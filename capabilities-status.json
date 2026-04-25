@@ -1,0 +1,15 @@
+{
+  "pcf-parse":       "verified",
+  "scene-renderer":  "placeholder",
+  "heatmap":         "placeholder",
+  "labels":          "placeholder",
+  "component-panel": "verified",
+  "theme":           "placeholder",
+  "glb-load":        "placeholder",
+  "glb-export":      "placeholder",
+  "dxf-import":      "placeholder",
+  "dxf-export":      "placeholder",
+  "debug-tab":       "placeholder",
+  "support-symbols": "verified",
+  "css2d-labels":    "placeholder"
+}

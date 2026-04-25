@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLB-PCF-Editor</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231e293b'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-size='16' font-family='monospace' fill='%23f59e0b'>PE</text></svg>">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":               "https://esm.sh/three@0.160.0",
+      "three/addons/":       "https://esm.sh/three@0.160.0/examples/jsm/",
+      "react":               "https://esm.sh/react@19.2.4",
+      "react-dom/client":    "https://esm.sh/react-dom@19.2.4/client",
+      "react-dom":           "https://esm.sh/react-dom@19.2.4",
+      "konva":               "https://esm.sh/konva@9.3.20",
+      "react-konva":         "https://esm.sh/react-konva@19.0.3?deps=react@19.2.4",
+      "lucide-react":        "https://esm.sh/lucide-react@0.468.0?deps=react@19.2.4",
+      "uuid":                "https://esm.sh/uuid@11.1.0",
+      "immer":               "https://esm.sh/immer@10.1.1",
+      "zustand":             "https://esm.sh/zustand@5.0.11",
+      "zustand/vanilla":     "https://esm.sh/zustand@5.0.11/vanilla",
+      "zustand/middleware":  "https://esm.sh/zustand@5.0.11/middleware",
+      "dxf-parser":          "https://esm.sh/dxf-parser@1.1.2"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="css/app.css">
+
+  <style>
+    /* ── Layout overrides for this app ────────────────────────── */
+    #app-main {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .tab-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-panel.active { display: flex; }
+
+    /* ── Viewer tab layout ─────────────────────────────────────── */
+    .viewer-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-2, #1c2030);
+      border-bottom: 1px solid var(--steel, #3a4255);
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .viewer-toolbar .sep {
+      width: 1px;
+      height: 20px;
+      background: var(--steel, #3a4255);
+      margin: 0 4px;
+    }
+    .viewer-toolbar select,
+    .viewer-toolbar button,
+    .viewer-toolbar label {
+      font-size: 11px;
+      color: var(--text-secondary, #94a3b8);
+    }
+    .viewer-toolbar button {
+      background: var(--bg-3, #252a3a);
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+    .viewer-toolbar .btn-tool {
+      min-width: 28px;
+      padding: 3px 6px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--text-primary, #e8eaf0);
+    }
+    .viewer-toolbar button:hover { background: var(--bg-4, #2e3448); color: var(--text-primary, #e8eaf0); }
+    .viewer-toolbar select {
+      background: var(--bg-3, #252a3a);
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      padding: 3px 6px;
+    }
+    .viewer-toolbar--grouped {
+      gap: 8px;
+    }
+    .viewer-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px;
+      border: 1px solid rgba(58,66,85,.75);
+      border-radius: 7px;
+      background: rgba(20,23,32,.45);
+    }
+    .viewer-toolbar--grouped:not(.viewer-toolbar--dev) .btn-mock,
+    .viewer-toolbar--grouped:not(.viewer-toolbar--dev) .cap-chip {
+      display: none !important;
+    }
+
+    .viewer-main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #viewer-canvas {
+      flex: 1;
+      position: relative;
+      background: #0f172a;
+      overflow: hidden;
+    }
+    /* Three.js + CSS2D renderer canvases fill the div */
+    #viewer-canvas canvas,
+    #viewer-canvas > div { position: absolute; inset: 0; }
+
+    #viewer-side-panel {
+      width: 280px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      background: var(--bg-1, #141720);
+      border-left: 1px solid var(--steel, #3a4255);
+      font-size: 12px;
+      font-family: var(--font-code, monospace);
+      padding: 12px;
+      color: var(--text-secondary, #94a3b8);
+    }
+    #viewer-side-panel.empty::after {
+      content: 'Click a component to inspect';
+      display: block;
+      color: var(--text-muted, #64748b);
+      font-style: italic;
+      margin-top: 16px;
+    }
+
+    /* ── Debug tab layout ──────────────────────────────────────── */
+    .debug-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-2, #1c2030);
+      border-bottom: 1px solid var(--steel, #3a4255);
+      flex-shrink: 0;
+    }
+    .debug-toolbar button {
+      font-size: 11px;
+      background: var(--bg-3, #252a3a);
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      padding: 3px 10px;
+      cursor: pointer;
+      color: var(--text-secondary, #94a3b8);
+    }
+    .debug-toolbar .domain-badge {
+      margin-left: auto;
+      font-size: 10px;
+      font-family: var(--font-code, monospace);
+      color: var(--amber, #f59e0b);
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.3);
+      border-radius: 4px;
+      padding: 2px 8px;
+    }
+
+    .debug-main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .debug-nav {
+      width: 140px;
+      flex-shrink: 0;
+      background: var(--bg-1, #141720);
+      border-right: 1px solid var(--steel, #3a4255);
+      padding: 8px 0;
+    }
+    .debug-nav button {
+      display: block;
+      width: 100%;
+      padding: 8px 14px;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text-secondary, #94a3b8);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .debug-nav button.active,
+    .debug-nav button:hover { background: var(--bg-2, #1c2030); color: var(--text-primary, #e8eaf0); }
+
+    .debug-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-family: var(--font-code, monospace);
+      color: var(--text-secondary, #94a3b8);
+    }
+
+    /* Search input inside debug */
+    .debug-search {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg-2, #1c2030);
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      padding: 5px 8px;
+      color: var(--text-primary, #e8eaf0);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    /* Log entry colours */
+    .log-ERROR { color: var(--red-err, #ef4444); }
+    .log-WARN  { color: var(--yellow-warn, #fbbf24); }
+    .log-INFO  { color: var(--blue-info, #60a5fa); }
+
+    /* Validation severity */
+    .val-error  { color: var(--red-err, #ef4444); }
+    .val-warn   { color: var(--yellow-warn, #fbbf24); }
+    .val-info   { color: var(--blue-info, #60a5fa); }
+
+    /* ── Capability chips ──────────────────────────────────────── */
+    .cap-chip {
+      display: inline-block;
+      font-size: 10px;
+      line-height: 1;
+      color: var(--text-muted, #64748b);
+      cursor: default;
+      user-select: none;
+      margin-right: 2px;
+    }
+
+    /* ── Mock buttons ──────────────────────────────────────────── */
+    .btn-mock {
+      background: rgba(245,158,11,.10);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--amber, #f59e0b);
+      opacity: 0.7;
+      transition: opacity .15s;
+    }
+    .btn-mock:hover { opacity: 1; background: rgba(245,158,11,.18); }
+
+    /* ── Component info panel sections ────────────────────────── */
+    .panel-section        { margin-bottom: 10px; }
+    .panel-section-title  { font-weight: 600; color: var(--amber, #f59e0b);
+                            margin-bottom: 3px; font-size: 10px; text-transform: uppercase;
+                            letter-spacing: .05em; }
+    .panel-table          { width: 100%; border-collapse: collapse; }
+    .panel-table td       { padding: 1px 0; vertical-align: top; }
+    .panel-label          { color: var(--text-muted, #64748b); width: 45%; padding-right: 6px; }
+    .panel-value          { color: var(--text-primary, #e8eaf0); word-break: break-all; }
+    .row-highlight td     { color: var(--amber, #f59e0b); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Tab Navigation ──────────────────────────────────────────── -->
+  <nav id="tab-nav" role="tablist">
+
+    <!-- Viewer tab -->
+    <button class="nav-btn active" id="rtab-viewer" role="tab">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+      </svg>
+      2.5D Viewer
+    </button>
+
+    <!-- Debug tab -->
+    <button class="nav-btn" id="rtab-debug" role="tab">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      Debug
+    </button>
+
+    <!-- App title (right-aligned in nav) -->
+    <div class="nav-header-inline">
+      <div class="app-title">
+        <svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect width="24" height="24" rx="5" fill="#0f1a14"/>
+          <rect x="2"  y="10" width="20" height="4" rx="2" fill="#f59e0b"/>
+          <rect x="10" y="2"  width="4"  height="20" rx="2" fill="#f59e0b"/>
+          <circle cx="12" cy="12" r="3.2" fill="#0f1a14"/>
+          <circle cx="12" cy="12" r="3.2" fill="none" stroke="#f59e0b" stroke-width="1.6"/>
+        </svg>
+        <h1>GLB-PCF-Editor</h1>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary btn-sm" id="btn-theme-toggle" title="Toggle light/dark theme">☀</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ───────────────────────────────────────────── -->
+  <main id="app-main">
+
+    <!-- ① 2.5D VIEWER TAB ──────────────────────────────────────── -->
+    <section id="panel-viewer" class="tab-panel active" role="tabpanel">
+
+      <!-- Toolbar -->
+      <div class="viewer-toolbar">
+
+        <!-- ── PCF / DXF open ──────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="pcf-parse" title="pcf-parse">○</span>
+        <label title="Load PCF / DXF file">
+          PCF/DXF
+          <input type="file" id="viewer-pcf-input" data-cap="pcf-parse" accept=".pcf,.pcfx,.dxf" style="display:none">
+        </label>
+        <button id="btn-viewer-open-pcf" data-cap="pcf-parse" title="Open PCF or DXF file">📂 Open</button>
+        <button class="btn-mock" data-cap-mock="pcf-parse" title="Load mock PCF and verify parse">🔬</button>
+
+        <span class="sep"></span>
+
+        <!-- ── GLB open ────────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="glb-load" title="glb-load">○</span>
+        <label title="Load GLB file">
+          <input type="file" id="viewer-glb-input" data-cap="glb-load" accept=".glb,.gltf" style="display:none">
+        </label>
+        <button id="btn-viewer-open-glb" data-cap="glb-load" title="Open GLB/GLTF file">📦 GLB</button>
+        <button class="btn-mock" data-cap-mock="glb-load" title="Load mock GLB and verify scene">🔬</button>
+
+        <span class="sep"></span>
+
+        <!-- ── View presets ────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="scene-renderer" title="scene-renderer">○</span>
+        <button data-view="iso-ne" data-cap="scene-renderer" title="Isometric NE">ISO-NE</button>
+        <button data-view="iso-nw" data-cap="scene-renderer" title="Isometric NW">ISO-NW</button>
+        <button data-view="iso-se" data-cap="scene-renderer" title="Isometric SE">ISO-SE</button>
+        <button data-view="iso-sw" data-cap="scene-renderer" title="Isometric SW">ISO-SW</button>
+        <button data-view="plan"   data-cap="scene-renderer" title="Plan view (top-down)">PLAN</button>
+        <button data-view="front"  data-cap="scene-renderer" title="Front elevation">FRONT</button>
+        <button id="btn-fit-all"   data-cap="scene-renderer" title="Fit all to view">⊞ Fit</button>
+        <button class="btn-mock" data-cap-mock="scene-renderer" title="Load mock and verify 3D scene">🔬</button>
+
+        <span class="sep"></span>
+
+        <!-- —— Placement tools (HUD bridge) ——————————————————————————————————————— -->
+        <button id="btn-tool-line" class="btn-tool" title="Line draw tool">✏</button>
+        <button id="btn-tool-valve" class="btn-tool" title="Insert valve">⛭</button>
+        <button id="btn-tool-flange" class="btn-tool" title="Insert flange">◍</button>
+        <button id="btn-tool-tee" class="btn-tool" title="Insert tee fitting">⊢</button>
+        <button id="btn-tool-support" class="btn-tool" title="Insert support">⌂</button>
+        <button id="btn-convert-bend" class="btn-tool" title="Convert current corner to elbow">↱</button>
+        <button id="btn-convert-tee" class="btn-tool" title="Convert current branch to tee">⊣</button>
+
+        <span class="sep"></span>
+
+        <!-- ── Heatmap ─────────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="heatmap" title="heatmap">○</span>
+        <select id="viewer-heatmap" data-cap="heatmap" title="Colour by property">
+          <option value="none">No heatmap</option>
+          <option value="OD">By OD / Bore</option>
+          <option value="material">By Material</option>
+          <option value="T1">By Temp (T1)</option>
+          <option value="P1">By Pressure (P1)</option>
+        </select>
+        <button class="btn-mock" data-cap-mock="heatmap" title="Apply mock heatmap and verify colours">🔬</button>
+
+        <span class="sep"></span>
+
+        <!-- ── Labels ──────────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="labels" title="css2d-labels">○</span>
+        <label title="Show/hide labels">
+          <input type="checkbox" id="viewer-labels-toggle" data-cap="labels" checked>
+          Labels
+        </label>
+        <button class="btn-mock" data-cap-mock="css2d-labels" title="Load mock and verify CSS2D labels">🔬</button>
+        <button class="btn-mock" data-cap-mock="support-symbols" title="Load mock and verify support symbols">🔬</button>
+        <button class="btn-mock" data-cap-mock="component-panel" title="Load mock and verify component panel">🔬</button>
+
+        <span class="sep"></span>
+
+        <!-- ── Theme ───────────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="theme" title="theme">○</span>
+        <select id="viewer-theme" data-cap="theme" title="Rendering theme">
+          <option value="NavisDark">NavisDark</option>
+          <option value="DrawLight">DrawLight</option>
+        </select>
+
+        <span class="sep"></span>
+
+        <!-- ── Export ──────────────────────────────────────── -->
+        <span class="cap-chip" data-cap-chip="glb-export" title="glb-export">○</span>
+        <button id="btn-export-glb" data-cap="glb-export" title="Export scene as GLB">⬇ GLB</button>
+        <button class="btn-mock" data-cap-mock="glb-export" title="Export mock scene as GLB and verify">🔬</button>
+
+        <span class="cap-chip" data-cap-chip="dxf-export" title="dxf-export" style="margin-left:4px">○</span>
+        <button id="btn-export-dxf" data-cap="dxf-export" title="Export scene as DXF">⬇ DXF</button>
+        <button class="btn-mock" data-cap-mock="dxf-import" title="Import mock DXF and verify" style="display:inline-block;">🔬 DXF Import</button>
+        <button class="btn-mock" data-cap-mock="dxf-export" title="Export mock scene as DXF and verify">🔬</button>
+
+        <!-- ── Status text ─────────────────────────────────── -->
+        <span id="viewer-status" style="margin-left:auto; font-size:11px; color:var(--text-muted,#64748b);">Ready</span>
+      </div>
+
+      <!-- Main area: 3D canvas + side panel -->
+      <div class="viewer-main">
+        <div id="viewer-canvas"></div>
+        <div id="viewer-side-panel" class="empty"></div>
+      </div>
+
+    </section>
+
+    <!-- ② DEBUG TAB ─────────────────────────────────────────────── -->
+    <section id="panel-debug" class="tab-panel" role="tabpanel">
+
+      <!-- Toolbar -->
+      <div class="debug-toolbar">
+        <span class="cap-chip" data-cap-chip="debug-tab" title="debug-tab">○</span>
+        <button id="btn-debug-refresh" data-cap="debug-tab" title="Refresh debug data">🔄 Refresh</button>
+        <button id="btn-debug-copy-json" data-cap="debug-tab" title="Copy component model JSON to clipboard">📋 Copy JSON</button>
+        <button id="btn-debug-export-log" data-cap="debug-tab" title="Download parse log as text">📥 Export Log</button>
+        <button class="btn-mock" data-cap-mock="debug-tab" title="Load mock and verify debug diagnostics">🔬 Mock</button>
+        <span class="domain-badge" id="debug-domain-label">domain: —</span>
+      </div>
+
+      <!-- Nav + content -->
+      <div class="debug-main">
+
+        <!-- Left nav -->
+        <nav class="debug-nav">
+          <button class="active" data-debug-section="summary">① Summary</button>
+          <button data-debug-section="log">② Parse Log</button>
+          <button data-debug-section="components">③ Components</button>
+          <button data-debug-section="validation">④ Validation</button>
+        </nav>
+
+        <!-- Content area (filled by debug-tab.js) -->
+        <div class="debug-content" id="debug-content">
+          <span style="color:var(--text-muted)">Load a file in the Viewer tab to populate diagnostics.</span>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Status Bar ─────────────────────────────────────────────── -->
+  <footer id="status-bar">
+    <div class="status-item">
+      <div class="status-dot idle" id="status-dot"></div>
+      <span id="status-text">Ready</span>
+    </div>
+    <div style="margin-left:auto; color:var(--text-muted); font-size:0.68rem;">
+      GLB-PCF-Editor — Release 1A
+    </div>
+  </footer>
+
+  <script type="module" src="core/app.js"></script>
+</body>
+</html>
