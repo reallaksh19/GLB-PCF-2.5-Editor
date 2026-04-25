@@ -69,6 +69,8 @@ export function resolveInsertContext(insertContext = {}, shellApi, options = {})
     component: insertContext.component,
     subtype: insertContext.subtype,
     size: insertContext.size,
+    branchSize: insertContext.branchSize,
+    angle: insertContext.angle,
     rating: insertContext.rating,
     facing: insertContext.facing,
     endType: insertContext.endType,

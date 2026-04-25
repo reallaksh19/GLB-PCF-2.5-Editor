@@ -26,8 +26,21 @@ function fieldPatchFromVisible(col, value) {
     Schedule: 'schedule',
     EndType: 'endType',
     Facing: 'facing',
+    Angle: 'angle',
+    RadiusType: 'radiusType',
+    CenterToEnd: 'centerToEnd',
+    TangentLength: 'tangentLength',
+    RunSize: 'runSize',
+    BranchSize: 'branchSize',
+    RunCenterToEnd: 'runCenterToEnd',
+    BranchCenterToEnd: 'branchCenterToEnd',
+    Standard: 'standard',
+    BoreType: 'boreType',
     Length: 'length',
     Weight: 'weight',
+    Source: 'source',
+    Revision: 'revision',
+    DatasetVersion: 'datasetVersion',
   };
   return { [map[col] || col]: value };
 }
