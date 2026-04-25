@@ -31,6 +31,29 @@ export function getInsertDefaults(component = 'VALVE', shellApi) {
   };
 
   if (upper === 'SUPPORT') defaults.subtype = 'REST';
+
+  // Resolve immediately against Master DB
+  const query = {
+    component: defaults.component,
+    subtype: defaults.subtype,
+    size: defaults.size,
+    rating: defaults.rating,
+    facing: defaults.facing,
+    endType: defaults.endType,
+    angle: defaults.angle,
+    branchSize: defaults.branchSize,
+  };
+  const result = shellApi?.resolveComponent?.(query);
+  if (result && result.ok && result.resolved) {
+    defaults.length = result.resolved.length || '';
+    defaults.weight = result.resolved.weight || '';
+    if (upper === 'TEE') {
+      defaults.branchLength = result.resolved.branchLength || result.resolved.length || '';
+    }
+    defaults.provenance = result.source || 'master-db';
+    defaults.resolvedMatchKey = result.matchKey || null;
+  }
+
   return defaults;
 }
 
@@ -99,6 +122,9 @@ export function buildInsertPayload(insertContext = {}, shellApi) {
     size: insertContext.size || '',
     rating: insertContext.rating || '',
     length: insertContext.length || '',
+    branchLength: insertContext.branchLength || '',
+    branchSize: insertContext.branchSize || '',
+    angle: insertContext.angle || '',
     weight: insertContext.weight || '',
     provenance: insertContext.provenance || 'manual',
     pipelineRef: insertContext.pipelineRef || 'ROUTE-AUTHORED',
