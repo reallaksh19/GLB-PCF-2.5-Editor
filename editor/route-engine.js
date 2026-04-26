@@ -515,6 +515,164 @@ export function registerDefaultRouteHandlers() {
     return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
   });
 
+  registerCommandHandler(CommandTypes.ROUTE_POLYLINE_CREATE, (state, command) => {
+    const { routeId, points, spec } = command.payload;
+    if (!points || points.length < 2) throw new Error('Polyline requires at least two points');
+
+    const rId = routeId || uid('route');
+    const route = createEmptyRoute(rId, spec || {});
+
+    const nodes = points.map(p => createRouteNode(uid('node'), p.x, p.y, p.z));
+    route.nodes = nodes;
+
+    for (let i = 0; i < nodes.length - 1; i++) {
+        const seg = createRouteSegment(uid('segment'), nodes[i].id, nodes[i+1].id, 'PIPE', classifySegmentOrientation(nodes[i], nodes[i+1]));
+        route.segments.push(seg);
+    }
+
+    const nextRoutes = [...(state.model?.routes || []), route];
+    return patchStateWithRoute(state, nextRoutes, route.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.ROUTE_STRETCH, (state, command) => {
+    // Stretches specific node(s) by a delta
+    const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+    const nextRoutes = clone(state.model.routes || []);
+    const nextRoute = clone(route);
+
+    const nodeIds = Array.isArray(command.payload.nodeId) ? command.payload.nodeId : [command.payload.nodeId];
+    const nodesToMove = nextRoute.nodes.filter(n => nodeIds.includes(n.id));
+    if (!nodesToMove.length) throw new Error('No valid nodes found for stretch');
+
+    const delta = normalizeAxisDelta(command.payload);
+
+    for (const node of nodesToMove) {
+        node.x += delta.dx;
+        node.y += delta.dy;
+        node.z += delta.dz;
+    }
+
+    const nodeIndex = routeNodeIndex(nextRoute);
+    for (const seg of nextRoute.segments) {
+      if (nodeIds.includes(seg.from) || nodeIds.includes(seg.to)) {
+        seg.orientation = classifySegmentOrientation(nodeIndex[seg.from], nodeIndex[seg.to]);
+      }
+    }
+
+    nextRoutes[index] = nextRoute;
+    return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.ROUTE_ROTATE, (state, command) => {
+    const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+    const nextRoutes = clone(state.model.routes || []);
+    const nextRoute = clone(route);
+
+    const { pivot, angle, axis, nodeIds } = command.payload;
+    if (!pivot || angle === undefined) throw new Error('Rotate requires pivot and angle');
+
+    const p = normalizePoint(pivot);
+    const rad = angle * Math.PI / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const targets = nodeIds ? nextRoute.nodes.filter(n => nodeIds.includes(n.id)) : nextRoute.nodes;
+
+    for (const node of targets) {
+       const dx = node.x - p.x;
+       const dy = node.y - p.y;
+       const dz = node.z - p.z;
+
+       if (axis === 'Z') {
+         node.x = p.x + dx * cos - dy * sin;
+         node.y = p.y + dx * sin + dy * cos;
+       } else if (axis === 'X') {
+         node.y = p.y + dy * cos - dz * sin;
+         node.z = p.z + dy * sin + dz * cos;
+       } else if (axis === 'Y') {
+         node.x = p.x + dx * cos + dz * sin;
+         node.z = p.z - dx * sin + dz * cos;
+       }
+    }
+
+    const nodeIndex = routeNodeIndex(nextRoute);
+    for (const seg of nextRoute.segments) {
+       seg.orientation = classifySegmentOrientation(nodeIndex[seg.from], nodeIndex[seg.to]);
+    }
+
+    nextRoutes[index] = nextRoute;
+    return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.ROUTE_BREAK, (state, command) => {
+      // Alias/Enhancement to SPLIT_SEGMENT. But keeping it explicit for now.
+      // Defers to logic similar to ROUTE_SPLIT_SEGMENT, but ensures we know it's a break action.
+      const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+      const nextRoutes = clone(state.model.routes || []);
+      const nextRoute = clone(route);
+      const segIndex = nextRoute.segments.findIndex((seg) => seg.id === command.payload.segmentId);
+      if (segIndex < 0) throw new Error(`Segment not found: ${command.payload.segmentId}`);
+
+      const segment = nextRoute.segments[segIndex];
+      const nodeIndex = routeNodeIndex(nextRoute);
+      const a = nodeIndex[segment.from];
+      const b = nodeIndex[segment.to];
+
+      const splitPoint = command.payload.point
+        ? normalizePoint(command.payload.point)
+        : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+
+      const middleNode = createRouteNode(uid('node'), splitPoint.x, splitPoint.y, splitPoint.z);
+      const first = createRouteSegment(uid('segment'), segment.from, middleNode.id, segment.kind || 'PIPE', classifySegmentOrientation(a, middleNode));
+      const second = createRouteSegment(uid('segment'), middleNode.id, segment.to, segment.kind || 'PIPE', classifySegmentOrientation(middleNode, b));
+
+      nextRoute.nodes.push(middleNode);
+      nextRoute.segments.splice(segIndex, 1, first, second);
+      nextRoutes[index] = nextRoute;
+      return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.GUIDE_CREATE, (state, command) => {
+    const guide = {
+      id: command.payload.id || uid('guide'),
+      type: command.payload.guideType || 'LINE',
+      points: (command.payload.points || []).map(p => normalizePoint(p)),
+      attributes: { SOURCE: 'guide-layer' }
+    };
+    return {
+      model: {
+        ...(state.model || {}),
+        guides: [...(state.model?.guides || []), guide],
+      }
+    };
+  });
+
+  registerCommandHandler(CommandTypes.GUIDE_MOVE, (state, command) => {
+    const guides = clone(state.model?.guides || []);
+    const guideIndex = guides.findIndex(g => g.id === command.payload.id);
+    if (guideIndex >= 0) {
+      const delta = normalizeAxisDelta(command.payload);
+      const guide = guides[guideIndex];
+      guide.points = guide.points.map(p => ({
+         x: p.x + delta.dx, y: p.y + delta.dy, z: p.z + delta.dz
+      }));
+      guides[guideIndex] = guide;
+    }
+    return {
+       model: { ...(state.model || {}), guides }
+    };
+  });
+
+  registerCommandHandler(CommandTypes.GUIDE_DELETE, (state, command) => {
+    const idList = Array.isArray(command.payload.id) ? command.payload.id : [command.payload.id];
+    return {
+      model: {
+        ...(state.model || {}),
+        guides: (state.model?.guides || []).filter(g => !idList.includes(g.id)),
+      }
+    };
+  });
+
   registerCommandHandler(CommandTypes.ROUTE_SPLIT_SEGMENT, (state, command) => {
     const { index, route } = getRouteOrThrow(state, command.payload.routeId);
     const nextRoutes = clone(state.model.routes || []);
@@ -541,8 +699,29 @@ export function registerDefaultRouteHandlers() {
   });
 
   registerCommandHandler(CommandTypes.ROUTE_DELETE, (state, command) => {
-    const nextRoutes = (state.model?.routes || []).filter((route) => route.id !== command.payload.routeId);
-    return patchStateWithRoute(state, nextRoutes, null, command.type);
+    // Phase 4D enhancement: Handle node-level/segment-level delete vs full route
+    const { routeId, segmentId, nodeId } = command.payload;
+
+    if (segmentId || nodeId) {
+      const { index, route } = getRouteOrThrow(state, routeId);
+      const nextRoutes = clone(state.model.routes || []);
+      const nextRoute = clone(route);
+
+      if (segmentId) {
+        nextRoute.segments = nextRoute.segments.filter(s => s.id !== segmentId);
+      }
+      if (nodeId) {
+        nextRoute.nodes = nextRoute.nodes.filter(n => n.id !== nodeId);
+        // Cascade delete segments attached to this node
+        nextRoute.segments = nextRoute.segments.filter(s => s.from !== nodeId && s.to !== nodeId);
+      }
+
+      nextRoutes[index] = nextRoute;
+      return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+    } else {
+      const nextRoutes = (state.model?.routes || []).filter((route) => route.id !== command.payload.routeId);
+      return patchStateWithRoute(state, nextRoutes, null, command.type);
+    }
   });
 
   registerCommandHandler(CommandTypes.INSERT_COMPONENT, (state, command) => {
@@ -788,6 +967,37 @@ export function createRouteEngine(options = {}) {
     return getActiveRoute();
   }
 
+  function stretchNode(routeId, nodeId, delta, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_STRETCH, {
+      routeId,
+      nodeId,
+      ...normalizeAxisDelta(delta)
+    }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function rotateNodes(routeId, pivot, angle, axis = 'Z', nodeIds = null, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_ROTATE, {
+      routeId,
+      pivot: normalizePoint(pivot),
+      angle,
+      axis,
+      nodeIds
+    }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function breakSegment(routeId, segmentId, point = null, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_BREAK, {
+      routeId,
+      segmentId,
+      point: point ? normalizePoint(point) : null,
+    }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
 
   function getAutoBendCandidate(routeId = null, nodeId = null) {
     const routes = getRoutes();
@@ -819,6 +1029,43 @@ export function createRouteEngine(options = {}) {
     return store.getState();
   }
 
+  function createPolyline(points, spec = {}, meta = {}) {
+    if (!points || points.length < 2) throw new Error('Polyline requires at least two points');
+    const routeId = meta.routeId || uid('route');
+    const cmd = createCommand(CommandTypes.ROUTE_POLYLINE_CREATE, {
+      routeId,
+      points: points.map(p => normalizePoint(p)),
+      spec
+    }, meta);
+    execute(cmd);
+    return routeId;
+  }
+
+  function createGuide(points, guideType = 'LINE', meta = {}) {
+    const id = meta.id || uid('guide');
+    const cmd = createCommand(CommandTypes.GUIDE_CREATE, {
+      id,
+      points: points.map(p => normalizePoint(p)),
+      guideType
+    }, meta);
+    execute(cmd);
+    return id;
+  }
+
+  function moveGuide(id, delta, meta = {}) {
+    const cmd = createCommand(CommandTypes.GUIDE_MOVE, {
+      id,
+      ...normalizeAxisDelta(delta)
+    }, meta);
+    execute(cmd);
+    return id;
+  }
+
+  function deleteGuide(id, meta = {}) {
+    const cmd = createCommand(CommandTypes.GUIDE_DELETE, { id }, meta);
+    execute(cmd);
+  }
+
   function getRoutes() {
     return store.getState().model?.routes || [];
   }
@@ -844,6 +1091,10 @@ export function createRouteEngine(options = {}) {
     version: ROUTE_ENGINE_VERSION,
     store,
     execute,
+    createGuide,
+    moveGuide,
+    deleteGuide,
+    createPolyline,
     startRoute,
     addSegment,
     addToPoint,
@@ -851,6 +1102,9 @@ export function createRouteEngine(options = {}) {
     drop,
     moveNode,
     splitSegment,
+    stretchNode,
+    rotateNodes,
+    breakSegment,
     insertComponent,
     getAutoBendCandidate,
     autoBend,

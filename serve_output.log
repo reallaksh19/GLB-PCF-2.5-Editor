@@ -1,0 +1,124 @@
+
+> glb-pcf-editor@1.0.0 serve
+> npx serve . -p 3000 --no-clipboard
+
+npm warn exec The following package was not found and will be installed: serve@14.2.6
+ INFO  Accepting connections at http://localhost:3000
+ HTTP  4/26/2026 1:48:50 AM ::1 GET /
+ HTTP  4/26/2026 1:48:50 AM ::1 Returned 200 in 536 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /css/app.css
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /core/app.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /core/domain-registry.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/debug/logger.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/capabilities/capability-registry.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/index.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/tabs/viewer-tab.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/tabs/debug-tab.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 11 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 14 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 14 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 14 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 14 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 15 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/parser.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/dxf-importer.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/geometry-builder.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/symbol-library.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /domains/piping/info-panel.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/renderer/scene-renderer.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 12 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 11 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 11 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 12 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 11 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 11 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/ui/toolbar.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/ui/component-panel.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/glb/exportToDXF.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /core/event-bus.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/route-engine.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/command-types.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 12 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 12 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-orchestrator.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-store.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-resolver.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-popup.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /macro/macro-terminal.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/vendor/splitPcfBlocks.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/vendor/parsePcfText.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/vendor/normalizePcfModel.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /core/component-model.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/vendor/buildDraftingScene.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /geometry/labels.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/glb/exportSceneToGLB.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 9 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 10 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 8 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /js/ui/heatmap.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /geometry/symbols.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /core/state.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/history.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/command-executor.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/command-handlers.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 3 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 5 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/route-contract.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/coordinate-normalizer.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /editor/route-metrics.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-contract.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-state.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-overlay.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-keyboard.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-line-draw.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-component-insert.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-schema.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-normalize.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /macro/macro-engine.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 6 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /macro/macro-history.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-import-export.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-grid.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /data/masterdb-contract.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /geometry/pipe-geometry.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 3 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 3 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 4 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /hud/hud-format.js
+ HTTP  4/26/2026 1:48:51 AM ::1 GET /macro/macro-commands.js
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 7 ms
+ HTTP  4/26/2026 1:48:51 AM ::1 Returned 200 in 5 ms
+ HTTP  4/26/2026 1:48:52 AM ::1 GET /macro/macro-route.js
+ HTTP  4/26/2026 1:48:52 AM ::1 Returned 200 in 3 ms

@@ -268,6 +268,18 @@ export function createHudOrchestrator({ container, shellApi }) {
     showLineMode() {
       overlay.root.querySelector('[data-action="line"]')?.click();
     },
+    showPolylineMode() {
+      store.patch({ visible: true, mode: 'polyline-draw', draftPoints: [], errors: [] });
+      emitHudTrace('POLYLINE_MODE_OPEN');
+    },
+    showSplineMode() {
+      store.patch({ visible: true, mode: 'spline-draw', draftPoints: [], errors: [] });
+      emitHudTrace('SPLINE_MODE_OPEN');
+    },
+    activateModifyTool(tool) {
+      store.patch({ visible: true, mode: 'modify-tool', activeTool: tool, errors: [] });
+      emitHudTrace('MODIFY_TOOL_OPEN', { tool });
+    },
     showInsertMode(component = 'VALVE') {
       const btn = overlay.root.querySelector(`[data-action="insert-${String(component).toLowerCase()}"]`);
       if (btn) btn.click();
