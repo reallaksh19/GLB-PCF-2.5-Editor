@@ -37,6 +37,17 @@ function lineDraftHtml(state) {
         <button data-action="drop" class="hud-mini">Drop</button>
         <button data-action="cancel" class="hud-mini">Cancel</button>
       </div>
+
+      <div class="hud-settings-row">
+        <label>
+          <input type="checkbox" data-action="toggle-compact" ${state.isCompact ? 'checked' : ''} />
+          Compact
+        </label>
+        <label>
+          Opac:
+          <input type="range" data-action="change-opacity" min="0.2" max="1" step="0.1" value="${state.opacity ?? 1}" />
+        </label>
+      </div>
     </div>`;
 }
 
@@ -84,6 +95,17 @@ function insertDraftHtml(state) {
         <button data-action="commit-insert" class="hud-primary">Insert</button>
         <button data-action="cancel" class="hud-mini">Cancel</button>
       </div>
+
+      <div class="hud-settings-row">
+        <label>
+          <input type="checkbox" data-action="toggle-compact" ${state.isCompact ? 'checked' : ''} />
+          Compact
+        </label>
+        <label>
+          Opac:
+          <input type="range" data-action="change-opacity" min="0.2" max="1" step="0.1" value="${state.opacity ?? 1}" />
+        </label>
+      </div>
     </div>`;
 }
 
@@ -107,6 +129,7 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'auto-bend') return handlers.commitAutoBend?.();
     if (action === 'auto-tee') return handlers.commitAutoTee?.();
     if (action === 'cancel') return handlers.cancel?.();
+    if (action === 'toggle-compact') return handlers.toggleCompact?.(ev.target.checked);
     if (action === 'hide') return handlers.hide?.();
     if (action === 'axis') return handlers.setAxis?.(actionEl.dataset.axis);
     if (action === 'sign') return handlers.setSign?.(Number(actionEl.dataset.sign || 1));
@@ -114,6 +137,15 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'commit-insert') return handlers.commitInsert?.();
     if (action === 'rise') return handlers.commitRise?.();
     if (action === 'drop') return handlers.commitDrop?.();
+  });
+
+
+  root.addEventListener('change', (ev) => {
+    const actionEl = ev.target.closest('[data-action="change-opacity"]');
+    if (actionEl) handlers.changeOpacity?.(ev.target.value);
+
+    const compactEl = ev.target.closest('[data-action="toggle-compact"]');
+    if (compactEl) handlers.toggleCompact?.(ev.target.checked);
   });
 
   root.addEventListener('input', (ev) => {

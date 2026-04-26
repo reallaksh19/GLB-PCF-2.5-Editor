@@ -96,11 +96,11 @@
     .viewer-toolbar-group {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 2px 4px;
-      border: 1px solid rgba(58,66,85,.75);
-      border-radius: 7px;
-      background: rgba(20,23,32,.45);
+      gap: 6px;
+      padding: 4px 6px;
+      border: 1px solid var(--steel-light, #4a5570);
+      border-radius: 6px;
+      background: var(--bg-1, #141720);
     }
     .viewer-toolbar--grouped:not(.viewer-toolbar--dev) .btn-mock,
     .viewer-toolbar--grouped:not(.viewer-toolbar--dev) .cap-chip {
@@ -337,27 +337,16 @@
 
         <span class="sep"></span>
 
-        <!-- ── View presets ────────────────────────────────── -->
-        <span class="cap-chip" data-cap-chip="scene-renderer" title="scene-renderer">○</span>
-        <button data-view="iso-ne" data-cap="scene-renderer" title="Isometric NE">ISO-NE</button>
-        <button data-view="iso-nw" data-cap="scene-renderer" title="Isometric NW">ISO-NW</button>
-        <button data-view="iso-se" data-cap="scene-renderer" title="Isometric SE">ISO-SE</button>
-        <button data-view="iso-sw" data-cap="scene-renderer" title="Isometric SW">ISO-SW</button>
-        <button data-view="plan"   data-cap="scene-renderer" title="Plan view (top-down)">PLAN</button>
-        <button data-view="front"  data-cap="scene-renderer" title="Front elevation">FRONT</button>
-        <button id="btn-fit-all"   data-cap="scene-renderer" title="Fit all to view">⊞ Fit</button>
-        <button class="btn-mock" data-cap-mock="scene-renderer" title="Load mock and verify 3D scene">🔬</button>
 
-        <span class="sep"></span>
 
         <!-- —— Placement tools (HUD bridge) ——————————————————————————————————————— -->
-        <button id="btn-tool-line" class="btn-tool" title="Line draw tool">✏</button>
-        <button id="btn-tool-valve" class="btn-tool" title="Insert valve">⛭</button>
-        <button id="btn-tool-flange" class="btn-tool" title="Insert flange">◍</button>
-        <button id="btn-tool-tee" class="btn-tool" title="Insert tee fitting">⊢</button>
-        <button id="btn-tool-support" class="btn-tool" title="Insert support">⌂</button>
-        <button id="btn-convert-bend" class="btn-tool" title="Convert current corner to elbow">↱</button>
-        <button id="btn-convert-tee" class="btn-tool" title="Convert current branch to tee">⊣</button>
+        <button id="btn-tool-line" class="btn-tool" title="Line draw tool"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></button>
+        <button id="btn-tool-valve" class="btn-tool" title="Insert valve"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-6-8v16l6-8"/><path d="M2 12h4l6-8v16l-6-8"/></svg></button>
+        <button id="btn-tool-flange" class="btn-tool" title="Insert flange"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="4" width="6" height="16" rx="1"/></svg></button>
+        <button id="btn-tool-tee" class="btn-tool" title="Insert tee fitting"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M12 12v8"/></svg></button>
+        <button id="btn-tool-support" class="btn-tool" title="Insert support"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M12 4v16M8 12h8"/></svg></button>
+        <button id="btn-convert-bend" class="btn-tool" title="Convert current corner to elbow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 3-3h8"/><path d="M16 5l4 4-4 4"/></svg></button>
+        <button id="btn-convert-tee" class="btn-tool" title="Convert current branch to tee"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h10"/><path d="M15 8l4 4-4 4"/><path d="M9 4v16"/></svg></button>
 
         <span class="sep"></span>
 
@@ -389,8 +378,12 @@
         <!-- ── Theme ───────────────────────────────────────── -->
         <span class="cap-chip" data-cap-chip="theme" title="theme">○</span>
         <select id="viewer-theme" data-cap="theme" title="Rendering theme">
-          <option value="NavisDark">NavisDark</option>
-          <option value="DrawLight">DrawLight</option>
+          <option value="NavisDark">Dark Theme (Navis Inspired)</option>
+          <option value="DraftLight">Draft Light</option>
+          <option value="DraftDark">Draft Dark</option>
+          <option value="Blueprint">Blueprint</option>
+          <option value="MonochromeTechnical">Monochrome Technical</option>
+          <option value="HighContrastReview">High Contrast Review</option>
         </select>
 
         <span class="sep"></span>
@@ -412,6 +405,20 @@
       <!-- Main area: 3D canvas + side panel -->
       <div class="viewer-main">
         <div id="viewer-canvas"></div>
+        <!-- Floating Navigation / View Cube -->
+        <div id="floating-nav" class="floating-nav">
+          <div class="nav-drag-handle">::</div>
+          <button data-view="iso-ne" title="Isometric NE">NE</button>
+          <button data-view="iso-nw" title="Isometric NW">NW</button>
+          <button data-view="iso-se" title="Isometric SE">SE</button>
+          <button data-view="iso-sw" title="Isometric SW">SW</button>
+          <div class="sep-h"></div>
+          <button data-view="plan" title="Plan view (top-down)">T</button>
+          <button data-view="front" title="Front elevation">F</button>
+          <div class="sep-h"></div>
+          <button id="btn-fit-all-float" title="Fit all to view">⊞</button>
+        </div>
+
         <div id="viewer-side-panel" class="empty"></div>
       </div>
 

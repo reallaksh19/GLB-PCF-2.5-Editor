@@ -39,6 +39,7 @@
   },
   "homepage": "https://github.com/lakshman81-ai/GLB-PCF-Editor-PG#readme",
   "dependencies": {
+    "@types/three": "^0.184.0",
     "ajv": "^8.18.0",
     "ansi-align": "^3.0.1",
     "ansi-regex": "^6.2.2",
@@ -110,7 +111,7 @@
     "strip-final-newline": "^2.0.0",
     "strip-json-comments": "^2.0.1",
     "supports-color": "^7.2.0",
-    "three": "^0.160.0",
+    "three": "^0.160.1",
     "type-fest": "^2.19.0",
     "update-check": "^1.5.4",
     "vary": "^1.1.2",

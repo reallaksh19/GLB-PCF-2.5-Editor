@@ -178,7 +178,18 @@ export class SceneRenderer {
 
   setTheme(theme) {
     this._theme = theme;
-    this._renderer.setClearColor(theme === 'NavisDark' ? 0x0f172a : 0xf7f8fb);
+    let clearColor = 0x0f172a;
+    switch (theme) {
+      case 'DraftLight': clearColor = 0xe2e8f0; break;
+      case 'DraftDark': clearColor = 0x0f172a; break;
+      case 'Blueprint': clearColor = 0x1e3a8a; break;
+      case 'MonochromeTechnical': clearColor = 0x171717; break;
+      case 'HighContrastReview': clearColor = 0x000000; break;
+      case 'NavisDark':
+      default:
+        clearColor = 0x0f172a; break;
+    }
+    this._renderer.setClearColor(clearColor);
   }
 
   setLabelsVisible(visible) {
