@@ -298,6 +298,39 @@ export function registerBuiltinCommands() {
     return registerCompsResult(comps, ctx, `ARRAY created: ${comps.length} copied component(s)`);
   });
 
+  register('SPLINE', (args, ctx) => {
+    // Treat SPLINE as a guide polyline
+    requireArgs(args, 1, 'SPLINE x1,y1,z1 x2,y2,z2 ...');
+    const pts = args.map(arg => parseXYZ(arg, ctx));
+    const comps = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ep1 = pts[i];
+      const ep2 = pts[i+1];
+      const pipe = componentBase('PIPE', ctx, `GUIDE-SPLINE-${i+1}`);
+      pipe.geometry = { origin: ep1, ep1, ep2, cp: null, bp: null, bore: null, size: null };
+      pipe.attributes = { 'GUIDE': 'TRUE' };
+      comps.push(pipe);
+    }
+    return registerCompsResult(comps, ctx, `SPLINE created with ${pts.length} points (${comps.length} segments)`);
+  });
+
+  register('MATRIX', (args, ctx) => {
+    requireArgs(args, 12, 'MATRIX m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34');
+    const m = args.slice(0, 12).map(Number);
+    if (m.some(v => !Number.isFinite(v))) throw new Error('MATRIX requires 12 numeric arguments');
+
+    const base = ctx.lastEntities || [];
+    if (!base.length) throw new Error('No LAST entity available for MATRIX transform');
+
+    const comps = base.map(comp => {
+      const c = cloneComp(comp, ctx);
+      c.metadata.matrix = m; // Hardening fixture matrices
+      return c;
+    });
+
+    return registerCompsResult(comps, ctx, `MATRIX applied to ${comps.length} component(s)`);
+  });
+
   register('MIRROR', (args, ctx) => {
     requireArgs(args, 2, 'MIRROR LAST PLANE=XY/XZ/YZ');
     if (String(args[0]).toUpperCase() !== 'LAST') throw new Error('MIRROR currently supports only LAST');

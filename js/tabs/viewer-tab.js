@@ -183,6 +183,47 @@ function handleScenePick(ev) {
   const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
   const hit = _sceneRenderer.pick(ndcX, ndcY);
 
+  const hudState = _hudApi?.getState?.();
+  if (hudState && hudState.mode?.startsWith('modify-')) {
+    const activeTool = hudState.activeTool;
+    const pt = hit?.point || null;
+    const ptObj = pt ? {x: pt.x, y: pt.y, z: pt.z} : null;
+
+    if (activeTool === 'polyline' && ptObj) {
+      if (!hudState.polylineRouteId) {
+        const rid = getViewerShellApi().startPolyline(ptObj);
+        _hudApi.updateField?.('polylineRouteId', rid); // Extend HUD API if needed, or use a local map
+      } else {
+        getViewerShellApi().addPolylinePoint(hudState.polylineRouteId, ptObj);
+      }
+      return;
+    }
+
+    if (hit?.comp) {
+      const attrs = hit.comp.attributes || {};
+      const routeId = attrs.ROUTE_ID || attrs['ROUTE_ID'] || null;
+      const nodeId = hit.comp.geometry?.ep1 || hit.comp.geometry?.origin; // Simplification for picking nodes
+      const segmentId = attrs.SEGMENT_ID || attrs['SEGMENT_ID'] || null;
+
+      if (activeTool === 'stretch' && routeId && nodeId && ptObj) {
+        getViewerShellApi().stretchNode(routeId, nodeId, ptObj);
+        return;
+      }
+      if (activeTool === 'rotate' && routeId && ptObj) {
+        getViewerShellApi().rotateRoute(routeId, ptObj, 45, 'Z'); // Hardcoded 45 for demo, ideally from HUD
+        return;
+      }
+      if (activeTool === 'break' && routeId && segmentId && ptObj) {
+        getViewerShellApi().breakRoute(routeId, segmentId, ptObj, 0); // No gap for now
+        return;
+      }
+      if (activeTool === 'delete' && routeId && nodeId) {
+        getViewerShellApi().deleteNode(routeId, nodeId, true); // Heal true by default
+        return;
+      }
+    }
+  }
+
   if (!hit?.comp) {
     selectComponent(null, null, 'pick-empty');
     return;
@@ -431,7 +472,36 @@ export function getViewerShellApi() {
     createEditorCommand: (type, payload = {}, meta = {}) => createCommand(type, payload, meta),
     getHudState: () => _hudApi?.getState?.() || null,
     showHudLineMode: () => _hudApi?.showLineMode?.(),
+    showHudModifyMode: (tool) => _hudApi?.showModifyMode?.(tool),
     showHudInsertMode: (component) => _hudApi?.showInsertMode?.(component),
+    stretchNode: (routeId, nodeId, absoluteOrDelta, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.stretchNode(routeId, nodeId, absoluteOrDelta, meta);
+    },
+    rotateRoute: (routeId, pivot, angleDeg, axis = 'Z', meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.rotateRoute(routeId, pivot, angleDeg, axis, meta);
+    },
+    breakRoute: (routeId, segmentId, point = null, gapMm = 0, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.breakRoute(routeId, segmentId, point, gapMm, meta);
+    },
+    deleteNode: (routeId, nodeId, heal = false, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.deleteNode(routeId, nodeId, heal, meta);
+    },
+    startPolyline: (point, spec = {}, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.startPolyline(point, spec, meta);
+    },
+    addPolylinePoint: (routeId, point, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.addPolylinePoint(routeId, point, meta);
+    },
+    endPolyline: (routeId, meta = {}) => {
+      if (!_routeEngine) throw new Error('Route engine not initialized');
+      return _routeEngine.endPolyline(routeId, meta);
+    },
     getMasterDbState: () => _masterDbStore?.getState?.() || null,
     openMasterDb: () => _masterDbPopup?.open?.(),
     closeMasterDb: () => _masterDbPopup?.close?.(),

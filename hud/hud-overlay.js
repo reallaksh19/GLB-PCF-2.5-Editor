@@ -112,6 +112,7 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'sign') return handlers.setSign?.(Number(actionEl.dataset.sign || 1));
     if (action === 'commit-line') return handlers.commitLine?.();
     if (action === 'commit-insert') return handlers.commitInsert?.();
+    if (action === 'commit-modify') return handlers.commitModify?.();
     if (action === 'rise') return handlers.commitRise?.();
     if (action === 'drop') return handlers.commitDrop?.();
   });
@@ -154,6 +155,13 @@ export function createHudOverlay(container, handlers = {}) {
 
     if (mode === 'line-draw') body += lineDraftHtml(state);
     else if (mode === 'insert-component') body += insertDraftHtml(state);
+    else if (mode?.startsWith('modify-')) {
+      body += `<div class="hud-body">
+        Modify tool active: ${esc(mode.replace('modify-', ''))}. Select points in 3D.
+        ${state.activeTool === 'polyline' ? '<button data-action="commit-modify">Finish Polyline (Enter)</button>' : ''}
+        <button data-action="cancel">Cancel (Esc)</button>
+      </div>`;
+    }
     else body += `<div class="hud-body hud-idle">HUD ready. Choose a mode or use shortcuts.</div>`;
 
     body += errors;

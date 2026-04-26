@@ -113,6 +113,7 @@ function normalizeActions(actionsOrRenderer, _getComponents, _getDomain, shellAp
       exportDXF: () => {},
       openMasterDb: () => shellApi.openMasterDb?.(),
       showHudLineMode: () => shellApi.showHudLineMode?.(),
+      showHudModifyMode: (tool) => shellApi.showHudModifyMode?.(tool),
       showHudInsertMode: (component) => shellApi.showHudInsertMode?.(component),
       autoBend: () => shellApi.autoBendRoute?.({ source: 'toolbar-auto-bend' }),
       autoTee: () => shellApi.autoTeeRoute?.({ source: 'toolbar-auto-tee' }),
@@ -161,12 +162,17 @@ export function initToolbar(actionsOrRenderer = {}, getComponents, getDomain, sh
   applyToolbarGrouping();
   unsubs.push(bindClick('btn-masterdb', () => actions.openMasterDb?.()));
   unsubs.push(bindClick('btn-tool-line', () => actions.showHudLineMode?.()));
+  unsubs.push(bindClick('btn-tool-polyline', () => actions.showHudModifyMode?.('polyline')));
   unsubs.push(bindClick('btn-tool-valve', () => actions.showHudInsertMode?.('VALVE')));
   unsubs.push(bindClick('btn-tool-flange', () => actions.showHudInsertMode?.('FLANGE')));
   unsubs.push(bindClick('btn-tool-tee', () => actions.showHudInsertMode?.('TEE')));
   unsubs.push(bindClick('btn-tool-support', () => actions.showHudInsertMode?.('SUPPORT')));
   unsubs.push(bindClick('btn-convert-bend', () => actions.autoBend?.()));
   unsubs.push(bindClick('btn-convert-tee', () => actions.autoTee?.()));
+  unsubs.push(bindClick('btn-tool-stretch', () => actions.showHudModifyMode?.('stretch')));
+  unsubs.push(bindClick('btn-tool-rotate', () => actions.showHudModifyMode?.('rotate')));
+  unsubs.push(bindClick('btn-tool-break', () => actions.showHudModifyMode?.('break')));
+  unsubs.push(bindClick('btn-tool-delete', () => actions.showHudModifyMode?.('delete')));
 
   unsubs.push(bindChange('viewer-heatmap', (ev) => actions.setHeatmap?.(ev.target?.value || 'none')));
   unsubs.push(bindChange('viewer-labels-toggle', (ev) => actions.setLabelsVisible?.(Boolean(ev.target?.checked))));

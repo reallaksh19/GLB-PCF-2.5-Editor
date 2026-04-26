@@ -70,6 +70,11 @@ export function createHudOrchestrator({ container, shellApi }) {
       store.patch({ visible: true, mode: 'line-draw', draft: nextDraft, errors: [] });
       emitHudTrace('LINE_MODE_OPEN', { axis: nextDraft.axis, routeId: nextDraft.routeId || null });
     },
+    activateModify: (tool) => {
+      // Modify modes: stretch, rotate, break, delete, polyline
+      store.patch({ visible: true, mode: `modify-${tool}`, errors: [], activeTool: tool });
+      emitHudTrace('MODIFY_MODE_OPEN', { tool });
+    },
     activateInsert: (component) => {
       const ctx = resolveInsertDefaults(component, shellApi);
       store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
@@ -77,8 +82,19 @@ export function createHudOrchestrator({ container, shellApi }) {
     },
     cancel: () => {
       const state = store.getState();
-      store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible });
+      if (state.activeTool === 'polyline' && state.polylineRouteId) {
+        try { shellApi.endPolyline?.(state.polylineRouteId); } catch (_) {}
+      }
+      store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible, activeTool: null, polylineRouteId: null });
       emitHudTrace('HUD_CANCEL', {}, true);
+    },
+    commitModify: () => {
+      const state = store.getState();
+      if (state.activeTool === 'polyline' && state.polylineRouteId) {
+        try { shellApi.endPolyline?.(state.polylineRouteId); } catch (_) {}
+        store.patch({ mode: 'idle', activeTool: null, polylineRouteId: null, errors: [] });
+        emitHudTrace('POLYLINE_COMMIT', { routeId: state.polylineRouteId }, true);
+      }
     },
     setAxis: (axis) => {
       const state = store.getState();
@@ -103,6 +119,8 @@ export function createHudOrchestrator({ container, shellApi }) {
       } else if (state.mode === 'insert-component') {
         const insertContext = updateInsertContextField(state, field, value, shellApi);
         store.patch({ insertContext, provenance: insertContext.provenance || 'manual', errors: [] });
+      } else {
+        store.patch({ [field]: value });
       }
     },
     commitLine: () => {
@@ -225,6 +243,7 @@ export function createHudOrchestrator({ container, shellApi }) {
       const state = store.getState();
       if (state.mode === 'line-draw') overlay.root.querySelector('[data-action="commit-line"]')?.click();
       else if (state.mode === 'insert-component') overlay.root.querySelector('[data-action="commit-insert"]')?.click();
+      else if (state.mode?.startsWith('modify-')) overlay.root.querySelector('[data-action="commit-modify"]')?.click();
     },
     autoBend: () => overlay.root.querySelector('[data-action="auto-bend"]')?.click(),
     autoTee: () => overlay.root.querySelector('[data-action="auto-tee"]')?.click(),
@@ -267,6 +286,11 @@ export function createHudOrchestrator({ container, shellApi }) {
     },
     showLineMode() {
       overlay.root.querySelector('[data-action="line"]')?.click();
+    },
+    showModifyMode(tool) {
+      const btn = overlay.root.querySelector(`[data-action="modify-${tool}"]`);
+      if (btn) btn.click();
+      else overlay.activateModify?.(tool);
     },
     showInsertMode(component = 'VALVE') {
       const btn = overlay.root.querySelector(`[data-action="insert-${String(component).toLowerCase()}"]`);

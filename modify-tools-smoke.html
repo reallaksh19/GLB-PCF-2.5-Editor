@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Modify Tools Smoke Test Matrix</title>
+</head>
+<body>
+  <h1>Modify Tools Smoke Matrix</h1>
+  <table border="1">
+    <tr><th>Scenario</th><th>Expected</th><th>Result</th></tr>
+    <tr><td>Polyline start, add, end</td><td>Route is created with nodes and segments</td><td>Pass</td></tr>
+    <tr><td>Stretch Node</td><td>Node is moved and segments orientation is updated</td><td>Pass</td></tr>
+    <tr><td>Rotate Route</td><td>Nodes are rotated around pivot point</td><td>Pass</td></tr>
+    <tr><td>Break Route</td><td>Segment is split, with gap if specified</td><td>Pass</td></tr>
+    <tr><td>Delete Node (Discon)</td><td>Node is deleted, segments removed</td><td>Pass</td></tr>
+    <tr><td>Delete Node (Heal)</td><td>Node is deleted, segments merged</td><td>Pass</td></tr>
+    <tr><td>Macro MATRIX</td><td>Transform metadata applied to comps</td><td>Pass</td></tr>
+    <tr><td>Macro SPLINE</td><td>Guide polyline created</td><td>Pass</td></tr>
+  </table>
+</body>
+</html>
