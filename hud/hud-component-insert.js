@@ -99,11 +99,15 @@ export function buildInsertPayload(insertContext = {}, shellApi) {
     size: insertContext.size || '',
     rating: insertContext.rating || '',
     length: insertContext.length || '',
+    branchLength: insertContext.branchLength || '',
     weight: insertContext.weight || '',
     provenance: insertContext.provenance || 'manual',
     pipelineRef: insertContext.pipelineRef || 'ROUTE-AUTHORED',
     facing: insertContext.facing || '',
     endType: insertContext.endType || '',
+    angle: insertContext.angle || '',
+    branchSize: insertContext.branchSize || '',
+    matchKey: insertContext.resolvedMatchKey || '',
     point,
   };
 }

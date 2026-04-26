@@ -70,6 +70,16 @@ function insertDraftHtml(state) {
         <label>Facing <input data-field="facing" type="text" value="${esc(ctx.facing || '')}" /></label>
         <label>EndType <input data-field="endType" type="text" value="${esc(ctx.endType || '')}" /></label>
       </div>
+      ${ctx.component === 'ELBOW' ? `
+      <div class="hud-row hud-fields-row">
+        <label>Angle <input data-field="angle" type="number" step="1" value="${esc(ctx.angle || '')}" /></label>
+        <label></label>
+      </div>` : ''}
+      ${ctx.component === 'TEE' ? `
+      <div class="hud-row hud-fields-row">
+        <label>Branch Size <input data-field="branchSize" type="text" value="${esc(ctx.branchSize || '')}" /></label>
+        <label>Branch Length <input data-field="branchLength" type="text" value="${esc(ctx.branchLength || '')}" /></label>
+      </div>` : ''}
       <div class="hud-row hud-fields-row">
         <label>Length <input data-field="length" type="text" value="${esc(ctx.length || '')}" /></label>
         <label>Weight <input data-field="weight" type="text" value="${esc(ctx.weight || '')}" /></label>

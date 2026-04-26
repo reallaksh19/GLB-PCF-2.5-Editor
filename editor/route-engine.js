@@ -92,7 +92,7 @@ function routeMidpoint(a, b) {
   };
 }
 
-function orthogonalElbowControl(prevNode, cornerNode, nextNode) {
+function orthogonalElbowControl(prevNode, cornerNode, nextNode, centerToEndMm) {
   const inVec = {
     x: cornerNode.x - prevNode.x,
     y: cornerNode.y - prevNode.y,
@@ -105,7 +105,13 @@ function orthogonalElbowControl(prevNode, cornerNode, nextNode) {
   };
   const inMag = Math.sqrt(inVec.x ** 2 + inVec.y ** 2 + inVec.z ** 2) || 1;
   const outMag = Math.sqrt(outVec.x ** 2 + outVec.y ** 2 + outVec.z ** 2) || 1;
-  const trim = Math.min(inMag, outMag, 250);
+
+  let trim = 0;
+  if (centerToEndMm == null || isNaN(centerToEndMm) || centerToEndMm === 0) {
+      throw new Error('AUTO_BEND_DIMENSION_UNRESOLVED: Master DB dimension not found. Auto Bend blocked.');
+  } else {
+      trim = Math.min(inMag, outMag, Number(centerToEndMm));
+  }
 
   return {
     ep1: {
@@ -119,6 +125,61 @@ function orthogonalElbowControl(prevNode, cornerNode, nextNode) {
       y: cornerNode.y + (outVec.y / outMag) * trim,
       z: cornerNode.z + (outVec.z / outMag) * trim,
     },
+  };
+}
+
+function orthogonalTeeControl(runFromNode, centerNode, runToNode, branchFarNode, runCenterToEndMm, branchCenterToEndMm) {
+  const inVec = {
+    x: centerNode.x - runFromNode.x,
+    y: centerNode.y - runFromNode.y,
+    z: centerNode.z - runFromNode.z,
+  };
+  const outVec = {
+    x: runToNode.x - centerNode.x,
+    y: runToNode.y - centerNode.y,
+    z: runToNode.z - centerNode.z,
+  };
+  const branchVec = {
+    x: branchFarNode.x - centerNode.x,
+    y: branchFarNode.y - centerNode.y,
+    z: branchFarNode.z - centerNode.z,
+  };
+
+  const inMag = Math.sqrt(inVec.x ** 2 + inVec.y ** 2 + inVec.z ** 2) || 1;
+  const outMag = Math.sqrt(outVec.x ** 2 + outVec.y ** 2 + outVec.z ** 2) || 1;
+  const branchMag = Math.sqrt(branchVec.x ** 2 + branchVec.y ** 2 + branchVec.z ** 2) || 1;
+
+  let trimRun = 0;
+  if (runCenterToEndMm == null || isNaN(runCenterToEndMm) || runCenterToEndMm === 0) {
+      throw new Error('AUTO_TEE_DIMENSION_UNRESOLVED: Master DB run dimension not found. Auto Tee blocked.');
+  } else {
+      trimRun = Math.min(inMag, outMag, Number(runCenterToEndMm));
+  }
+
+  let trimBranch = 0;
+  if (branchCenterToEndMm == null || isNaN(branchCenterToEndMm) || branchCenterToEndMm === 0) {
+      throw new Error('AUTO_TEE_DIMENSION_UNRESOLVED: Master DB branch dimension not found. Auto Tee blocked.');
+  } else {
+      trimBranch = Math.min(branchMag, Number(branchCenterToEndMm));
+  }
+
+  return {
+    ep1: {
+      x: centerNode.x - (inVec.x / inMag) * trimRun,
+      y: centerNode.y - (inVec.y / inMag) * trimRun,
+      z: centerNode.z - (inVec.z / inMag) * trimRun,
+    },
+    cp: clonePoint(centerNode),
+    ep2: {
+      x: centerNode.x + (outVec.x / outMag) * trimRun,
+      y: centerNode.y + (outVec.y / outMag) * trimRun,
+      z: centerNode.z + (outVec.z / outMag) * trimRun,
+    },
+    bp: {
+      x: centerNode.x + (branchVec.x / branchMag) * trimBranch,
+      y: centerNode.y + (branchVec.y / branchMag) * trimBranch,
+      z: centerNode.z + (branchVec.z / branchMag) * trimBranch,
+    }
   };
 }
 
@@ -308,7 +369,13 @@ function buildAutoBendPayload(route, candidate, resolved = {}, payload = {}) {
   const prevNode = clonePoint(nodeIndex[prevSeg.from]);
   const cornerNode = clonePoint(nodeIndex[prevSeg.to]);
   const nextNode = clonePoint(nodeIndex[nextSeg.to]);
-  const elbow = orthogonalElbowControl(prevNode, cornerNode, nextNode);
+
+  const length = resolved.centerToEnd || resolved.length || payload.length || 0;
+  if (!length) {
+    throw new Error('AUTO_BEND_DIMENSION_UNRESOLVED: Master DB dimension not found. Auto Bend blocked.');
+  }
+
+  const elbow = orthogonalElbowControl(prevNode, cornerNode, nextNode, length);
   return {
     id: `route:${route.id}:auto-bend:${candidate.nodeId}`,
     routeId: route.id,
@@ -318,11 +385,13 @@ function buildAutoBendPayload(route, candidate, resolved = {}, payload = {}) {
     ep1: elbow.ep1,
     ep2: elbow.ep2,
     cp: elbow.cp,
+    _trimEp1: elbow.ep1,
+    _trimEp2: elbow.ep2,
     subtype: resolved.subtype || payload.subtype || payload.radiusType || 'LR',
     size: resolved.size || payload.size || route.spec?.size || '',
     rating: resolved.rating || payload.rating || route.spec?.rating || '',
     angle: resolved.angle || payload.angle || 90,
-    length: resolved.centerToEnd || resolved.length || payload.length || '',
+    length: length || '',
     weight: resolved.weight || payload.weight || '',
     provenance: payload.provenance || 'manual',
     matchKey: payload.matchKey || '',
@@ -348,21 +417,34 @@ function buildAutoTeePayload(routes, route, candidate, resolved = {}, payload = 
       bp = clonePoint(branchNodeIndex[otherEndId]);
     }
   }
+
+  const length = resolved.runCenterToEnd || resolved.length || payload.length || 0;
+  const branchLength = resolved.branchCenterToEnd || payload.branchLength || length || 0;
+
+  if (!length || !branchLength) {
+    throw new Error('AUTO_TEE_DIMENSION_UNRESOLVED: Master DB dimension not found. Auto Tee blocked.');
+  }
+
+  const tee = orthogonalTeeControl(runFrom, point, runTo, bp, length, branchLength);
+
   return {
     id: `route:${route.id}:auto-tee:${candidate.nodeId}`,
     routeId: route.id,
     component: 'TEE',
     point,
     origin: point,
-    ep1: runFrom,
-    ep2: runTo,
-    bp,
+    ep1: tee.ep1,
+    ep2: tee.ep2,
+    bp: tee.bp,
+    _trimEp1: tee.ep1,
+    _trimEp2: tee.ep2,
+    _trimBp: tee.bp,
     subtype: resolved.subtype || payload.subtype || candidate.subtype || 'EQUAL',
     size: resolved.size || payload.size || candidate.runSize || route.spec?.size || '',
     branchSize: resolved.branchSize || payload.branchSize || candidate.branchSize || '',
     rating: resolved.rating || payload.rating || candidate.rating || route.spec?.rating || '',
-    length: resolved.runCenterToEnd || resolved.length || payload.length || '',
-    branchLength: resolved.branchCenterToEnd || payload.branchLength || '',
+    length: length || '',
+    branchLength: branchLength || '',
     weight: resolved.weight || payload.weight || '',
     provenance: payload.provenance || 'manual',
     matchKey: payload.matchKey || '',
@@ -577,10 +659,43 @@ export function registerDefaultRouteHandlers() {
     if (!nextRoute.convertedBendNodes.includes(candidate.nodeId)) nextRoute.convertedBendNodes.push(candidate.nodeId);
 
     const payload = buildAutoBendPayload(nextRoute, candidate, command.payload.resolved || {}, command.payload);
+
+    // Apply trimming
+    const { _trimEp1, _trimEp2 } = payload;
+    if (_trimEp1 && _trimEp2) {
+      const prevSegIndex = nextRoute.segments.findIndex(seg => seg.id === candidate.prevSegId);
+      const nextSegIndex = nextRoute.segments.findIndex(seg => seg.id === candidate.nextSegId);
+
+      if (prevSegIndex >= 0 && nextSegIndex >= 0) {
+        const trimNode1 = createRouteNode(uid('node'), _trimEp1.x, _trimEp1.y, _trimEp1.z);
+        const trimNode2 = createRouteNode(uid('node'), _trimEp2.x, _trimEp2.y, _trimEp2.z);
+        nextRoute.nodes.push(trimNode1, trimNode2);
+
+        if (nextRoute.segments[prevSegIndex].to === candidate.nodeId) {
+            nextRoute.segments[prevSegIndex].to = trimNode1.id;
+        } else {
+            nextRoute.segments[prevSegIndex].from = trimNode1.id;
+        }
+
+        if (nextRoute.segments[nextSegIndex].from === candidate.nodeId) {
+            nextRoute.segments[nextSegIndex].from = trimNode2.id;
+        } else {
+            nextRoute.segments[nextSegIndex].to = trimNode2.id;
+        }
+      }
+    }
+
     const component = normalizeInlineComponent(payload, {
       model: state.model,
       selection: state.selection,
     });
+
+    // We attach the inserted component to the original corner node visually, but update its origin to reflect it
+    if (_trimEp1 && _trimEp2) {
+        component.geometry.origin = clonePoint(candidate.cornerPoint);
+        component.geometry.ep1 = clonePoint(_trimEp1);
+        component.geometry.ep2 = clonePoint(_trimEp2);
+    }
     const nextComponents = (state.model?.components || []).filter((item) => item.id !== component.id).concat(component);
 
     nextRoutes[index] = nextRoute;
@@ -603,10 +718,71 @@ export function registerDefaultRouteHandlers() {
     if (!nextRoute.convertedTeeNodes.includes(candidate.nodeId)) nextRoute.convertedTeeNodes.push(candidate.nodeId);
 
     const payload = buildAutoTeePayload(state.model?.routes || [], nextRoute, candidate, command.payload.resolved || {}, command.payload);
+
+    // Apply trimming
+    const { _trimEp1, _trimEp2, _trimBp } = payload;
+
+    if (_trimEp1 && candidate.prevSeg) {
+        const prevSegIndex = nextRoute.segments.findIndex(seg => seg.id === candidate.prevSeg.id);
+        if (prevSegIndex >= 0) {
+            const trimNode1 = createRouteNode(uid('node'), _trimEp1.x, _trimEp1.y, _trimEp1.z);
+            nextRoute.nodes.push(trimNode1);
+            if (nextRoute.segments[prevSegIndex].to === candidate.nodeId) {
+                nextRoute.segments[prevSegIndex].to = trimNode1.id;
+            } else {
+                nextRoute.segments[prevSegIndex].from = trimNode1.id;
+            }
+        }
+    }
+
+    if (_trimEp2 && candidate.nextSeg) {
+        const nextSegIndex = nextRoute.segments.findIndex(seg => seg.id === candidate.nextSeg.id);
+        if (nextSegIndex >= 0) {
+            const trimNode2 = createRouteNode(uid('node'), _trimEp2.x, _trimEp2.y, _trimEp2.z);
+            nextRoute.nodes.push(trimNode2);
+            if (nextRoute.segments[nextSegIndex].from === candidate.nodeId) {
+                nextRoute.segments[nextSegIndex].from = trimNode2.id;
+            } else {
+                nextRoute.segments[nextSegIndex].to = trimNode2.id;
+            }
+        }
+    }
+
+    if (_trimBp && candidate.branchSeg && candidate.branchRouteId) {
+        const branchRouteIndex = nextRoutes.findIndex(r => r.id === candidate.branchRouteId);
+        if (branchRouteIndex >= 0) {
+            const nextBranchRoute = clone(nextRoutes[branchRouteIndex]);
+            const branchSegIndex = nextBranchRoute.segments.findIndex(seg => seg.id === candidate.branchSeg.id);
+
+            if (branchSegIndex >= 0) {
+                const trimBpNode = createRouteNode(uid('node'), _trimBp.x, _trimBp.y, _trimBp.z);
+                nextBranchRoute.nodes.push(trimBpNode);
+
+                const branchNodeIndex = routeNodeIndex(nextBranchRoute);
+                const branchFromPt = branchNodeIndex[nextBranchRoute.segments[branchSegIndex].from];
+
+                if (isSamePoint(branchFromPt, candidate.point)) {
+                    nextBranchRoute.segments[branchSegIndex].from = trimBpNode.id;
+                } else {
+                    nextBranchRoute.segments[branchSegIndex].to = trimBpNode.id;
+                }
+            }
+            nextRoutes[branchRouteIndex] = nextBranchRoute;
+        }
+    }
+
     const component = normalizeInlineComponent(payload, {
       model: state.model,
       selection: state.selection,
     });
+
+    // We attach the inserted component to the original corner node visually, but update its origin to reflect it
+    if (_trimEp1 || _trimEp2 || _trimBp) {
+        component.geometry.origin = clonePoint(candidate.point);
+        if (_trimEp1) component.geometry.ep1 = clonePoint(_trimEp1);
+        if (_trimEp2) component.geometry.ep2 = clonePoint(_trimEp2);
+        if (_trimBp) component.geometry.bp = clonePoint(_trimBp);
+    }
     const nextComponents = (state.model?.components || []).filter((item) => item.id !== component.id).concat(component);
 
     nextRoutes[index] = nextRoute;
