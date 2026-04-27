@@ -113,7 +113,10 @@ function normalizeActions(actionsOrRenderer, _getComponents, _getDomain, shellAp
       exportDXF: () => {},
       openMasterDb: () => shellApi.openMasterDb?.(),
       showHudLineMode: () => shellApi.showHudLineMode?.(),
+      showHudPolylineMode: () => shellApi.showHudPolylineMode?.(),
+      showHudSplineMode: () => shellApi.showHudSplineMode?.(),
       showHudInsertMode: (component) => shellApi.showHudInsertMode?.(component),
+      setModifyMode: (mode) => shellApi.setModifyMode?.(mode),
       autoBend: () => shellApi.autoBendRoute?.({ source: 'toolbar-auto-bend' }),
       autoTee: () => shellApi.autoTeeRoute?.({ source: 'toolbar-auto-tee' }),
       setStatus: (tone, text) => shellApi.setViewerStatus?.(text, tone),
@@ -161,10 +164,17 @@ export function initToolbar(actionsOrRenderer = {}, getComponents, getDomain, sh
   applyToolbarGrouping();
   unsubs.push(bindClick('btn-masterdb', () => actions.openMasterDb?.()));
   unsubs.push(bindClick('btn-tool-line', () => actions.showHudLineMode?.()));
+  unsubs.push(bindClick('btn-tool-polyline', () => actions.showHudPolylineMode?.()));
+  unsubs.push(bindClick('btn-tool-spline', () => actions.showHudSplineMode?.()));
   unsubs.push(bindClick('btn-tool-valve', () => actions.showHudInsertMode?.('VALVE')));
   unsubs.push(bindClick('btn-tool-flange', () => actions.showHudInsertMode?.('FLANGE')));
   unsubs.push(bindClick('btn-tool-tee', () => actions.showHudInsertMode?.('TEE')));
   unsubs.push(bindClick('btn-tool-support', () => actions.showHudInsertMode?.('SUPPORT')));
+  unsubs.push(bindClick('btn-tool-move', () => actions.setModifyMode?.('MOVE')));
+  unsubs.push(bindClick('btn-tool-stretch', () => actions.setModifyMode?.('STRETCH')));
+  unsubs.push(bindClick('btn-tool-rotate', () => actions.setModifyMode?.('ROTATE')));
+  unsubs.push(bindClick('btn-tool-break', () => actions.setModifyMode?.('BREAK')));
+  unsubs.push(bindClick('btn-tool-delete', () => actions.setModifyMode?.('DELETE')));
   unsubs.push(bindClick('btn-convert-bend', () => actions.autoBend?.()));
   unsubs.push(bindClick('btn-convert-tee', () => actions.autoTee?.()));
 

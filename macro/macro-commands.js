@@ -64,12 +64,25 @@ function withMirror(comp, plane, ctx) {
   return cp;
 }
 
-function parseXYZ(token, ctx, mode = 'standard') {
-  if (!token) throw new Error('Missing coordinate token');
+function parseXYZ(token, ctx, mode = 'standard', argIndex = -1) {
+  if (!token) throw new Error(`Missing coordinate token${argIndex >= 0 ? ` at arg ${argIndex + 1}` : ''}`);
   const isRelative = token.startsWith('@');
   const raw = isRelative ? token.slice(1) : token;
-  const parts = raw.split(',').map(v => Number(v.trim()));
-  if (parts.length !== 3 || parts.some(Number.isNaN)) throw new Error(`Invalid coordinate: ${token}`);
+  const strParts = raw.split(',');
+  if (strParts.length !== 3) {
+    throw new Error(`Invalid coordinate format: "${token}"${argIndex >= 0 ? ` at arg ${argIndex + 1}` : ''}. Expected x,y,z.`);
+  }
+
+  const parts = strParts.map(v => {
+    const trimmed = v.trim();
+    if (trimmed === '') return NaN;
+    return Number(trimmed);
+  });
+
+  if (parts.some(Number.isNaN)) {
+    throw new Error(`Non-numeric coordinate in: "${token}"${argIndex >= 0 ? ` at arg ${argIndex + 1}` : ''}.`);
+  }
+
   const base = mode === 'route-delta'
     ? { x: 0, y: 0, z: 0 }
     : isRelative
@@ -136,8 +149,8 @@ export function registerBuiltinCommands() {
 
   register('PIPE', (args, ctx) => {
     requireArgs(args, 2, 'PIPE x1,y1,z1 x2,y2,z2 [OD=n] [MAT=CS]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const ep2 = parseXYZ(args[1], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const ep2 = parseXYZ(args[1], ctx, 'standard', 1);
     const opts = parseKV(args.slice(2));
     const bore = resolveBore(opts, ctx);
     const comp = componentBase('PIPE', ctx, `PIPE ${bore}mm`);
@@ -152,9 +165,9 @@ export function registerBuiltinCommands() {
 
   register('ELBOW', (args, ctx) => {
     requireArgs(args, 3, 'ELBOW x1,y1,z1 xc,yc,zc x2,y2,z2 [OD=n] [R=long/short]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const cp = parseXYZ(args[1], ctx);
-    const ep2 = parseXYZ(args[2], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const cp = parseXYZ(args[1], ctx, 'standard', 1);
+    const ep2 = parseXYZ(args[2], ctx, 'standard', 2);
     const opts = parseKV(args.slice(3));
     const bore = resolveBore(opts, ctx);
     const comp = componentBase('ELBOW', ctx, `ELBOW ${bore}mm`);
@@ -170,9 +183,9 @@ export function registerBuiltinCommands() {
 
   register('TEE', (args, ctx) => {
     requireArgs(args, 3, 'TEE x1,y1,z1 x2,y2,z2 xb,yb,zb [OD=n] [BRANCH-OD=n]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const ep2 = parseXYZ(args[1], ctx);
-    const bp = parseXYZ(args[2], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const ep2 = parseXYZ(args[1], ctx, 'standard', 1);
+    const bp = parseXYZ(args[2], ctx, 'standard', 2);
     const opts = parseKV(args.slice(3));
     const bore = resolveBore(opts, ctx);
     const branchBore = Number(opts['BRANCH-OD'] || opts.BRANCH_OD || bore);
@@ -189,7 +202,7 @@ export function registerBuiltinCommands() {
 
   register('FLANGE', (args, ctx) => {
     requireArgs(args, 1, 'FLANGE x,y,z [OD=n] [RATING=150]');
-    const origin = parseXYZ(args[0], ctx);
+    const origin = parseXYZ(args[0], ctx, 'standard', 0);
     const opts = parseKV(args.slice(1));
     const bore = resolveBore(opts, ctx);
     const comp = componentBase('FLANGE', ctx, `FLANGE ${bore}mm`);
@@ -206,7 +219,7 @@ export function registerBuiltinCommands() {
 
   register('VALVE', (args, ctx) => {
     requireArgs(args, 1, 'VALVE x,y,z [OD=n] [TYPE=GATE/BALL/CHECK]');
-    const origin = parseXYZ(args[0], ctx);
+    const origin = parseXYZ(args[0], ctx, 'standard', 0);
     const opts = parseKV(args.slice(1));
     const bore = resolveBore(opts, ctx);
     const comp = componentBase('VALVE', ctx, `VALVE ${bore}mm`);
@@ -222,8 +235,8 @@ export function registerBuiltinCommands() {
 
   register('REDUCER', (args, ctx) => {
     requireArgs(args, 2, 'REDUCER x1,y1,z1 x2,y2,z2 [OD1=n] [OD2=n]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const ep2 = parseXYZ(args[1], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const ep2 = parseXYZ(args[1], ctx, 'standard', 1);
     const opts = parseKV(args.slice(2));
     const od1 = Number(opts.OD1 || ctx.defaultOD || 168.3);
     const od2 = Number(opts.OD2 || opts.OD || od1 / 2);
@@ -241,7 +254,7 @@ export function registerBuiltinCommands() {
 
   register('SUPPORT', (args, ctx) => {
     requireArgs(args, 1, 'SUPPORT x,y,z [KIND=REST/GUIDE/ANCHOR] [NAME=S-01]');
-    const origin = parseXYZ(args[0], ctx);
+    const origin = parseXYZ(args[0], ctx, 'standard', 0);
     const opts = parseKV(args.slice(1));
     const kind = String(opts.KIND || 'REST').toUpperCase();
     const name = String(opts.NAME || '');
@@ -259,7 +272,7 @@ export function registerBuiltinCommands() {
 
   register('LABEL', (args, ctx) => {
     requireArgs(args, 2, 'LABEL x,y,z "text"');
-    const origin = parseXYZ(args[0], ctx);
+    const origin = parseXYZ(args[0], ctx, 'standard', 0);
     const text = args.slice(1).join(' ').trim();
     const comp = componentBase('MESSAGE-SQUARE', ctx, text || 'LABEL');
     comp.geometry = { origin, ep1: null, ep2: null, cp: null, bp: null, bore: null, size: null };
@@ -270,7 +283,7 @@ export function registerBuiltinCommands() {
 
   register('ORIGIN', (args, ctx) => {
     requireArgs(args, 1, 'ORIGIN x,y,z');
-    const origin = parseXYZ(args[0], { ...ctx, lastPoint: { x: 0, y: 0, z: 0 }, workingOrigin: { x: 0, y: 0, z: 0 } });
+    const origin = parseXYZ(args[0], { ...ctx, lastPoint: { x: 0, y: 0, z: 0 }, workingOrigin: { x: 0, y: 0, z: 0 } }, 'standard', 0);
     ctx.workingOrigin = origin;
     ctx.lastPoint = origin;
     return { message: `Working Plane Origin set to ${origin.x},${origin.y},${origin.z}` };
@@ -287,7 +300,7 @@ export function registerBuiltinCommands() {
     if (String(args[0]).toUpperCase() !== 'LAST') throw new Error('ARRAY currently supports only LAST');
     const count = Number(args[1]);
     if (!Number.isFinite(count) || count < 1) throw new Error('ARRAY count must be >= 1');
-    const delta = parseXYZ(args[2], ctx, 'route-delta');
+    const delta = parseXYZ(args[2], ctx, 'route-delta', 2);
     const base = ctx.lastEntities || [];
     if (!base.length) throw new Error('No LAST entity available for ARRAY');
     const comps = [];
@@ -310,6 +323,73 @@ export function registerBuiltinCommands() {
     return registerCompsResult(comps, ctx, `MIRROR created: ${comps.length} mirrored component(s)`);
   });
 
+  register('POLYLINE', (args, ctx) => {
+    requireArgs(args, 2, 'POLYLINE x1,y1,z1 x2,y2,z2 ... [OD=n] [MAT=CS]');
+    const points = [];
+    const opts = parseKV(args);
+    const bore = resolveBore(opts, ctx);
+
+    // Find all coordinate arguments
+    for (let i = 0; i < args.length; i++) {
+      if (args[i].includes('=')) continue; // Skip key-value options
+      points.push(parseXYZ(args[i], ctx, 'standard', i));
+    }
+
+    if (points.length < 2) throw new Error('POLYLINE requires at least 2 points');
+
+    const comps = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const ep1 = points[i];
+      const ep2 = points[i + 1];
+      const pipe = componentBase('PIPE', ctx, `PIPE ${bore}mm`);
+      pipe.geometry = { origin: ep1, ep1, ep2, cp: null, bp: null, bore, size: null };
+      pipe.attributes = {
+        'PIPELINE-REFERENCE': opts.PIPELINE || ctx.pipeline || '',
+        'MATERIAL': opts.MAT || ctx.defaultMat || 'CS',
+        'BORE': String(bore),
+      };
+      comps.push(pipe);
+    }
+
+    // Auto-insert elbows at corners
+    for (let i = 0; i < points.length - 2; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1]; // corner
+      const p3 = points[i + 2];
+
+      const elbow = componentBase('ELBOW', ctx, `ELBOW ${bore}mm`);
+      elbow.geometry = { origin: p2, ep1: p1, ep2: p3, cp: p2, bp: null, bore, size: null };
+      elbow.attributes = {
+        'BORE': String(bore),
+        'RADIUS-TYPE': String(opts.R || 'LONG').toUpperCase(),
+        'PIPELINE-REFERENCE': opts.PIPELINE || ctx.pipeline || '',
+        'MATERIAL': opts.MAT || ctx.defaultMat || 'CS',
+      };
+      comps.push(elbow);
+    }
+
+    return registerCompsResult(comps, ctx, `POLYLINE created: ${points.length - 1} segments`);
+  });
+
+  register('SPLINE', (args, ctx) => {
+    requireArgs(args, 2, 'SPLINE x1,y1,z1 x2,y2,z2 ...');
+    const points = [];
+    for (let i = 0; i < args.length; i++) {
+      points.push(parseXYZ(args[i], ctx, 'standard', i));
+    }
+
+    if (points.length < 2) throw new Error('SPLINE requires at least 2 points');
+
+    // In macro ctx without route engine direct link we just create a GUIDE pseudo-component
+    // to render the line visually
+    const comp = componentBase('GUIDE-SPLINE', ctx, 'Spline Guide');
+    comp.geometry = { origin: points[0], points, bore: null, size: null, isGuide: true };
+    comp.attributes = {
+      'GUIDE-TYPE': 'SPLINE',
+    };
+    return registerCompResult(comp, ctx, `SPLINE guide created with ${points.length} points`);
+  });
+
   register('ROUTE', (args, ctx) => {
     const opts = parseKV(args);
     beginRoute(ctx, opts);
@@ -318,7 +398,7 @@ export function registerBuiltinCommands() {
 
   register('START', (args, ctx) => {
     requireArgs(args, 1, 'START x,y,z');
-    const pt = parseXYZ(args[0], ctx);
+    const pt = parseXYZ(args[0], ctx, 'standard', 0);
     routeStart(ctx, pt);
     return { message: `ROUTE start set at ${pt.x},${pt.y},${pt.z}` };
   });
@@ -326,7 +406,7 @@ export function registerBuiltinCommands() {
   register('RUN', (args, ctx) => {
     requireArgs(args, 1, 'RUN dx,dy,dz');
     requireActiveRoute(ctx);
-    const delta = parseXYZ(args[0], ctx, 'route-delta');
+    const delta = parseXYZ(args[0], ctx, 'route-delta', 0);
     const opts = parseKV(args.slice(1));
     const bore = resolveBore(opts, ctx);
     const pending = consumePendingElbow(ctx, delta, opts.R || opts.RADIUS || bore * 1.5);
@@ -367,9 +447,9 @@ export function registerBuiltinCommands() {
   // keep direct elbow handler reachable
   _commands.get('ELBOW').__direct = (args, ctx) => {
     requireArgs(args, 3, 'ELBOW x1,y1,z1 xc,yc,zc x2,y2,z2 [OD=n] [R=long/short]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const cp = parseXYZ(args[1], ctx);
-    const ep2 = parseXYZ(args[2], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const cp = parseXYZ(args[1], ctx, 'standard', 1);
+    const ep2 = parseXYZ(args[2], ctx, 'standard', 2);
     const opts = parseKV(args.slice(3));
     const bore = resolveBore(opts, ctx);
     const comp = componentBase('ELBOW', ctx, `ELBOW ${bore}mm`);
@@ -388,7 +468,7 @@ export function registerBuiltinCommands() {
       const opts = parseKV(args);
       const rs = requireActiveRoute(ctx);
       if (!rs.lastPoint) throw new Error('TEE in ROUTE mode requires an active last point');
-      const branchDelta = parseXYZ(String(opts.BRANCH || '0,1000,0'), ctx, 'route-delta');
+      const branchDelta = parseXYZ(String(opts.BRANCH || '0,1000,0'), ctx, 'route-delta', -1);
       const bp = { x: rs.lastPoint.x + branchDelta.x, y: rs.lastPoint.y + branchDelta.y, z: rs.lastPoint.z + branchDelta.z };
       const bore = Number(opts.OD || ctx.defaultOD || 168.3);
       const branchBore = Number(opts['BRANCH-OD'] || opts.BRANCH_OD || bore);
@@ -407,9 +487,9 @@ export function registerBuiltinCommands() {
   });
   _commands.get('TEE').__direct = (args, ctx) => {
     requireArgs(args, 3, 'TEE x1,y1,z1 x2,y2,z2 xb,yb,zb [OD=n] [BRANCH-OD=n]');
-    const ep1 = parseXYZ(args[0], ctx);
-    const ep2 = parseXYZ(args[1], ctx);
-    const bp = parseXYZ(args[2], ctx);
+    const ep1 = parseXYZ(args[0], ctx, 'standard', 0);
+    const ep2 = parseXYZ(args[1], ctx, 'standard', 1);
+    const bp = parseXYZ(args[2], ctx, 'standard', 2);
     const opts = parseKV(args.slice(3));
     const bore = resolveBore(opts, ctx);
     const branchBore = Number(opts['BRANCH-OD'] || opts.BRANCH_OD || bore);
@@ -438,8 +518,8 @@ export function registerBuiltinCommands() {
 
   register('DIST', (args, ctx) => {
     requireArgs(args, 2, 'DIST x1,y1,z1 x2,y2,z2');
-    const a = parseXYZ(args[0], ctx);
-    const b = parseXYZ(args[1], ctx);
+    const a = parseXYZ(args[0], ctx, 'standard', 0);
+    const b = parseXYZ(args[1], ctx, 'standard', 1);
     return { message: `Distance: ${formatDistance(a, b)} mm` };
   });
 

@@ -10,7 +10,7 @@ import { createCommand, CommandTypes } from './command-types.js';
 import { executeEditorCommand } from './command-executor.js';
 import { getCommandHandler, registerCommandHandler } from './command-handlers.js';
 import { createEmptyRoute, createRouteNode, createRouteSegment } from './route-contract.js';
-import { applyDelta, boundsFromPoints, clonePoint, normalizeAxisDelta, normalizePoint, pointsEqual } from './coordinate-normalizer.js';
+import { applyDelta, boundsFromPoints, clonePoint, normalizeAxisDelta, normalizePoint, pointsEqual, rotatePoint } from './coordinate-normalizer.js';
 import { aggregateRouteMetrics, classifySegmentOrientation, routeNodeIndex } from './route-metrics.js';
 
 export const ROUTE_ENGINE_VERSION = '1.0.0-ai2';
@@ -459,6 +459,98 @@ export function registerDefaultRouteHandlers() {
     return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
   });
 
+  registerCommandHandler(CommandTypes.ROUTE_BREAK, (state, command) => {
+    const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+    const nextRoutes = clone(state.model.routes || []);
+    const nextRoute = clone(route);
+    const segIndex = nextRoute.segments.findIndex((seg) => seg.id === command.payload.segmentId);
+    if (segIndex < 0) throw new Error(`Segment not found: ${command.payload.segmentId}`);
+
+    const segment = nextRoute.segments[segIndex];
+    const nodeIndex = routeNodeIndex(nextRoute);
+    const a = nodeIndex[segment.from];
+    const b = nodeIndex[segment.to];
+    const breakPoint = command.payload.point
+      ? normalizePoint(command.payload.point)
+      : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+
+    // Break removes the connection, creating two independent endpoints
+    const breakNode1 = createRouteNode(uid('node'), breakPoint.x, breakPoint.y, breakPoint.z);
+    const breakNode2 = createRouteNode(uid('node'), breakPoint.x, breakPoint.y, breakPoint.z);
+
+    const first = createRouteSegment(uid('segment'), segment.from, breakNode1.id, segment.kind || 'PIPE', classifySegmentOrientation(a, breakNode1));
+    const second = createRouteSegment(uid('segment'), breakNode2.id, segment.to, segment.kind || 'PIPE', classifySegmentOrientation(breakNode2, b));
+
+    nextRoute.nodes.push(breakNode1, breakNode2);
+    nextRoute.segments.splice(segIndex, 1, first, second);
+    nextRoutes[index] = nextRoute;
+    return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.ROUTE_ROTATE, (state, command) => {
+    const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+    const nextRoutes = clone(state.model.routes || []);
+    const nextRoute = clone(route);
+
+    const pivotNodeId = command.payload.pivotNodeId;
+    const pivotNode = nextRoute.nodes.find(n => n.id === pivotNodeId);
+    if (!pivotNode) throw new Error(`Pivot node not found: ${pivotNodeId}`);
+
+    const angle = command.payload.angle || 90;
+    const axis = command.payload.axis || 'Z';
+
+    const nodeIdsToRotate = new Set(command.payload.nodeIds || []);
+
+    const pivot = normalizePoint(pivotNode);
+    for (const node of nextRoute.nodes) {
+      if (nodeIdsToRotate.has(node.id)) {
+        const rotated = rotatePoint(node, pivot, axis, angle);
+        node.x = rotated.x;
+        node.y = rotated.y;
+        node.z = rotated.z;
+      }
+    }
+
+    const nodeIndex = routeNodeIndex(nextRoute);
+    for (const seg of nextRoute.segments) {
+      seg.orientation = classifySegmentOrientation(nodeIndex[seg.from], nodeIndex[seg.to]);
+    }
+
+    nextRoutes[index] = nextRoute;
+    return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
+  registerCommandHandler(CommandTypes.ROUTE_STRETCH, (state, command) => {
+    const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+    const nextRoutes = clone(state.model.routes || []);
+    const nextRoute = clone(route);
+
+    // Stretch moves an endpoint (or specific nodes) while keeping the segment connected
+    // This is similar to ROUTE_NODE_MOVE but designed for topological segment stretching
+    const nodeId = command.payload.nodeId;
+    const node = nextRoute.nodes.find((item) => item.id === nodeId);
+    if (!node) throw new Error(`Node not found: ${nodeId}`);
+
+    const delta = normalizeAxisDelta({ dx: command.payload.dx, dy: command.payload.dy, dz: command.payload.dz });
+    const nextPoint = command.payload.absolute
+      ? normalizePoint(command.payload.absolute)
+      : applyDelta(node, delta);
+
+    node.x = nextPoint.x;
+    node.y = nextPoint.y;
+    node.z = nextPoint.z;
+
+    const nodeIndex = routeNodeIndex(nextRoute);
+    for (const seg of nextRoute.segments) {
+      if (seg.from === node.id || seg.to === node.id) {
+        seg.orientation = classifySegmentOrientation(nodeIndex[seg.from], nodeIndex[seg.to]);
+      }
+    }
+
+    nextRoutes[index] = nextRoute;
+    return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
+  });
+
   registerCommandHandler(CommandTypes.ROUTE_SEGMENT_EDIT, (state, command) => {
     const { index, route } = getRouteOrThrow(state, command.payload.routeId);
     const nextRoutes = clone(state.model.routes || []);
@@ -541,8 +633,66 @@ export function registerDefaultRouteHandlers() {
   });
 
   registerCommandHandler(CommandTypes.ROUTE_DELETE, (state, command) => {
-    const nextRoutes = (state.model?.routes || []).filter((route) => route.id !== command.payload.routeId);
-    return patchStateWithRoute(state, nextRoutes, null, command.type);
+    let nextRoutes = clone(state.model.routes || []);
+
+    if (command.payload.segmentId || command.payload.nodeId) {
+      // Partial delete: remove a specific segment or node and clean up orphans
+      const { index, route } = getRouteOrThrow(state, command.payload.routeId);
+      const nextRoute = clone(route);
+
+      if (command.payload.segmentId) {
+        nextRoute.segments = nextRoute.segments.filter(seg => seg.id !== command.payload.segmentId);
+      }
+      if (command.payload.nodeId) {
+        // Removing a node removes any connected segments
+        nextRoute.nodes = nextRoute.nodes.filter(n => n.id !== command.payload.nodeId);
+        nextRoute.segments = nextRoute.segments.filter(seg => seg.from !== command.payload.nodeId && seg.to !== command.payload.nodeId);
+      }
+
+      // Cleanup orphan nodes
+      const usedNodes = new Set();
+      nextRoute.segments.forEach(seg => {
+        usedNodes.add(seg.from);
+        usedNodes.add(seg.to);
+      });
+      nextRoute.nodes = nextRoute.nodes.filter(n => usedNodes.has(n.id));
+
+      if (nextRoute.nodes.length === 0) {
+        // If route is now empty, delete the entire route
+        nextRoutes = nextRoutes.filter((r) => r.id !== command.payload.routeId);
+      } else {
+        nextRoutes[index] = nextRoute;
+      }
+      return patchStateWithRoute(state, nextRoutes, command.payload.routeId, command.type);
+    } else {
+      // Full route delete
+      nextRoutes = nextRoutes.filter((route) => route.id !== command.payload.routeId);
+      return patchStateWithRoute(state, nextRoutes, null, command.type);
+    }
+  });
+
+  registerCommandHandler(CommandTypes.GUIDE_ADD, (state, command) => {
+    // Guides (like splines) are stored alongside route models but flagged as guides.
+    // They are not exported to PCF or included in stress calculations.
+    const guide = {
+      id: command.payload.id || uid('guide'),
+      type: command.payload.type || 'SPLINE',
+      points: (command.payload.points || []).map(normalizePoint),
+      isGuide: true,
+      spec: command.payload.spec || {},
+    };
+
+    return {
+      model: {
+        ...(state.model || {}),
+        guides: [...(state.model?.guides || []), guide]
+      },
+      selection: {
+        ...(state.selection || {}),
+        activeGuideId: guide.id,
+      },
+      diagnostics: buildDiagnostics(state, null, command.type),
+    };
   });
 
   registerCommandHandler(CommandTypes.INSERT_COMPONENT, (state, command) => {
@@ -745,6 +895,53 @@ export function createRouteEngine(options = {}) {
     return getActiveRoute();
   }
 
+  function stretchNode(routeId, nodeId, absoluteOrDelta, meta = {}) {
+    const payload = absoluteOrDelta?.x != null || absoluteOrDelta?.y != null || absoluteOrDelta?.z != null
+      ? { routeId, nodeId, absolute: normalizePoint(absoluteOrDelta) }
+      : { routeId, nodeId, ...normalizeAxisDelta(absoluteOrDelta) };
+    const cmd = createCommand(CommandTypes.ROUTE_STRETCH, payload, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function deleteRouteOrPart(routeId, segmentId = null, nodeId = null, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_DELETE, { routeId, segmentId, nodeId }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function breakSegment(routeId, segmentId, point = null, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_BREAK, {
+      routeId,
+      segmentId,
+      point: point ? normalizePoint(point) : null,
+    }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function rotateNodes(routeId, pivotNodeId, nodeIds, angle, axis, meta = {}) {
+    const cmd = createCommand(CommandTypes.ROUTE_ROTATE, {
+      routeId,
+      pivotNodeId,
+      nodeIds,
+      angle,
+      axis,
+    }, meta);
+    execute(cmd);
+    return getActiveRoute();
+  }
+
+  function addGuide(type, points, spec = {}, meta = {}) {
+    const cmd = createCommand(CommandTypes.GUIDE_ADD, { type, points, spec }, meta);
+    execute(cmd);
+    return store.getState().selection?.activeGuideId;
+  }
+
+  function getGuides() {
+    return store.getState().model?.guides || [];
+  }
+
   function addToPoint(routeId, point, meta = {}) {
     const cmd = createCommand(CommandTypes.ROUTE_SEGMENT_ADD, { routeId, to: normalizePoint(point) }, meta);
     execute(cmd);
@@ -850,7 +1047,11 @@ export function createRouteEngine(options = {}) {
     rise,
     drop,
     moveNode,
+    stretchNode,
+    deleteRouteOrPart,
     splitSegment,
+    breakSegment,
+    rotateNodes,
     insertComponent,
     getAutoBendCandidate,
     autoBend,
@@ -858,6 +1059,8 @@ export function createRouteEngine(options = {}) {
     autoTee,
     getState,
     getRoutes,
+    getGuides,
+    addGuide,
     getInlineComponents,
     getDerivedComponents,
     getMetrics,

@@ -62,6 +62,38 @@ export function applyDelta(point, delta = {}) {
   };
 }
 
+export function rotatePoint(point, pivot, axis, angleDegrees) {
+  const p = normalizePoint(point);
+  const pv = normalizePoint(pivot);
+  const angleRad = angleDegrees * Math.PI / 180;
+  const c = Math.cos(angleRad);
+  const s = Math.sin(angleRad);
+  const dx = p.x - pv.x;
+  const dy = p.y - pv.y;
+  const dz = p.z - pv.z;
+
+  let rx = dx, ry = dy, rz = dz;
+  const a = String(axis || 'Z').toUpperCase();
+
+  if (a === 'X') {
+    ry = dy * c - dz * s;
+    rz = dy * s + dz * c;
+  } else if (a === 'Y') {
+    rx = dx * c + dz * s;
+    rz = -dx * s + dz * c;
+  } else {
+    // Default Z axis rotation
+    rx = dx * c - dy * s;
+    ry = dx * s + dy * c;
+  }
+
+  return {
+    x: pv.x + rx,
+    y: pv.y + ry,
+    z: pv.z + rz
+  };
+}
+
 export function normalizeAxisDelta({ dx = 0, dy = 0, dz = 0 } = {}) {
   return {
     dx: toFiniteNumber(dx),

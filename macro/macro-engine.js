@@ -34,15 +34,26 @@ export function executeMacroScript(script, context) {
   ensureBuiltins();
   const results = [];
   const lines = String(script || '').split(/\r?\n/);
+
+  // Matrix input validation: reject script if there are syntax errors before running
+  const executableLines = [];
   lines.forEach((line, idx) => {
     const trimmed = stripComments(line).trim();
-    if (!trimmed) return;
+    if (trimmed) {
+      executableLines.push({ text: trimmed, num: idx + 1 });
+    }
+  });
+
+  if (executableLines.length === 0) return results;
+
+  executableLines.forEach(({ text, num }) => {
     try {
-      const result = executeMacro(trimmed, context);
-      if (result) results.push({ ok: true, line: idx + 1, result });
+      const result = executeMacro(text, context);
+      if (result) results.push({ ok: true, line: num, result });
     } catch (err) {
-      results.push({ ok: false, line: idx + 1, error: err });
-      throw err;
+      const wrappedError = new Error(`Line ${num}: ${err.message}`);
+      results.push({ ok: false, line: num, error: wrappedError });
+      throw wrappedError;
     }
   });
   return results;

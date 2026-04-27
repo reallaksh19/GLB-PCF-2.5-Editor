@@ -99,11 +99,14 @@ export function createHudOverlay(container, handlers = {}) {
     const action = actionEl.dataset.action;
     if (action === 'open') return handlers.open?.();
     if (action === 'line') return handlers.activateLine?.();
+    if (action === 'polyline') return handlers.activateModifyMode?.('polyline');
+    if (action === 'spline') return handlers.activateModifyMode?.('spline');
     if (action === 'insert-valve') return handlers.activateInsert?.('VALVE');
     if (action === 'insert-flange') return handlers.activateInsert?.('FLANGE');
     if (action === 'insert-elbow') return handlers.activateInsert?.('ELBOW');
     if (action === 'insert-tee') return handlers.activateInsert?.('TEE');
     if (action === 'insert-support') return handlers.activateInsert?.('SUPPORT');
+    if (action.startsWith('modify-')) return handlers.activateModifyMode?.(action.split('-')[1]);
     if (action === 'auto-bend') return handlers.commitAutoBend?.();
     if (action === 'auto-tee') return handlers.commitAutoTee?.();
     if (action === 'cancel') return handlers.cancel?.();
@@ -140,11 +143,18 @@ export function createHudOverlay(container, handlers = {}) {
     let body = `
       <div class="hud-topbar">
         <button data-action="line" class="hud-mode ${mode === 'line-draw' ? 'active' : ''}">✏ Line</button>
+        <button data-action="polyline" class="hud-mode ${mode === 'modify-polyline' ? 'active' : ''}">☍ Polyline</button>
+        <button data-action="spline" class="hud-mode ${mode === 'modify-spline' ? 'active' : ''}">〰 Spline</button>
         <button data-action="insert-valve" class="hud-mode ${mode === 'insert-component' && state.insertContext?.component === 'VALVE' ? 'active' : ''}">⛭ Valve</button>
         <button data-action="insert-flange" class="hud-mode ${mode === 'insert-component' && state.insertContext?.component === 'FLANGE' ? 'active' : ''}">◍ Flange</button>
         <button data-action="insert-elbow" class="hud-mode ${mode === 'insert-component' && state.insertContext?.component === 'ELBOW' ? 'active' : ''}">↱ Elbow</button>
         <button data-action="insert-tee" class="hud-mode ${mode === 'insert-component' && state.insertContext?.component === 'TEE' ? 'active' : ''}">⊢ Tee</button>
         <button data-action="insert-support" class="hud-mode ${mode === 'insert-component' && state.insertContext?.component === 'SUPPORT' ? 'active' : ''}">⌂ Support</button>
+        <button data-action="modify-move" class="hud-mode ${mode === 'modify-move' ? 'active' : ''}">✥ Move</button>
+        <button data-action="modify-stretch" class="hud-mode ${mode === 'modify-stretch' ? 'active' : ''}">↔ Stretch</button>
+        <button data-action="modify-rotate" class="hud-mode ${mode === 'modify-rotate' ? 'active' : ''}">↻ Rotate</button>
+        <button data-action="modify-break" class="hud-mode ${mode === 'modify-break' ? 'active' : ''}">✂ Break</button>
+        <button data-action="modify-delete" class="hud-mode ${mode === 'modify-delete' ? 'active' : ''}">🗑 Delete</button>
         <button data-action="auto-bend" class="hud-mode">↱ Convert Bend</button>
         <button data-action="auto-tee" class="hud-mode">⊣ Convert Tee</button>
         <button data-action="hide" class="hud-hide">×</button>
