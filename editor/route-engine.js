@@ -636,11 +636,13 @@ export function registerDefaultRouteHandlers() {
     const { routeId, points, spec } = command.payload;
     if (!points || points.length < 2) throw new Error('Polyline requires at least two points');
 
+
     const rId = routeId || uid('route');
     const route = createEmptyRoute(rId, spec || {});
 
     const nodes = points.map(p => createRouteNode(uid('node'), p.x, p.y, p.z));
     route.nodes = nodes;
+
 
     for (let i = 0; i < nodes.length - 1; i++) {
         const seg = createRouteSegment(uid('segment'), nodes[i].id, nodes[i+1].id, 'PIPE', classifySegmentOrientation(nodes[i], nodes[i+1]));
@@ -657,11 +659,15 @@ export function registerDefaultRouteHandlers() {
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = clone(route);
 
+
+
     const nodeIds = Array.isArray(command.payload.nodeId) ? command.payload.nodeId : [command.payload.nodeId];
     const nodesToMove = nextRoute.nodes.filter(n => nodeIds.includes(n.id));
     if (!nodesToMove.length) throw new Error('No valid nodes found for stretch');
 
     const delta = normalizeAxisDelta(command.payload);
+
+
 
     for (const node of nodesToMove) {
         node.x += delta.dx;
@@ -685,20 +691,26 @@ export function registerDefaultRouteHandlers() {
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = clone(route);
 
+
     const { pivot, angle, axis, nodeIds } = command.payload;
     if (!pivot || angle === undefined) throw new Error('Rotate requires pivot and angle');
+
 
     const p = normalizePoint(pivot);
     const rad = angle * Math.PI / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
 
+
     const targets = nodeIds ? nextRoute.nodes.filter(n => nodeIds.includes(n.id)) : nextRoute.nodes;
+
 
     for (const node of targets) {
        const dx = node.x - p.x;
        const dy = node.y - p.y;
        const dz = node.z - p.z;
+
+
 
        if (axis === 'Z') {
          node.x = p.x + dx * cos - dy * sin;
@@ -711,6 +723,8 @@ export function registerDefaultRouteHandlers() {
          node.z = p.z - dx * sin + dz * cos;
        }
     }
+
+
 
     const nodeIndex = routeNodeIndex(nextRoute);
     for (const seg of nextRoute.segments) {
@@ -734,6 +748,8 @@ export function registerDefaultRouteHandlers() {
       const nodeIndex = routeNodeIndex(nextRoute);
       const a = nodeIndex[segment.from];
       const b = nodeIndex[segment.to];
+
+
 
       const splitPoint = command.payload.point
         ? normalizePoint(command.payload.point)
@@ -819,6 +835,8 @@ export function registerDefaultRouteHandlers() {
     // Phase 4D enhancement: Handle node-level/segment-level delete vs full route
     const { routeId, segmentId, nodeId } = command.payload;
 
+
+
     if (segmentId || nodeId) {
       const { index, route } = getRouteOrThrow(state, routeId);
       const nextRoutes = clone(state.model.routes || []);
@@ -832,6 +850,8 @@ export function registerDefaultRouteHandlers() {
         // Cascade delete segments attached to this node
         nextRoute.segments = nextRoute.segments.filter(s => s.from !== nodeId && s.to !== nodeId);
       }
+
+
 
       nextRoutes[index] = nextRoute;
       return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
