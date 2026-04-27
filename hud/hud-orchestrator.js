@@ -75,11 +75,20 @@ export function createHudOrchestrator({ container, shellApi }) {
       store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
       emitHudTrace('INSERT_MODE_OPEN', { component: ctx.component, point: ctx.point, provenance: ctx.provenance || 'default', matchKey: ctx.resolvedMatchKey || null }, true);
     },
+
     cancel: () => {
       const state = store.getState();
       store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible });
       emitHudTrace('HUD_CANCEL', {}, true);
     },
+    toggleCompact: (isCompact) => {
+      store.patch({ isCompact });
+    },
+    changeOpacity: (opacity) => {
+      store.patch({ opacity });
+      overlay.root.style.setProperty('--hud-opacity', opacity);
+    },
+
     setAxis: (axis) => {
       const state = store.getState();
       if (state.mode !== 'line-draw') return;
@@ -202,7 +211,14 @@ export function createHudOrchestrator({ container, shellApi }) {
     },
   });
 
-  const unsubscribeRender = store.subscribe((state) => overlay.render(state));
+
+  const unsubscribeRender = store.subscribe((state) => {
+    overlay.render(state);
+    if (state.isCompact) overlay.root.classList.add('hud-compact');
+    else overlay.root.classList.remove('hud-compact');
+    if (state.opacity !== undefined) overlay.root.style.setProperty('--hud-opacity', state.opacity);
+  });
+
   overlay.render(store.getState());
 
   const offKeyboard = installHudKeyboard(overlay.root, {
