@@ -92,7 +92,7 @@ function routeMidpoint(a, b) {
   };
 }
 
-function orthogonalElbowControl(prevNode, cornerNode, nextNode, length = null) {
+function orthogonalElbowControl(prevNode, cornerNode, nextNode) {
   const inVec = {
     x: cornerNode.x - prevNode.x,
     y: cornerNode.y - prevNode.y,
@@ -105,12 +105,7 @@ function orthogonalElbowControl(prevNode, cornerNode, nextNode, length = null) {
   };
   const inMag = Math.sqrt(inVec.x ** 2 + inVec.y ** 2 + inVec.z ** 2) || 1;
   const outMag = Math.sqrt(outVec.x ** 2 + outVec.y ** 2 + outVec.z ** 2) || 1;
-
-  const angle = calculateBendAngle(prevNode, cornerNode, nextNode);
-  const requestedLength = Number.isFinite(Number(length)) && Number(length) > 0 ? Number(length) : 250;
-  const computedCutback = calculateBendTrim(requestedLength, angle);
-
-  const trim = Math.min(inMag, outMag, computedCutback);
+  const trim = Math.min(inMag, outMag, 250);
 
   return {
     ep1: {
@@ -212,30 +207,6 @@ function isSamePoint(a, b, eps = 0.001) {
 }
 
 
-
-function calculateBendAngle(a, b, c) {
-  const u = directionVector(a, b);
-  const v = directionVector(b, c);
-  const magU = Math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
-  const magV = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-  if (magU <= 0.001 || magV <= 0.001) return 0;
-
-  const dot = u.x * v.x + u.y * v.y + u.z * v.z;
-  const cosTheta = Math.max(-1, Math.min(1, dot / (magU * magV)));
-  const angleRad = Math.acos(cosTheta);
-  let angleDeg = angleRad * (180 / Math.PI);
-
-  if (Math.abs(angleDeg - 90) < 1) angleDeg = 90;
-  else if (Math.abs(angleDeg - 45) < 1) angleDeg = 45;
-
-  return angleDeg;
-}
-
-function calculateBendTrim(length, angleDeg) {
-  if (angleDeg <= 0 || angleDeg >= 180) return length;
-  return length * Math.tan((angleDeg * Math.PI / 180) / 2);
-}
-
 function directionVector(a, b) {
   return { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
 }
@@ -288,23 +259,9 @@ function routeBendCandidate(route, preferredNodeId = null) {
       nextSeg,
       size: route.spec?.size || route.spec?.nominalSize || '',
       rating: route.spec?.rating || '',
-      angle: calculateBendAngle(nodeIndex[prevSeg.from], nodeIndex[prevSeg.to], nodeIndex[nextSeg.to]),
     };
   }
   return null;
-}
-
-
-function isPointOnSegment(p, a, b, eps = 0.001) {
-  const crossX = (p.y - a.y) * (b.z - a.z) - (p.z - a.z) * (b.y - a.y);
-  const crossY = (p.z - a.z) * (b.x - a.x) - (p.x - a.x) * (b.z - a.z);
-  const crossZ = (p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x);
-  if (Math.abs(crossX) > eps || Math.abs(crossY) > eps || Math.abs(crossZ) > eps) return false;
-  const dot = (p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y) + (p.z - a.z) * (b.z - a.z);
-  if (dot < -eps) return false;
-  const lenSq = (b.x - a.x)**2 + (b.y - a.y)**2 + (b.z - a.z)**2;
-  if (dot > lenSq + eps) return false;
-  return true;
 }
 
 function routeTeeCandidate(routes, targetRoute, preferredNodeId = null) {
@@ -315,70 +272,34 @@ function routeTeeCandidate(routes, targetRoute, preferredNodeId = null) {
 
   for (const node of nodes) {
     if ((targetRoute.convertedTeeNodes || []).includes(node.id)) continue;
-
     const { prevSeg, nextSeg } = findPrevNextSegments(targetRoute, node.id);
+    if (!prevSeg && !nextSeg) continue;
+
     for (const otherRoute of routes || []) {
       if (!otherRoute || otherRoute.id === targetRoute.id) continue;
-
       const otherNode = (otherRoute.nodes || []).find((item) => isSamePoint(item, node));
-      if (otherNode) {
-        const otherSeg = (otherRoute.segments || []).find((seg) => seg.from === otherNode.id || seg.to === otherNode.id) || null;
-        if (!otherSeg || (!prevSeg && !nextSeg)) continue;
-        return {
-          routeId: targetRoute.id,
-          nodeId: node.id,
-          branchRouteId: otherRoute.id,
-          point: clonePoint(node),
-          runSize: targetRoute.spec?.size || '',
-          branchSize: otherRoute.spec?.size || targetRoute.spec?.size || '',
-          rating: targetRoute.spec?.rating || otherRoute.spec?.rating || '',
-          subtype: (otherRoute.spec?.size || '') && String(otherRoute.spec?.size) !== String(targetRoute.spec?.size || '') ? 'REDUCING' : 'EQUAL',
-          prevSeg,
-          nextSeg,
-          branchSeg: otherSeg,
-          nodeIndex: targetNodeIndex,
-          isMidSegmentSplit: false
-        };
-      }
+      if (!otherNode) continue;
+      const otherSeg = (otherRoute.segments || []).find((seg) => seg.from === otherNode.id || seg.to === otherNode.id) || null;
+      if (!otherSeg) continue;
+
+      return {
+        routeId: targetRoute.id,
+        nodeId: node.id,
+        branchRouteId: otherRoute.id,
+        point: clonePoint(node),
+        runSize: targetRoute.spec?.size || '',
+        branchSize: otherRoute.spec?.size || targetRoute.spec?.size || '',
+        rating: targetRoute.spec?.rating || otherRoute.spec?.rating || '',
+        subtype: (otherRoute.spec?.size || '') && String(otherRoute.spec?.size) !== String(targetRoute.spec?.size || '') ? 'REDUCING' : 'EQUAL',
+        prevSeg,
+        nextSeg,
+        branchSeg: otherSeg,
+        nodeIndex: targetNodeIndex,
+      };
     }
   }
-
-  for (const seg of targetRoute.segments || []) {
-    const a = targetNodeIndex[seg.from];
-    const b = targetNodeIndex[seg.to];
-    if (!a || !b) continue;
-
-    for (const otherRoute of routes || []) {
-      if (!otherRoute || otherRoute.id === targetRoute.id) continue;
-      for (const otherNode of otherRoute.nodes || []) {
-        if (!isPointOnSegment(otherNode, a, b)) continue;
-
-        const otherSeg = (otherRoute.segments || []).find((s) => s.from === otherNode.id || s.to === otherNode.id) || null;
-        if (!otherSeg) continue;
-
-        return {
-          routeId: targetRoute.id,
-          nodeId: null, // No node yet, need to split
-          intersectedSegment: seg,
-          branchRouteId: otherRoute.id,
-          point: clonePoint(otherNode),
-          runSize: targetRoute.spec?.size || '',
-          branchSize: otherRoute.spec?.size || targetRoute.spec?.size || '',
-          rating: targetRoute.spec?.rating || otherRoute.spec?.rating || '',
-          subtype: (otherRoute.spec?.size || '') && String(otherRoute.spec?.size) !== String(targetRoute.spec?.size || '') ? 'REDUCING' : 'EQUAL',
-          prevSeg: null,
-          nextSeg: null,
-          branchSeg: otherSeg,
-          nodeIndex: targetNodeIndex,
-          isMidSegmentSplit: true
-        };
-      }
-    }
-  }
-
   return null;
 }
-
 
 function buildAutoBendPayload(route, candidate, resolved = {}, payload = {}) {
   const nodeIndex = routeNodeIndex(route);
@@ -387,8 +308,7 @@ function buildAutoBendPayload(route, candidate, resolved = {}, payload = {}) {
   const prevNode = clonePoint(nodeIndex[prevSeg.from]);
   const cornerNode = clonePoint(nodeIndex[prevSeg.to]);
   const nextNode = clonePoint(nodeIndex[nextSeg.to]);
-  const elbowLength = resolved.length || payload.length;
-  const elbow = orthogonalElbowControl(prevNode, cornerNode, nextNode, elbowLength);
+  const elbow = orthogonalElbowControl(prevNode, cornerNode, nextNode);
   return {
     id: `route:${route.id}:auto-bend:${candidate.nodeId}`,
     routeId: route.id,
@@ -415,36 +335,8 @@ function buildAutoTeePayload(routes, route, candidate, resolved = {}, payload = 
   const point = clonePoint(nodeIndex[candidate.nodeId]);
   const prevSeg = candidate.prevSeg;
   const nextSeg = candidate.nextSeg;
-
-  const runLen = resolved.length || payload.length || 0;
-  const branchLen = payload.branchLength || resolved.branchLength || runLen;
-
-  let runFrom = clonePoint(point);
-  if (prevSeg) {
-    const origFrom = clonePoint(nodeIndex[prevSeg.from]);
-    const inVec = { x: point.x - origFrom.x, y: point.y - origFrom.y, z: point.z - origFrom.z };
-    const inMag = Math.sqrt(inVec.x**2 + inVec.y**2 + inVec.z**2) || 1;
-    const trim = Math.min(inMag, runLen);
-    runFrom = {
-      x: point.x - (inVec.x / inMag) * trim,
-      y: point.y - (inVec.y / inMag) * trim,
-      z: point.z - (inVec.z / inMag) * trim,
-    };
-  }
-
-  let runTo = clonePoint(point);
-  if (nextSeg) {
-    const origTo = clonePoint(nodeIndex[nextSeg.to]);
-    const outVec = { x: origTo.x - point.x, y: origTo.y - point.y, z: origTo.z - point.z };
-    const outMag = Math.sqrt(outVec.x**2 + outVec.y**2 + outVec.z**2) || 1;
-    const trim = Math.min(outMag, runLen);
-    runTo = {
-      x: point.x + (outVec.x / outMag) * trim,
-      y: point.y + (outVec.y / outMag) * trim,
-      z: point.z + (outVec.z / outMag) * trim,
-    };
-  }
-
+  const runFrom = prevSeg ? clonePoint(nodeIndex[prevSeg.from]) : clonePoint(point);
+  const runTo = nextSeg ? clonePoint(nodeIndex[nextSeg.to]) : clonePoint(point);
   const branchRoute = (routes || []).find((item) => item.id === candidate.branchRouteId) || null;
   let bp = clonePoint(point);
   if (branchRoute) {
@@ -453,16 +345,7 @@ function buildAutoTeePayload(routes, route, candidate, resolved = {}, payload = 
     if (otherSeg && otherNode) {
       const branchNodeIndex = routeNodeIndex(branchRoute);
       const otherEndId = otherSeg.from === otherNode.id ? otherSeg.to : otherSeg.from;
-      const otherEndNode = clonePoint(branchNodeIndex[otherEndId]);
-
-      const brVec = { x: otherEndNode.x - point.x, y: otherEndNode.y - point.y, z: otherEndNode.z - point.z };
-      const brMag = Math.sqrt(brVec.x**2 + brVec.y**2 + brVec.z**2) || 1;
-      const brTrim = Math.min(brMag, branchLen);
-      bp = {
-        x: point.x + (brVec.x / brMag) * brTrim,
-        y: point.y + (brVec.y / brMag) * brTrim,
-        z: point.z + (brVec.z / brMag) * brTrim,
-      };
+      bp = clonePoint(branchNodeIndex[otherEndId]);
     }
   }
   return {
@@ -636,13 +519,11 @@ export function registerDefaultRouteHandlers() {
     const { routeId, points, spec } = command.payload;
     if (!points || points.length < 2) throw new Error('Polyline requires at least two points');
 
-
     const rId = routeId || uid('route');
     const route = createEmptyRoute(rId, spec || {});
 
     const nodes = points.map(p => createRouteNode(uid('node'), p.x, p.y, p.z));
     route.nodes = nodes;
-
 
     for (let i = 0; i < nodes.length - 1; i++) {
         const seg = createRouteSegment(uid('segment'), nodes[i].id, nodes[i+1].id, 'PIPE', classifySegmentOrientation(nodes[i], nodes[i+1]));
@@ -659,15 +540,11 @@ export function registerDefaultRouteHandlers() {
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = clone(route);
 
-
-
     const nodeIds = Array.isArray(command.payload.nodeId) ? command.payload.nodeId : [command.payload.nodeId];
     const nodesToMove = nextRoute.nodes.filter(n => nodeIds.includes(n.id));
     if (!nodesToMove.length) throw new Error('No valid nodes found for stretch');
 
     const delta = normalizeAxisDelta(command.payload);
-
-
 
     for (const node of nodesToMove) {
         node.x += delta.dx;
@@ -691,26 +568,20 @@ export function registerDefaultRouteHandlers() {
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = clone(route);
 
-
     const { pivot, angle, axis, nodeIds } = command.payload;
     if (!pivot || angle === undefined) throw new Error('Rotate requires pivot and angle');
-
 
     const p = normalizePoint(pivot);
     const rad = angle * Math.PI / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
 
-
     const targets = nodeIds ? nextRoute.nodes.filter(n => nodeIds.includes(n.id)) : nextRoute.nodes;
-
 
     for (const node of targets) {
        const dx = node.x - p.x;
        const dy = node.y - p.y;
        const dz = node.z - p.z;
-
-
 
        if (axis === 'Z') {
          node.x = p.x + dx * cos - dy * sin;
@@ -723,8 +594,6 @@ export function registerDefaultRouteHandlers() {
          node.z = p.z - dx * sin + dz * cos;
        }
     }
-
-
 
     const nodeIndex = routeNodeIndex(nextRoute);
     for (const seg of nextRoute.segments) {
@@ -748,8 +617,6 @@ export function registerDefaultRouteHandlers() {
       const nodeIndex = routeNodeIndex(nextRoute);
       const a = nodeIndex[segment.from];
       const b = nodeIndex[segment.to];
-
-
 
       const splitPoint = command.payload.point
         ? normalizePoint(command.payload.point)
@@ -835,8 +702,6 @@ export function registerDefaultRouteHandlers() {
     // Phase 4D enhancement: Handle node-level/segment-level delete vs full route
     const { routeId, segmentId, nodeId } = command.payload;
 
-
-
     if (segmentId || nodeId) {
       const { index, route } = getRouteOrThrow(state, routeId);
       const nextRoutes = clone(state.model.routes || []);
@@ -850,8 +715,6 @@ export function registerDefaultRouteHandlers() {
         // Cascade delete segments attached to this node
         nextRoute.segments = nextRoute.segments.filter(s => s.from !== nodeId && s.to !== nodeId);
       }
-
-
 
       nextRoutes[index] = nextRoute;
       return patchStateWithRoute(state, nextRoutes, nextRoute.id, command.type);
@@ -884,7 +747,7 @@ export function registerDefaultRouteHandlers() {
     };
   });
 
-    registerCommandHandler(CommandTypes.AUTO_BEND, (state, command) => {
+  registerCommandHandler(CommandTypes.AUTO_BEND, (state, command) => {
     const { index, route } = getRouteOrThrow(state, command.payload.routeId);
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = ensureRouteFlags(clone(route));
@@ -899,18 +762,6 @@ export function registerDefaultRouteHandlers() {
     });
     const nextComponents = (state.model?.components || []).filter((item) => item.id !== component.id).concat(component);
 
-    // Apply trim to upstream and downstream segments
-    const prevSegIndex = nextRoute.segments.findIndex((seg) => seg.id === candidate.prevSegId);
-    const nextSegIndex = nextRoute.segments.findIndex((seg) => seg.id === candidate.nextSegId);
-
-    if (prevSegIndex >= 0 && nextSegIndex >= 0) {
-      const nodeEp1 = createRouteNode(uid('node'), payload.ep1.x, payload.ep1.y, payload.ep1.z);
-      const nodeEp2 = createRouteNode(uid('node'), payload.ep2.x, payload.ep2.y, payload.ep2.z);
-      nextRoute.nodes.push(nodeEp1, nodeEp2);
-      nextRoute.segments[prevSegIndex].to = nodeEp1.id;
-      nextRoute.segments[nextSegIndex].from = nodeEp2.id;
-    }
-
     nextRoutes[index] = nextRoute;
     return {
       model: {
@@ -922,44 +773,13 @@ export function registerDefaultRouteHandlers() {
     };
   });
 
-        registerCommandHandler(CommandTypes.AUTO_TEE, (state, command) => {
+  registerCommandHandler(CommandTypes.AUTO_TEE, (state, command) => {
     const { index, route } = getRouteOrThrow(state, command.payload.routeId);
     const nextRoutes = clone(state.model.routes || []);
     const nextRoute = ensureRouteFlags(clone(route));
-    // When re-evaluating we don't know the exact nodeId if it was mid-segment.
-    // We pass the payload candidate directly if node is null
-    const candidate = command.payload.candidate || routeTeeCandidate(state.model?.routes || [], nextRoute, command.payload.nodeId);
+    const candidate = routeTeeCandidate(state.model?.routes || [], nextRoute, command.payload.nodeId);
     if (!candidate) throw new Error('No eligible tee conversion candidate found');
-
-    let targetNodeId = candidate.nodeId;
-    if (candidate.isMidSegmentSplit) {
-      // Perform the run split here before processing the auto tee
-      const splitNodeId = uid('node');
-      const middleNode = createRouteNode(splitNodeId, candidate.point.x, candidate.point.y, candidate.point.z);
-      const segIndex = nextRoute.segments.findIndex((seg) => seg.id === candidate.intersectedSegment?.id);
-      const segment = nextRoute.segments[segIndex];
-      if (segment) {
-        const nodeIndexCurrent = routeNodeIndex(nextRoute);
-        const a = nodeIndexCurrent[segment.from];
-        const b = nodeIndexCurrent[segment.to];
-
-        const first = createRouteSegment(uid('segment'), segment.from, middleNode.id, segment.kind || 'PIPE', classifySegmentOrientation(a, middleNode));
-        const second = createRouteSegment(uid('segment'), middleNode.id, segment.to, segment.kind || 'PIPE', classifySegmentOrientation(middleNode, b));
-
-        nextRoute.nodes.push(middleNode);
-        nextRoute.segments.splice(segIndex, 1, first, second);
-
-        targetNodeId = splitNodeId;
-        candidate.nodeId = splitNodeId;
-        candidate.prevSeg = first;
-        candidate.nextSeg = second;
-
-        const nodeIndex = routeNodeIndex(nextRoute);
-        candidate.nodeIndex = nodeIndex;
-      }
-    }
-
-    if (!nextRoute.convertedTeeNodes.includes(targetNodeId)) nextRoute.convertedTeeNodes.push(targetNodeId);
+    if (!nextRoute.convertedTeeNodes.includes(candidate.nodeId)) nextRoute.convertedTeeNodes.push(candidate.nodeId);
 
     const payload = buildAutoTeePayload(state.model?.routes || [], nextRoute, candidate, command.payload.resolved || {}, command.payload);
     const component = normalizeInlineComponent(payload, {
@@ -967,43 +787,6 @@ export function registerDefaultRouteHandlers() {
       selection: state.selection,
     });
     const nextComponents = (state.model?.components || []).filter((item) => item.id !== component.id).concat(component);
-
-    // Break run and trim
-    const prevSegIndex = candidate.prevSeg ? nextRoute.segments.findIndex((seg) => seg.id === candidate.prevSeg.id) : -1;
-    const nextSegIndex = candidate.nextSeg ? nextRoute.segments.findIndex((seg) => seg.id === candidate.nextSeg.id) : -1;
-
-    if (prevSegIndex >= 0) {
-      const nodeEp1 = createRouteNode(uid('node'), payload.ep1.x, payload.ep1.y, payload.ep1.z);
-      nextRoute.nodes.push(nodeEp1);
-      nextRoute.segments[prevSegIndex].to = nodeEp1.id;
-    }
-    if (nextSegIndex >= 0) {
-      const nodeEp2 = createRouteNode(uid('node'), payload.ep2.x, payload.ep2.y, payload.ep2.z);
-      nextRoute.nodes.push(nodeEp2);
-      nextRoute.segments[nextSegIndex].from = nodeEp2.id;
-    }
-
-    // Trim branch
-    if (candidate.branchRouteId) {
-      const branchRouteIndex = nextRoutes.findIndex((r) => r.id === candidate.branchRouteId);
-      if (branchRouteIndex >= 0) {
-        const branchRoute = clone(nextRoutes[branchRouteIndex]);
-        const otherNode = branchRoute.nodes.find((item) => isSamePoint(item, payload.point));
-        const otherSegIndex = branchRoute.segments.findIndex((seg) => seg.id === candidate.branchSeg?.id);
-
-        if (otherNode && otherSegIndex >= 0) {
-          const nodeBp = createRouteNode(uid('node'), payload.bp.x, payload.bp.y, payload.bp.z);
-          branchRoute.nodes.push(nodeBp);
-
-          if (branchRoute.segments[otherSegIndex].from === otherNode.id) {
-            branchRoute.segments[otherSegIndex].from = nodeBp.id;
-          } else {
-            branchRoute.segments[otherSegIndex].to = nodeBp.id;
-          }
-          nextRoutes[branchRouteIndex] = branchRoute;
-        }
-      }
-    }
 
     nextRoutes[index] = nextRoute;
     return {

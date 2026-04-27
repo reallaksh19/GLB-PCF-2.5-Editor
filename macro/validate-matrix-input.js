@@ -50,8 +50,6 @@ export function validateMatrixInput(matrix) {
     const px = Number(x);
     if (!Number.isFinite(px)) errors.push({ row: i, column: 'x', code: 'INVALID_NUMBER', message: `Row ${i} column X must be numeric.` });
 
-
-
     const py = Number(y);
     if (!Number.isFinite(py)) errors.push({ row: i, column: 'y', code: 'INVALID_NUMBER', message: `Row ${i} column Y must be numeric.` });
 
@@ -62,8 +60,6 @@ export function validateMatrixInput(matrix) {
 
     const currentPoint = { x: px, y: py, z: pz };
 
-
-
     // Check for duplicate consecutive points and zero-length segments
     if (points.length > 0) {
       const prev = points[points.length - 1];
@@ -72,15 +68,11 @@ export function validateMatrixInput(matrix) {
       const dz = currentPoint.z - prev.z;
       const distSq = dx*dx + dy*dy + dz*dz;
 
-
-
       if (distSq < 0.0001) { // EPSILON for zero length
         errors.push({ row: i, column: null, code: 'DUPLICATE_POINT', message: `Row ${i} is a duplicate of the previous point (zero-length segment).` });
         continue; // Skip adding to points
       }
     }
-
-
 
     points.push(currentPoint);
   }

@@ -158,7 +158,6 @@ export function initToolbar(actionsOrRenderer = {}, getComponents, getDomain, sh
   });
 
   unsubs.push(bindClick('btn-fit-all', () => actions.fitAll?.()));
-  unsubs.push(bindClick('btn-fit-all-float', () => actions.fitAll?.()));
   unsubs.push(bindClick('btn-export-glb', () => actions.exportGLB?.()));
   unsubs.push(bindClick('btn-export-dxf', () => actions.exportDXF?.()));
   ensureMasterDbButton();
@@ -186,42 +185,6 @@ export function initToolbar(actionsOrRenderer = {}, getComponents, getDomain, sh
   capabilities.ready('theme');
   capabilities.ready('glb-load');
   capabilities.ready('glb-export');
-
-  // Floating nav dragging
-  const floatNav = byId('floating-nav');
-  const dragHandle = floatNav?.querySelector('.nav-drag-handle');
-  if (floatNav && dragHandle) {
-    let isDragging = false;
-    let startX, startY, initialX, initialY;
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      floatNav.style.transform = `translate(${initialX + dx}px, ${initialY + dy}px)`;
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    dragHandle.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-
-      const style = window.getComputedStyle(floatNav);
-      const matrix = new DOMMatrixReadOnly(style.transform);
-      initialX = matrix.m41;
-      initialY = matrix.m42;
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    });
-  }
-
 
   return {
     destroy() {

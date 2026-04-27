@@ -8,12 +8,7 @@ function escapeCsvValue(value) {
 
 export function exportMasterDbCsv(rows = []) {
   const visible = rows.map(toVisibleRow);
-  const headers = [
-    'Component', 'Subtype', 'Size', 'Rating', 'Schedule', 'EndType', 'Facing',
-    'Angle', 'RadiusType', 'CenterToEnd', 'TangentLength', 'RunSize', 'BranchSize',
-    'RunCenterToEnd', 'BranchCenterToEnd', 'Standard', 'BoreType', 'Revision',
-    'DatasetVersion', 'Source', 'Length', 'Weight'
-  ];
+  const headers = ['Component', 'Subtype', 'Size', 'Rating', 'Schedule', 'EndType', 'Facing', 'Length', 'Weight'];
   const lines = [headers.join(',')];
   for (const row of visible) {
     lines.push(headers.map((h) => escapeCsvValue(row[h])).join(','));

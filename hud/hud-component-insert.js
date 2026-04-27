@@ -31,29 +31,6 @@ export function getInsertDefaults(component = 'VALVE', shellApi) {
   };
 
   if (upper === 'SUPPORT') defaults.subtype = 'REST';
-
-  // Resolve immediately against Master DB
-  const query = {
-    component: defaults.component,
-    subtype: defaults.subtype,
-    size: defaults.size,
-    rating: defaults.rating,
-    facing: defaults.facing,
-    endType: defaults.endType,
-    angle: defaults.angle,
-    branchSize: defaults.branchSize,
-  };
-  const result = shellApi?.resolveComponent?.(query);
-  if (result && result.ok && result.resolved) {
-    defaults.length = result.resolved.length || '';
-    defaults.weight = result.resolved.weight || '';
-    if (upper === 'TEE') {
-      defaults.branchLength = result.resolved.branchLength || result.resolved.length || '';
-    }
-    defaults.provenance = result.source || 'master-db';
-    defaults.resolvedMatchKey = result.matchKey || null;
-  }
-
   return defaults;
 }
 
@@ -77,16 +54,6 @@ export function applyResolverResult(insertContext = {}, result = null) {
     endType: insertContext.endType || resolved.endType || '',
     angle: insertContext.angle || resolved.angle || '',
     branchSize: insertContext.branchSize || resolved.branchSize || '',
-    radiusType: insertContext.radiusType || resolved.radiusType || '',
-    centerToEnd: insertContext.centerToEnd || resolved.centerToEnd || '',
-    tangentLength: insertContext.tangentLength || resolved.tangentLength || '',
-    runSize: insertContext.runSize || resolved.runSize || '',
-    runCenterToEnd: insertContext.runCenterToEnd || resolved.runCenterToEnd || '',
-    branchCenterToEnd: insertContext.branchCenterToEnd || resolved.branchCenterToEnd || '',
-    standard: insertContext.standard || resolved.standard || '',
-    boreType: insertContext.boreType || resolved.boreType || '',
-    revision: insertContext.revision || resolved.revision || '',
-    datasetVersion: insertContext.datasetVersion || resolved.datasetVersion || '',
     length: keepManual && insertContext.length !== '' ? insertContext.length : (resolved.length ?? insertContext.length ?? ''),
     branchLength: keepManual && insertContext.branchLength !== '' ? insertContext.branchLength : (resolved.branchLength ?? insertContext.branchLength ?? ''),
     weight: keepManual && insertContext.weight !== '' ? insertContext.weight : (resolved.weight ?? insertContext.weight ?? ''),
@@ -105,8 +72,6 @@ export function resolveInsertContext(insertContext = {}, shellApi, options = {})
     rating: insertContext.rating,
     facing: insertContext.facing,
     endType: insertContext.endType,
-    angle: insertContext.angle !== '' ? Number(insertContext.angle) : undefined,
-    branchSize: insertContext.branchSize,
   };
   const result = shellApi?.resolveComponent?.(query) || null;
   const next = applyResolverResult(insertContext, result);
@@ -134,22 +99,7 @@ export function buildInsertPayload(insertContext = {}, shellApi) {
     size: insertContext.size || '',
     rating: insertContext.rating || '',
     length: insertContext.length || '',
-    branchLength: insertContext.branchLength || '',
-    branchSize: insertContext.branchSize || '',
-    angle: insertContext.angle || '',
     weight: insertContext.weight || '',
-    angle: insertContext.angle || '',
-    branchSize: insertContext.branchSize || '',
-    radiusType: insertContext.radiusType || '',
-    centerToEnd: insertContext.centerToEnd || '',
-    tangentLength: insertContext.tangentLength || '',
-    runSize: insertContext.runSize || '',
-    runCenterToEnd: insertContext.runCenterToEnd || '',
-    branchCenterToEnd: insertContext.branchCenterToEnd || '',
-    standard: insertContext.standard || '',
-    boreType: insertContext.boreType || '',
-    revision: insertContext.revision || '',
-    datasetVersion: insertContext.datasetVersion || '',
     provenance: insertContext.provenance || 'manual',
     pipelineRef: insertContext.pipelineRef || 'ROUTE-AUTHORED',
     facing: insertContext.facing || '',

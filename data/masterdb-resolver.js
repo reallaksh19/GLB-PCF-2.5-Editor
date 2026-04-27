@@ -16,10 +16,6 @@ function scoreRecord(query, record) {
   else if (query.endType && record.endType !== query.endType) warnings.push('ENDTYPE_FALLBACK');
   if (query.facing && record.facing === query.facing) score += 5;
   else if (query.facing && record.facing !== query.facing) warnings.push('FACING_FALLBACK');
-  if (query.angle != null && record.angle === query.angle) score += 5;
-  else if (query.angle != null && record.angle !== query.angle) warnings.push('ANGLE_FALLBACK');
-  if (query.branchSize && record.branchSize === query.branchSize) score += 5;
-  else if (query.branchSize && record.branchSize !== query.branchSize) warnings.push('BRANCH_SIZE_FALLBACK');
   return { score, warnings };
 }
 
@@ -48,7 +44,7 @@ export function createMasterDbResolver(store) {
     }
 
     const best = ranked[0];
-    const exact = best.warnings.length === 0;
+    const exact = best.score >= 100;
     const result = createResolverResult({
       ok: true,
       source: exact ? 'master-db' : 'fallback',

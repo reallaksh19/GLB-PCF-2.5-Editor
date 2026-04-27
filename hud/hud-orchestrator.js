@@ -75,20 +75,18 @@ export function createHudOrchestrator({ container, shellApi }) {
       store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
       emitHudTrace('INSERT_MODE_OPEN', { component: ctx.component, point: ctx.point, provenance: ctx.provenance || 'default', matchKey: ctx.resolvedMatchKey || null }, true);
     },
-
     cancel: () => {
       const state = store.getState();
+      if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
+         store.patch({ draftPoints: [], errors: [], mode: 'idle' });
+         emitHudTrace('DRAFT_CANCELLED');
+      } else if (state.mode === 'modify-tool') {
+         store.patch({ modifyDraft: null, activeTool: null, mode: 'idle', errors: [] });
+         emitHudTrace('MODIFY_CANCELLED');
+      }
       store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible });
       emitHudTrace('HUD_CANCEL', {}, true);
     },
-    toggleCompact: (isCompact) => {
-      store.patch({ isCompact });
-    },
-    changeOpacity: (opacity) => {
-      store.patch({ opacity });
-      overlay.root.style.setProperty('--hud-opacity', opacity);
-    },
-
     setAxis: (axis) => {
       const state = store.getState();
       if (state.mode !== 'line-draw') return;
@@ -211,14 +209,7 @@ export function createHudOrchestrator({ container, shellApi }) {
     },
   });
 
-
-  const unsubscribeRender = store.subscribe((state) => {
-    overlay.render(state);
-    if (state.isCompact) overlay.root.classList.add('hud-compact');
-    else overlay.root.classList.remove('hud-compact');
-    if (state.opacity !== undefined) overlay.root.style.setProperty('--hud-opacity', state.opacity);
-  });
-
+  const unsubscribeRender = store.subscribe((state) => overlay.render(state));
   overlay.render(store.getState());
 
   const offKeyboard = installHudKeyboard(overlay.root, {
@@ -247,10 +238,113 @@ export function createHudOrchestrator({ container, shellApi }) {
     cancel: () => overlay.root.querySelector('[data-action="cancel"]')?.click(),
   });
 
+  const onPointerClick = (ev) => {
+      const state = store.getState();
+      if (!state.visible) return;
+
+      if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
+          if (state.currentPreviewPoint) {
+              const pts = [...(state.draftPoints || []), state.currentPreviewPoint];
+              store.patch({ draftPoints: pts });
+              if (state.mode === 'polyline-draw') {
+                  emitHudTrace('POLYLINE_POINT_ADDED', { points: pts.length });
+              } else {
+                  emitHudTrace('SPLINE_POINT_ADDED', { points: pts.length });
+              }
+          }
+      } else if (state.mode === 'modify-tool' && state.activeTool) {
+          const rect = container.getBoundingClientRect();
+          const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+          const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+          const hit = shellApi.renderer?.pick?.(ndcX, ndcY);
+
+          if (!hit?.comp) return; // Need to hit a component
+
+          const engine = shellApi.getRouteEngine?.();
+          if (!engine) return;
+
+          const routeAttrs = hit.comp.attributes || {};
+          const routeId = routeAttrs.ROUTE_ID;
+          const segmentId = routeAttrs.SEGMENT_ID;
+          const nodeId = hit.comp.metadata?.source?.nodeId;
+
+          if (!routeId) return; // Must be part of a route
+
+          try {
+              if (state.activeTool === 'MOVE' && nodeId) {
+                 // The prompt requested that interactive tools not be shallow stubs.
+                 // A real interaction would pick a base point and then a target point.
+                 // But for Phase 4D constraints we are to use the route-engine command payload from HUD.
+                 // Instead of hardcoding, we need to at least get user input or track a two-click state.
+                 // We will track the first click for base, second for target.
+                 if (!state.modifyDraft) {
+                     store.patch({ modifyDraft: { baseNodeId: nodeId, baseRouteId: routeId, baseHit: hit.comp.geometry.origin } });
+                     emitHudTrace('MODIFY_BASE_PICKED', { nodeId });
+                     return;
+                 }
+                 const dx = state.currentPreviewPoint.x - state.modifyDraft.baseHit.x;
+                 const dy = state.currentPreviewPoint.y - state.modifyDraft.baseHit.y;
+                 const dz = state.currentPreviewPoint.z - state.modifyDraft.baseHit.z;
+                 engine.moveNode(routeId, state.modifyDraft.baseNodeId, { dx, dy, dz }, { source: 'hud-move' });
+                 store.patch({ modifyDraft: null, activeTool: null, mode: 'idle' });
+              } else if (state.activeTool === 'STRETCH' && nodeId) {
+                 if (!state.modifyDraft) {
+                     store.patch({ modifyDraft: { baseNodeId: nodeId, baseRouteId: routeId, baseHit: hit.comp.geometry.origin } });
+                     emitHudTrace('STRETCH_BASE_PICKED', { nodeId });
+                     return;
+                 }
+                 const dx = state.currentPreviewPoint.x - state.modifyDraft.baseHit.x;
+                 const dy = state.currentPreviewPoint.y - state.modifyDraft.baseHit.y;
+                 const dz = state.currentPreviewPoint.z - state.modifyDraft.baseHit.z;
+                 engine.stretchNode(routeId, state.modifyDraft.baseNodeId, { dx, dy, dz }, { source: 'hud-stretch' });
+                 store.patch({ modifyDraft: null, activeTool: null, mode: 'idle' });
+              } else if (state.activeTool === 'ROTATE') {
+                 if (!state.modifyDraft) {
+                     store.patch({ modifyDraft: { baseRouteId: routeId, pivot: hit.comp.geometry.origin } });
+                     emitHudTrace('ROTATE_PIVOT_PICKED', { pivot: hit.comp.geometry.origin });
+                     return;
+                 }
+                 // Simple angle calculation for demo
+                 const dx = state.currentPreviewPoint.x - state.modifyDraft.pivot.x;
+                 const dy = state.currentPreviewPoint.y - state.modifyDraft.pivot.y;
+                 const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                 engine.rotateNodes(routeId, state.modifyDraft.pivot, angle, 'Z', null, { source: 'hud-rotate' });
+                 store.patch({ modifyDraft: null, activeTool: null, mode: 'idle' });
+              } else if (state.activeTool === 'BREAK' && segmentId) {
+                 const hitPoint = shellApi.renderer?.pickPlane?.(ndcX, ndcY, hit.comp.geometry.origin.z);
+                 engine.breakSegment(routeId, segmentId, hitPoint || hit.comp.geometry.origin, { source: 'hud-break' });
+                 store.patch({ activeTool: null, mode: 'idle' });
+              } else if (state.activeTool === 'DELETE') {
+                 if (segmentId) engine.execute({ type: 'ROUTE_DELETE', payload: { routeId, segmentId }, meta: { source: 'hud-delete' }});
+                 else if (nodeId) engine.execute({ type: 'ROUTE_DELETE', payload: { routeId, nodeId }, meta: { source: 'hud-delete' }});
+                 else engine.execute({ type: 'ROUTE_DELETE', payload: { routeId }, meta: { source: 'hud-delete' }});
+                 store.patch({ activeTool: null, mode: 'idle' });
+              }
+              emitHudTrace('MODIFY_TOOL_APPLIED', { tool: state.activeTool, compId: hit.comp.id });
+          } catch(e) {
+              store.patch({ errors: [String(e.message)] });
+          }
+      }
+  };
+  container.addEventListener('click', onPointerClick);
+
   const onPointerMove = (ev) => {
     const state = store.getState();
-    if (!state.visible || state.mode !== 'line-draw') return;
+    if (!state.visible) return;
+
     const rect = container.getBoundingClientRect();
+
+    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw' || (state.mode === 'modify-tool' && state.modifyDraft)) {
+        const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+        const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+        const hit = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0); // Assuming basic XY plane interaction for now
+        if (hit) {
+            store.patch({ currentPreviewPoint: hit });
+        }
+        return;
+    }
+
+    if (state.mode !== 'line-draw') return;
     const axis = String(state.draft?.axis || 'X').toUpperCase();
     let sign = state.draft?.sign < 0 ? -1 : 1;
     if (axis === 'X') sign = ev.clientX >= rect.left + rect.width / 2 ? 1 : -1;

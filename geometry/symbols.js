@@ -250,6 +250,7 @@ export function createSupportSymbol(pos, type, pipeAxis, odInMM) {
     if (!type || type === 'UNKNOWN') return null;
     const group = new THREE.Group();
     const p = toThree(pos);
+    group.position.copy(p);
 
     // Apply global scale
     const scale = state.viewerSettings.restraintSymbolScale || 1.0;
@@ -276,10 +277,6 @@ export function createSupportSymbol(pos, type, pipeAxis, odInMM) {
     const leftDir = lateral.clone().negate();
     const rightDir = lateral.clone();
     const upDir = upAxis.clone();
-
-    // Offset the position to sit below the pipe surface
-    p.addScaledVector(upDir, -od / 2);
-    group.position.copy(p);
     const downDir = upAxis.clone().negate();
 
     if (type === 'ANCHOR') {
@@ -293,12 +290,12 @@ export function createSupportSymbol(pos, type, pipeAxis, odInMM) {
     }
 
     if (type === 'GUIDE') {
-        group.add(makeArrow(rightDir, 0, od, MAT_SUPPORT));
-        group.add(makeArrow(leftDir, 0, od, MAT_SUPPORT));
-        group.add(makeArrow(upDir, 0, od, MAT_SUPPORT));
+        group.add(makeArrow(rightDir, -od * 0.9, od, MAT_SUPPORT));
+        group.add(makeArrow(leftDir, -od * 0.9, od, MAT_SUPPORT));
+        group.add(makeArrow(upDir, -od * 0.45, od, MAT_SUPPORT));
     }
     else if (type === 'REST') {
-        group.add(makeArrow(upDir, 0, od, MAT_SUPPORT));
+        group.add(makeArrow(upDir, -od * 0.45, od, MAT_SUPPORT));
     }
     else if (type === 'SPRING') {
         // Vertical dashed arrow
@@ -307,20 +304,20 @@ export function createSupportSymbol(pos, type, pipeAxis, odInMM) {
         const shaftLen = arrowLen - headLen;
 
         const pts = [];
-        pts.push(upDir.clone().multiplyScalar(0));
-        pts.push(upDir.clone().multiplyScalar(shaftLen));
+        pts.push(upDir.clone().multiplyScalar(-od / 2));
+        pts.push(upDir.clone().multiplyScalar(-od / 2 + shaftLen));
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
         const line = new THREE.Line(geo, MAT_SPRING);
         line.computeLineDistances();
         group.add(line);
 
         const head = new THREE.Mesh(new THREE.ConeGeometry(0.175 * od, headLen, 8), MAT_SUPPORT);
-        head.position.copy(upDir).multiplyScalar(shaftLen + headLen / 2);
+        head.position.copy(upDir).multiplyScalar(-od / 2 + shaftLen + headLen / 2);
         group.add(head);
     }
     else if (type === 'STOP') {
-        group.add(makeArrow(rightDir, 0, od, MAT_SUPPORT));
-        group.add(makeArrow(leftDir, 0, od, MAT_SUPPORT));
+        group.add(makeArrow(rightDir, -od * 0.7, od, MAT_SUPPORT));
+        group.add(makeArrow(leftDir, -od * 0.7, od, MAT_SUPPORT));
     }
     else if (type === 'RIGID') {
         // Cross symbol in pipe plane

@@ -306,7 +306,6 @@ function autoBendRoute(meta = {}) {
     subtype: 'LR',
     size: candidate.size || route?.spec?.size || '',
     rating: candidate.rating || route?.spec?.rating || '',
-    angle: candidate.angle,
   };
   const result = _masterDbResolver?.resolveComponent?.(query) || null;
   const list = _routeEngine.autoBend({
@@ -333,14 +332,12 @@ function autoTeeRoute(meta = {}) {
     component: 'TEE',
     subtype: candidate.subtype || 'EQUAL',
     size: candidate.runSize || '',
-    branchSize: candidate.branchSize || candidate.runSize || '',
     rating: candidate.rating || '',
   };
   const result = _masterDbResolver?.resolveComponent?.(query) || null;
   const list = _routeEngine.autoTee({
     routeId: candidate.routeId,
     nodeId: candidate.nodeId,
-    candidate,
     resolved: result?.resolved || {},
     provenance: result?.source || 'manual',
     matchKey: result?.matchKey || '',
