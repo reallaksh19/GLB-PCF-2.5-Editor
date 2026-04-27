@@ -156,10 +156,29 @@ export function createHudOverlay(container, handlers = {}) {
     if (mode === 'line-draw') body += lineDraftHtml(state);
     else if (mode === 'insert-component') body += insertDraftHtml(state);
     else if (mode?.startsWith('modify-')) {
+      const tool = state.activeTool || mode.replace('modify-', '');
+      let extraFields = '';
+      if (tool === 'rotate') {
+        extraFields = `
+          <div class="hud-row hud-fields-row">
+            <label>Angle (deg) <input data-field="rotateAngle" type="number" step="1" value="${esc(state.rotateAngle || 90)}" /></label>
+            <label>Axis <input data-field="rotateAxis" type="text" maxlength="1" value="${esc(state.rotateAxis || 'Z')}" /></label>
+          </div>
+        `;
+      } else if (tool === 'break') {
+        extraFields = `
+          <div class="hud-row hud-fields-row">
+            <label>Gap (mm) <input data-field="breakGap" type="number" step="1" value="${esc(state.breakGap || 0)}" /></label>
+          </div>
+        `;
+      }
       body += `<div class="hud-body">
-        Modify tool active: ${esc(mode.replace('modify-', ''))}. Select points in 3D.
-        ${state.activeTool === 'polyline' ? '<button data-action="commit-modify">Finish Polyline (Enter)</button>' : ''}
-        <button data-action="cancel">Cancel (Esc)</button>
+        <div class="hud-row hud-meta">Modify tool active: ${esc(tool)}. Select point/node in 3D.</div>
+        ${extraFields}
+        <div class="hud-row hud-meta">
+          ${tool === 'polyline' ? '<button data-action="commit-modify" class="hud-mode">Finish Polyline (Enter)</button>' : ''}
+          <button data-action="cancel" class="hud-mode">Cancel (Esc)</button>
+        </div>
       </div>`;
     }
     else body += `<div class="hud-body hud-idle">HUD ready. Choose a mode or use shortcuts.</div>`;

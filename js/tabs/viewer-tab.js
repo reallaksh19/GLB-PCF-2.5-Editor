@@ -202,25 +202,66 @@ function handleScenePick(ev) {
     if (hit?.comp) {
       const attrs = hit.comp.attributes || {};
       const routeId = attrs.ROUTE_ID || attrs['ROUTE_ID'] || null;
-      const nodeId = hit.comp.geometry?.ep1 || hit.comp.geometry?.origin; // Simplification for picking nodes
+
+      // Determine nearest node or fallback
+      let nodeId = null;
+      if (routeId && _routeEngine) {
+         const route = _routeEngine.getRoutes().find(r => r.id === routeId);
+         if (route && ptObj) {
+             let minDist = Infinity;
+             for (const node of route.nodes) {
+                 const dist = Math.hypot(node.x - ptObj.x, node.y - ptObj.y, node.z - ptObj.z);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     nodeId = node.id;
+                 }
+             }
+         }
+      }
+      if (!nodeId) nodeId = hit.comp.geometry?.ep1 || hit.comp.geometry?.origin;
+
       const segmentId = attrs.SEGMENT_ID || attrs['SEGMENT_ID'] || null;
 
-      if (activeTool === 'stretch' && routeId && nodeId && ptObj) {
-        getViewerShellApi().stretchNode(routeId, nodeId, ptObj);
-        return;
+      if (activeTool === 'stretch') {
+          if (!hudState.stretchNodeId && routeId && nodeId) {
+             _hudApi.updateField?.('stretchRouteId', routeId);
+             _hudApi.updateField?.('stretchNodeId', nodeId);
+             setViewerStatus('Stretch: Select target point', 'active');
+             return;
+          } else if (hudState.stretchNodeId && ptObj) {
+             getViewerShellApi().stretchNode(hudState.stretchRouteId, hudState.stretchNodeId, ptObj);
+             _hudApi.updateField?.('stretchNodeId', null);
+             _hudApi.updateField?.('stretchRouteId', null);
+             setViewerStatus('Stretch applied', 'ok');
+             return;
+          }
       }
+
       if (activeTool === 'rotate' && routeId && ptObj) {
-        getViewerShellApi().rotateRoute(routeId, ptObj, 45, 'Z'); // Hardcoded 45 for demo, ideally from HUD
+        const angle = Number(hudState.rotateAngle) || 90;
+        const axis = String(hudState.rotateAxis || 'Z').toUpperCase();
+        getViewerShellApi().rotateRoute(routeId, ptObj, angle, axis);
+        setViewerStatus(`Rotated ${angle}° around ${axis}`, 'ok');
         return;
       }
       if (activeTool === 'break' && routeId && segmentId && ptObj) {
-        getViewerShellApi().breakRoute(routeId, segmentId, ptObj, 0); // No gap for now
+        const gap = Number(hudState.breakGap) || 0;
+        getViewerShellApi().breakRoute(routeId, segmentId, ptObj, gap);
+        setViewerStatus(`Broken segment with gap ${gap}mm`, 'ok');
         return;
       }
       if (activeTool === 'delete' && routeId && nodeId) {
         getViewerShellApi().deleteNode(routeId, nodeId, true); // Heal true by default
+        setViewerStatus(`Deleted node ${nodeId}`, 'ok');
         return;
       }
+    } else if (activeTool === 'stretch' && hudState.stretchNodeId && ptObj) {
+        // Allow stretching to empty space
+        getViewerShellApi().stretchNode(hudState.stretchRouteId, hudState.stretchNodeId, ptObj);
+        _hudApi.updateField?.('stretchNodeId', null);
+        _hudApi.updateField?.('stretchRouteId', null);
+        setViewerStatus('Stretch applied', 'ok');
+        return;
     }
   }
 

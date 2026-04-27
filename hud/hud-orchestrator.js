@@ -83,7 +83,8 @@ export function createHudOrchestrator({ container, shellApi }) {
     cancel: () => {
       const state = store.getState();
       if (state.activeTool === 'polyline' && state.polylineRouteId) {
-        try { shellApi.endPolyline?.(state.polylineRouteId); } catch (_) {}
+        // Discard the polyline on cancel
+        try { shellApi.executeEditorCommand?.(shellApi.createEditorCommand?.('ROUTE_DELETE', { routeId: state.polylineRouteId })); } catch (_) {}
       }
       store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible, activeTool: null, polylineRouteId: null });
       emitHudTrace('HUD_CANCEL', {}, true);
