@@ -327,6 +327,35 @@ export function createHudOrchestrator({ container, shellApi }) {
       }
   };
   container.addEventListener('click', onPointerClick);
+  const onDoubleClick = (ev) => {
+      const state = store.getState();
+      if (!state.visible) return;
+
+      if (state.mode === 'polyline-draw') {
+          const pts = state.draftPoints || [];
+          if (pts.length > 1) {
+              try {
+                  shellApi.getRouteEngine?.().createPolyline(pts, {}, { source: 'hud-polyline' });
+                  store.patch({ mode: 'idle', draftPoints: [], errors: [] });
+                  emitHudTrace('POLYLINE_COMMIT', { points: pts.length });
+              } catch (e) {
+                  store.patch({ errors: [String(e.message)] });
+              }
+          }
+      } else if (state.mode === 'spline-draw') {
+          const pts = state.draftPoints || [];
+          if (pts.length > 1) {
+              try {
+                  shellApi.getRouteEngine?.().createGuide(pts, 'SPLINE', { source: 'hud-spline' });
+                  store.patch({ mode: 'idle', draftPoints: [], errors: [] });
+                  emitHudTrace('SPLINE_COMMIT', { points: pts.length });
+              } catch (e) {
+                  store.patch({ errors: [String(e.message)] });
+              }
+          }
+      }
+  };
+  container.addEventListener('dblclick', onDoubleClick);
 
   const onPointerMove = (ev) => {
     const state = store.getState();
@@ -400,6 +429,8 @@ export function createHudOrchestrator({ container, shellApi }) {
       try { offRoute?.(); } catch (_) {}
       try { unsubscribeRender?.(); } catch (_) {}
       try { container.removeEventListener('mousemove', onPointerMove); } catch (_) {}
+      try { container.removeEventListener('click', onPointerClick); } catch (_) {}
+      try { container.removeEventListener('dblclick', onDoubleClick); } catch (_) {}
       overlay.destroy();
     },
   };
