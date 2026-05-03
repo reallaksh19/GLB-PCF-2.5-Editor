@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLB-PCF Editor — UI Wireframe Explorations</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #f0ede8;
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* ── Design canvas host ── */
+  #root { width: 100vw; height: 100vh; }
+
+  /* ── Shared sketch tokens ── */
+  :root {
+    --ink: #1a1a1a;
+    --ink-2: #3d3d3d;
+    --ink-3: #888;
+    --paper: #faf9f6;
+    --paper-2: #f3f0eb;
+    --paper-3: #e8e4dc;
+    --amber: #d97706;
+    --amber-light: rgba(217,119,6,0.12);
+    --steel: #64748b;
+    --green: #059669;
+    --red: #dc2626;
+    --blue: #2563eb;
+    --sketch: 'Caveat', cursive;
+    --mono: 'JetBrains Mono', monospace;
+    --ui: 'DM Sans', sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="../design-canvas.jsx"></script>
+
+<script type="text/babel">
+/* ════════════════════════════════════════════════════
+   SHARED SKETCH PRIMITIVES
+   ════════════════════════════════════════════════════ */
+
+const S = {
+  /* Layout containers */
+  app: { display:'flex', flexDirection:'column', width:'100%', height:'100%', background:'#1a1e26', border:'2px solid #1a1a1a', borderRadius:6, overflow:'hidden', fontFamily:'DM Sans, sans-serif', position:'relative' },
+  titlebar: { height:28, background:'#111318', borderBottom:'1px solid #2d3340', display:'flex', alignItems:'center', gap:8, padding:'0 10px', flexShrink:0 },
+  toolbar: { background:'#1c2130', borderBottom:'1px solid #2d3340', flexShrink:0 },
+  canvas: { flex:1, background:'#0d1117', position:'relative', overflow:'hidden' },
+  statusbar: { height:22, background:'#111318', borderTop:'1px solid #2d3340', display:'flex', alignItems:'center', padding:'0 10px', gap:12, flexShrink:0 },
+
+  /* Typography */
+  label: { fontFamily:'Caveat, cursive', fontSize:13, color:'#888', fontWeight:400 },
+  heading: { fontFamily:'Caveat, cursive', fontSize:16, color:'#d97706', fontWeight:700, letterSpacing:'0.02em' },
+  mono: { fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'#64748b' },
+
+  /* Sketch shapes */
+  box: (w, h, opts={}) => ({
+    width: w, height: h,
+    background: opts.fill || 'rgba(255,255,255,0.04)',
+    border: `1px solid ${opts.stroke || '#2d3340'}`,
+    borderRadius: opts.r ?? 3,
+    display:'flex', alignItems:'center', justifyContent:'center',
+    flexShrink:0,
+    position: opts.pos || 'relative',
+    overflow:'hidden',
+    ...opts.style,
+  }),
+
+  /* Icon placeholder — clean SVG square */
+  iconBox: (active=false, color='#64748b') => ({
+    width:28, height:28,
+    background: active ? 'rgba(217,119,6,0.18)' : 'rgba(255,255,255,0.04)',
+    border: `1px solid ${active ? '#d97706' : '#2d3340'}`,
+    borderRadius:4,
+    display:'flex', alignItems:'center', justifyContent:'center',
+    cursor:'pointer', flexShrink:0,
+    color: active ? '#d97706' : color,
+  }),
+
+  sep: { width:1, height:20, background:'#2d3340', margin:'0 4px', flexShrink:0 },
+  hSep: { height:1, background:'#2d3340', margin:'4px 0' },
+};
+
+/* ── Annotation callout ── */
+function Note({ x, y, text, dir='right' }) {
+  const arrowMap = { right:'→', left:'←', up:'↑', down:'↓' };
+  return (
+    <div style={{ position:'absolute', left:x, top:y, display:'flex', alignItems:'center', gap:4, pointerEvents:'none', zIndex:99 }}>
+      <span style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#d97706', background:'rgba(13,11,9,0.85)', padding:'2px 6px', borderRadius:3, whiteSpace:'nowrap', lineHeight:1.4 }}>
+        {dir === 'left' || dir === 'up' ? arrowMap[dir] + ' ' : ''}{text}{dir === 'right' || dir === 'down' ? ' ' + arrowMap[dir] : ''}
+      </span>
+    </div>
+  );
+}
+
+/* ── Sketch label badge ── */
+function Badge({ text, color='#d97706' }) {
+  return (
+    <span style={{ fontFamily:'Caveat,cursive', fontSize:11, background:`${color}22`, color, border:`1px solid ${color}44`, borderRadius:3, padding:'1px 6px', whiteSpace:'nowrap' }}>
+      {text}
+    </span>
+  );
+}
+
+/* ── Crosshatch fill for empty canvas ── */
+function Crosshatch({ opacity=0.12 }) {
+  return (
+    <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity }} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="hatch" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M0 20L20 0M-5 5L5 -5M15 25L25 15" stroke="#64748b" strokeWidth="0.5"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#hatch)"/>
+    </svg>
+  );
+}
+
+/* ── Grid dot fill ── */
+function GridDots() {
+  return (
+    <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.15 }} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+          <circle cx="12" cy="12" r="1" fill="#60a5fa"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#dots)"/>
+    </svg>
+  );
+}
+
+/* ── Pipe sketch geometry ── */
+function PipeGeometry({ style }) {
+  return (
+    <svg viewBox="0 0 320 180" style={{ position:'absolute', inset:0, width:'100%', height:'100%', ...style }}>
+      {/* Main pipe run */}
+      <line x1="30" y1="90" x2="200" y2="90" stroke="#60a5fa" strokeWidth="5" strokeLinecap="round"/>
+      {/* Elbow */}
+      <path d="M200 90 Q220 90 220 70" fill="none" stroke="#60a5fa" strokeWidth="5"/>
+      {/* Rise */}
+      <line x1="220" y1="70" x2="220" y2="30" stroke="#60a5fa" strokeWidth="5" strokeLinecap="round"/>
+      {/* Branch tee */}
+      <line x1="120" y1="90" x2="120" y2="140" stroke="#93c5fd" strokeWidth="4" strokeLinecap="round"/>
+      {/* Valve symbol */}
+      <polygon points="85,82 95,82 95,98 85,98" fill="none" stroke="#fbbf24" strokeWidth="1.5"/>
+      <line x1="90" y1="82" x2="90" y2="74" stroke="#fbbf24" strokeWidth="1.5"/>
+      {/* Flange marks */}
+      <line x1="60" y1="85" x2="60" y2="95" stroke="#a78bfa" strokeWidth="2"/>
+      <line x1="63" y1="85" x2="63" y2="95" stroke="#a78bfa" strokeWidth="2"/>
+      {/* Support */}
+      <line x1="160" y1="90" x2="160" y2="108" stroke="#34d399" strokeWidth="2"/>
+      <line x1="153" y1="108" x2="167" y2="108" stroke="#34d399" strokeWidth="2"/>
+      {/* Node dots */}
+      <circle cx="30" cy="90" r="3.5" fill="#60a5fa"/>
+      <circle cx="200" cy="90" r="3.5" fill="#60a5fa"/>
+      <circle cx="220" cy="30" r="3.5" fill="#60a5fa"/>
+      <circle cx="120" cy="140" r="3.5" fill="#93c5fd"/>
+      {/* Labels */}
+      <text x="30" y="105" fontSize="7" fill="#94a3b8" fontFamily="JetBrains Mono">0,0,0</text>
+      <text x="192" y="105" fontSize="7" fill="#94a3b8" fontFamily="JetBrains Mono">5000</text>
+      <text x="224" y="55" fontSize="7" fill="#94a3b8" fontFamily="JetBrains Mono">Z+1200</text>
+      <text x="80" y="76" fontSize="7" fill="#fbbf24" fontFamily="JetBrains Mono">VALVE</text>
+      <text x="125" y="135" fontSize="7" fill="#93c5fd" fontFamily="JetBrains Mono">TEE</text>
+    </svg>
+  );
+}
+
+/* ── Generic SVG icon placeholders ── */
+function Icon({ d, size=14, color='currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d}/>
+    </svg>
+  );
+}
+
+// Icon paths
+const ICONS = {
+  line:    'M5 19L19 5',
+  poly:    'M3 18L8 6L14 15L18 9L21 13',
+  spline:  'M3 19C5 12 10 5 14 12S20 19 21 12',
+  move:    'M12 4v16M4 12h16',
+  rotate:  'M21.5 2v6h-6M2.5 22v-6h6M2 11.5A10 10 0 0 1 16 3.5M22 12.5A10 10 0 0 1 8 20.5',
+  stretch: 'M8 12h8M5 9l3 3-3 3M19 9l-3 3 3 3',
+  cut:     'M6 9l6 6M12 9l6 6M7 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM17 14a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
+  del:     'M18 6L6 18M6 6l12 12',
+  valve:   'M12 5v14M5 8l7 4 7-4M5 16l7-4 7 4',
+  flange:  'M4 8h16v8H4zM2 8h2M22 8h-2M2 16h2M22 16h-2',
+  tee:     'M4 12h16M12 4v8',
+  support: 'M4 20h16M8 20V9M16 20V9M8 9a4 4 0 0 1 8 0',
+  elbow:   'M4 20V8a4 4 0 0 1 4-4h12',
+  fit:     'M5 5h4v4H5zM15 5h4v4h-4zM5 15h4v4H5zM15 15h4v4h-4z',
+  iso:     'M12 2l9 5v10l-9 5-9-5V7zM12 2v20M21 7l-9 5M3 7l9 5',
+  plan:    'M3 3h18v18H3zM3 8h18M8 3v18',
+  eye:     'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 0 0 0 6 3 3 0 0 0 0-6z',
+  open:    'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+  export:  'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  heatmap: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z',
+  debug:   'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
+  cmd:     'M4 6h16M4 12h8M4 18h12',
+  term:    'M8 9l3 3-3 3M13 15h3',
+  close:   'M18 6L6 18M6 6l12 12',
+  chevron: 'M6 9l6 6 6-6',
+  grip:    'M9 5h2M13 5h2M9 10h2M13 10h2M9 15h2M13 15h2',
+  snap:    'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83',
+  lock:    'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4',
+  layers:  'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  info:    'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 16v-4M12 8h.01',
+};
+
+function Ico({ name, size=14, color='currentColor', strokeWidth=2 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d={ICONS[name] || ICONS.info}/>
+    </svg>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   WIREFRAME A — AutoCAD Ribbon + Right-Dock HUD
+   ══════════════════════════════════════════════════════════ */
+function WireframeA() {
+  const [activeTool, setActiveTool] = React.useState('line');
+  const [hudOpen, setHudOpen] = React.useState(true);
+  const [macroOpen, setMacroOpen] = React.useState(false);
+
+  const groups = [
+    {
+      label: 'FILE', color:'#475569',
+      tools: [
+        { id:'open-pcf', icon:'open', label:'Open PCF' },
+        { id:'open-glb', icon:'open', label:'Open GLB' },
+        { id:'export-glb', icon:'export', label:'Export GLB' },
+        { id:'export-dxf', icon:'export', label:'Export DXF' },
+      ]
+    },
+    {
+      label: 'DRAW', color:'#2563eb',
+      tools: [
+        { id:'line', icon:'line', label:'Line' },
+        { id:'poly', icon:'poly', label:'Polyline' },
+        { id:'spline', icon:'spline', label:'Spline' },
+      ]
+    },
+    {
+      label: 'INSERT', color:'#7c3aed',
+      tools: [
+        { id:'valve', icon:'valve', label:'Valve' },
+        { id:'flange', icon:'flange', label:'Flange' },
+        { id:'tee', icon:'tee', label:'Tee' },
+        { id:'elbow', icon:'elbow', label:'Elbow' },
+        { id:'support', icon:'support', label:'Support' },
+      ]
+    },
+    {
+      label: 'MODIFY', color:'#d97706',
+      tools: [
+        { id:'move', icon:'move', label:'Move' },
+        { id:'stretch', icon:'stretch', label:'Stretch' },
+        { id:'rotate', icon:'rotate', label:'Rotate' },
+        { id:'cut', icon:'cut', label:'Break' },
+        { id:'del', icon:'del', label:'Delete' },
+      ]
+    },
+    {
+      label: 'VIEW', color:'#059669',
+      tools: [
+        { id:'fit', icon:'fit', label:'Fit All' },
+        { id:'iso', icon:'iso', label:'Isometric' },
+        { id:'plan', icon:'plan', label:'Plan' },
+        { id:'snap', icon:'snap', label:'Snap' },
+      ]
+    },
+    {
+      label: 'ANALYSE', color:'#dc2626',
+      tools: [
+        { id:'heatmap', icon:'heatmap', label:'Heatmap' },
+        { id:'layers', icon:'layers', label:'Layers' },
+        { id:'debug', icon:'debug', label:'Debug' },
+      ]
+    },
+  ];
+
+  return (
+    <div style={S.app}>
+      {/* ── Title bar ── */}
+      <div style={S.titlebar}>
+        <div style={{ width:18, height:18, background:'#d97706', borderRadius:3, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, fontWeight:700, color:'#0d0f12' }}>PE</span>
+        </div>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:11, fontWeight:600, color:'#e8eaf0', letterSpacing:'0.06em' }}>GLB-PCF EDITOR</span>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#475569', marginLeft:6 }}>Release 1A</span>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          {['2.5D Viewer','Debug'].map((t,i) => (
+            <button key={t} style={{ fontFamily:'DM Sans', fontSize:10, fontWeight:600, color: i===0 ? '#d97706':'#64748b', background:'transparent', border:'none', borderBottom: i===0 ? '2px solid #d97706':'2px solid transparent', padding:'0 8px', cursor:'pointer', height:28 }}>{t}</button>
+          ))}
+          <div style={{ width:1, background:'#2d3340', margin:'4px 0' }}/>
+          <button style={{ ...S.iconBox(false,'#64748b'), width:22, height:22, border:'none', background:'transparent', cursor:'pointer' }}><Ico name="close" size={11}/></button>
+        </div>
+      </div>
+
+      {/* ── Ribbon toolbar ── */}
+      <div style={{ ...S.toolbar, padding:'0 8px' }}>
+        <div style={{ display:'flex', alignItems:'stretch', gap:0, overflowX:'auto' }}>
+          {groups.map((g, gi) => (
+            <React.Fragment key={g.label}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'4px 10px 2px', borderRight:'1px solid #2d3340' }}>
+                <div style={{ display:'flex', gap:3, marginBottom:2 }}>
+                  {g.tools.map(t => (
+                    <button key={t.id} onClick={() => setActiveTool(t.id)} title={t.label} style={{
+                      ...S.iconBox(activeTool === t.id, g.color),
+                      flexDirection:'column', gap:1, height:36, width:32, fontSize:8,
+                      background: activeTool===t.id ? `${g.color}22` : 'transparent',
+                      border: `1px solid ${activeTool===t.id ? g.color : '#2d3340'}`,
+                      borderRadius:3, cursor:'pointer', padding:'4px 2px',
+                    }}>
+                      <Ico name={t.icon} size={13} color={activeTool===t.id ? g.color : '#94a3b8'}/>
+                      <span style={{ fontFamily:'DM Sans', fontSize:7, color: activeTool===t.id ? g.color : '#64748b', whiteSpace:'nowrap' }}>{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color: g.color, letterSpacing:'0.08em', opacity:0.7 }}>{g.label}</span>
+              </div>
+            </React.Fragment>
+          ))}
+
+          {/* Right-side theme + macro toggle */}
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6, padding:'0 8px' }}>
+            <select style={{ background:'#1c2130', border:'1px solid #2d3340', color:'#94a3b8', fontSize:9, fontFamily:'JetBrains Mono', padding:'2px 6px', borderRadius:3 }}>
+              <option>Dark (Navis)</option>
+              <option>Blueprint</option>
+              <option>Monochrome</option>
+            </select>
+            <button onClick={() => setMacroOpen(v=>!v)} style={{ ...S.iconBox(macroOpen,'#d97706'), width:'auto', padding:'0 8px', fontSize:9, fontFamily:'JetBrains Mono', gap:4 }}>
+              <Ico name="term" size={11} color={macroOpen ? '#d97706':'#64748b'}/> MACRO
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main area ── */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
+
+        {/* Viewport canvas */}
+        <div style={{ ...S.canvas, flex:1, position:'relative' }}>
+          <GridDots/>
+          <PipeGeometry style={{ opacity:0.9 }}/>
+
+          {/* Floating view cube — top-right */}
+          <div style={{ position:'absolute', top:10, right: hudOpen ? 298 : 10, background:'rgba(20,23,32,0.92)', border:'1px solid #2d3340', borderRadius:4, padding:6, display:'grid', gridTemplateColumns:'1fr 1fr', gap:3, transition:'right 0.2s' }}>
+            {['NE','NW','SE','SW'].map(v => (
+              <button key={v} style={{ width:28, height:22, background:'#252a3a', border:'1px solid #3a4255', borderRadius:3, color:'#94a3b8', fontSize:8, fontFamily:'JetBrains Mono', cursor:'pointer' }}>{v}</button>
+            ))}
+            <button style={{ gridColumn:'1/3', height:22, background:'#252a3a', border:'1px solid #3a4255', borderRadius:3, color:'#94a3b8', fontSize:8, fontFamily:'JetBrains Mono', cursor:'pointer' }}>Plan / Front</button>
+          </div>
+
+          {/* Active tool hint — bottom of canvas */}
+          <div style={{ position:'absolute', bottom: macroOpen ? 148 : 8, left:'50%', transform:'translateX(-50%)', background:'rgba(20,23,32,0.9)', border:'1px solid #2563eb44', borderRadius:3, padding:'3px 12px', fontFamily:'JetBrains Mono', fontSize:9, color:'#60a5fa', pointerEvents:'none', transition:'bottom 0.2s' }}>
+            TOOL: LINE — click anchor point or press Enter to commit · Esc to cancel
+          </div>
+
+          {/* Annotations */}
+          <Note x={20} y={5} text="No emoji — proper SVG icons, grouped by function" dir="right"/>
+          <Note x={20} y={22} text="Ribbon group labels: FILE · DRAW · INSERT · MODIFY · VIEW · ANALYSE" dir="right"/>
+        </div>
+
+        {/* ── Right HUD panel (docked) ── */}
+        {hudOpen && (
+          <div style={{ width:288, background:'#141720', borderLeft:'1px solid #2d3340', display:'flex', flexDirection:'column', flexShrink:0, overflow:'hidden' }}>
+            {/* Panel header */}
+            <div style={{ background:'#1c2130', borderBottom:'1px solid #2d3340', padding:'6px 10px', display:'flex', alignItems:'center', gap:6 }}>
+              <div style={{ width:6, height:6, borderRadius:'50%', background:'#2563eb' }}/>
+              <span style={{ fontFamily:'JetBrains Mono', fontSize:10, fontWeight:600, color:'#60a5fa', letterSpacing:'0.06em' }}>LINE DRAW</span>
+              <button onClick={() => setHudOpen(false)} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:14, lineHeight:1 }}>×</button>
+            </div>
+
+            {/* Axis selector */}
+            <div style={{ padding:'8px 10px', borderBottom:'1px solid #1e2435' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:5, letterSpacing:'0.08em' }}>AXIS</div>
+              <div style={{ display:'flex', gap:3 }}>
+                {['X','Y','Z'].map(a => (
+                  <button key={a} style={{ flex:1, height:28, background: a==='X' ? '#2563eb22':'#252a3a', border: `1px solid ${a==='X' ? '#2563eb':'#2d3340'}`, borderRadius:3, color: a==='X' ? '#60a5fa':'#64748b', fontFamily:'JetBrains Mono', fontSize:12, fontWeight:700, cursor:'pointer' }}>{a}</button>
+                ))}
+                <div style={{ width:1, background:'#2d3340', margin:'0 3px' }}/>
+                {['+','-'].map(s => (
+                  <button key={s} style={{ width:28, height:28, background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, color:'#64748b', fontFamily:'JetBrains Mono', fontSize:14, cursor:'pointer' }}>{s}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Fields */}
+            <div style={{ padding:'8px 10px', borderBottom:'1px solid #1e2435' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:5, letterSpacing:'0.08em' }}>PARAMETERS</div>
+              {[['Length (mm)', '3000'], ['Pipeline', 'L01-P-001'], ['Size', '168.3 OD'], ['Rating', 'PN16']].map(([lbl, val]) => (
+                <div key={lbl} style={{ display:'flex', alignItems:'center', marginBottom:4 }}>
+                  <span style={{ fontFamily:'DM Sans', fontSize:10, color:'#64748b', width:90, flexShrink:0 }}>{lbl}</span>
+                  <div style={{ flex:1, height:22, background:'#0d1117', border:'1px solid #2d3340', borderRadius:3, padding:'0 8px', display:'flex', alignItems:'center' }}>
+                    <span style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'#e8eaf0' }}>{val}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Anchor info */}
+            <div style={{ padding:'8px 10px', borderBottom:'1px solid #1e2435' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:4, letterSpacing:'0.08em' }}>ROUTE STATE</div>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#94a3b8', lineHeight:1.7 }}>
+                <div><span style={{ color:'#475569' }}>Anchor: </span>5000, 0, 0</div>
+                <div><span style={{ color:'#475569' }}>Preview: </span>8000, 0, 0</div>
+                <div><span style={{ color:'#475569' }}>Last: </span>3000 mm</div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:4 }}>
+              <button style={{ height:30, background:'#2563eb', border:'none', borderRadius:4, color:'#fff', fontFamily:'JetBrains Mono', fontSize:11, fontWeight:600, cursor:'pointer', letterSpacing:'0.04em' }}>
+                ↵ COMMIT LINE
+              </button>
+              <div style={{ display:'flex', gap:3 }}>
+                <button style={{ flex:1, height:24, background:'#1c2130', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer' }}>↑ Rise</button>
+                <button style={{ flex:1, height:24, background:'#1c2130', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer' }}>↓ Drop</button>
+                <button style={{ flex:1, height:24, background:'#1c2130', border:'1px solid #dc2626', borderRadius:3, color:'#dc2626', fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer' }}>Esc</button>
+              </div>
+            </div>
+
+            {/* Insert shortcuts */}
+            <div style={{ padding:'8px 10px', marginTop:'auto', borderTop:'1px solid #1e2435' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:5, letterSpacing:'0.08em' }}>INSERT QUICK-PICK</div>
+              <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
+                {[['valve','V','#fbbf24'],['flange','F','#a78bfa'],['tee','T','#34d399'],['elbow','E','#60a5fa'],['support','S','#fb923c']].map(([name, key, color]) => (
+                  <button key={name} style={{ flex:'none', height:26, padding:'0 8px', background:`${color}11`, border:`1px solid ${color}33`, borderRadius:3, color, fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+                    <Ico name={name} size={10} color={color}/>{name.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Component panel */}
+            <div style={{ borderTop:'1px solid #2d3340', padding:'6px 10px', background:'#0d1117' }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:4, letterSpacing:'0.08em' }}>SELECTED COMPONENT</div>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#94a3b8', lineHeight:1.7 }}>
+                <div><span style={{ color:'#d97706' }}>VALVE</span> · Gate · 168.3 OD</div>
+                <div><span style={{ color:'#475569' }}>Rating:</span> PN16 · FW</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!hudOpen && (
+          <button onClick={() => setHudOpen(true)} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'#1c2130', border:'1px solid #2563eb44', borderRadius:4, color:'#60a5fa', fontFamily:'JetBrains Mono', fontSize:9, padding:'8px 4px', cursor:'pointer', writingMode:'vertical-rl' }}>
+            HUD ›
+          </button>
+        )}
+      </div>
+
+      {/* ── Macro terminal (collapsible bottom) ── */}
+      {macroOpen && (
+        <div style={{ position:'absolute', bottom:22, left:0, right:0, height:140, background:'rgba(9,11,17,0.97)', borderTop:'1px solid #d97706', zIndex:50, display:'flex', flexDirection:'column' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 10px', borderBottom:'1px solid #2d3340', flexShrink:0 }}>
+            <Ico name="term" size={11} color="#d97706"/>
+            <span style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'#d97706', fontWeight:600 }}>MACRO TERMINAL</span>
+            <Badge text="route: L01-P-001" color="#059669"/>
+            <span style={{ marginLeft:'auto', fontFamily:'JetBrains Mono', fontSize:9, color:'#475569' }}>History: 3 cmds</span>
+            <button onClick={() => setMacroOpen(false)} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:13 }}>×</button>
+          </div>
+          <div style={{ flex:1, overflow:'auto', padding:'4px 10px', fontFamily:'JetBrains Mono', fontSize:10, lineHeight:1.7 }}>
+            <div style={{ color:'#64748b' }}>› PIPE 0,0,0 5000,0,0 OD=168.3</div>
+            <div style={{ color:'#34d399' }}>✓ Created PIPE segment — 5000 mm, OD 168.3</div>
+            <div style={{ color:'#64748b' }}>› VALVE 1500,0,0 TYPE=GATE PN16</div>
+            <div style={{ color:'#34d399' }}>✓ Inserted VALVE — Gate PN16</div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderTop:'1px solid #1e2435', flexShrink:0 }}>
+            <span style={{ color:'#d97706', fontFamily:'JetBrains Mono', fontSize:12 }}>›</span>
+            <div style={{ flex:1, height:22, background:'transparent', border:'none', fontFamily:'JetBrains Mono', fontSize:11, color:'#e8eaf0', display:'flex', alignItems:'center' }}>
+              <span style={{ color:'#475569' }}>PIPE 0,0,0 3000,0,0 OD=168.3</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Annotations on canvas */}
+      <div style={{ position:'absolute', top:58, left:10, zIndex:10, pointerEvents:'none', display:'flex', flexDirection:'column', gap:6 }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#d97706', background:'rgba(9,11,17,0.88)', padding:'2px 7px', borderRadius:3, maxWidth:260, lineHeight:1.5 }}>
+          ↖ Ribbon: grouped tool bands, each with icon+label. No emoji.
+        </div>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#60a5fa', background:'rgba(9,11,17,0.88)', padding:'2px 7px', borderRadius:3, maxWidth:260, lineHeight:1.5 }}>
+          → HUD docked right — never covers geometry. Collapses to a thin tab.
+        </div>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#d97706', background:'rgba(9,11,17,0.88)', padding:'2px 7px', borderRadius:3, maxWidth:260, lineHeight:1.5 }}>
+          ↓ Macro slides up from bottom — off by default, toggle in ribbon.
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div style={S.statusbar}>
+        <div style={{ width:6, height:6, borderRadius:'50%', background:'#d97706', animation:'pulse 1.5s infinite' }}/>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b' }}>LINE — anchor at 5000,0,0 — Enter to commit</span>
+        <div style={{ marginLeft:'auto', display:'flex', gap:12 }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#475569' }}>Snap: Grid 250mm</span>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#475569' }}>OD: 168.3 · PN16</span>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#475569' }}>GLB-PCF-Editor v1A</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   WIREFRAME B — Vertical Left Palette + Floating HUD Card
+   ══════════════════════════════════════════════════════════ */
+function WireframeB() {
+  const [activeTool, setActiveTool] = React.useState('line');
+
+  const sections = [
+    { label:'DRAW', tools: [
+      { id:'line', icon:'line', label:'Line', key:'L' },
+      { id:'poly', icon:'poly', label:'Poly', key:'P' },
+      { id:'spline', icon:'spline', label:'Spline', key:'S' },
+    ]},
+    { label:'INSERT', tools: [
+      { id:'valve', icon:'valve', label:'Valve', key:'V' },
+      { id:'flange', icon:'flange', label:'Flange', key:'F' },
+      { id:'tee', icon:'tee', label:'Tee', key:'T' },
+      { id:'elbow', icon:'elbow', label:'Elbow', key:'E' },
+      { id:'support', icon:'support', label:'Supp', key:'U' },
+    ]},
+    { label:'EDIT', tools: [
+      { id:'move', icon:'move', label:'Move', key:'M' },
+      { id:'stretch', icon:'stretch', label:'Stretch', key:'H' },
+      { id:'rotate', icon:'rotate', label:'Rotate', key:'R' },
+      { id:'cut', icon:'cut', label:'Break', key:'B' },
+      { id:'del', icon:'del', label:'Delete', key:'Del' },
+    ]},
+    { label:'VIEW', tools: [
+      { id:'fit', icon:'fit', label:'Fit', key:'F' },
+      { id:'iso', icon:'iso', label:'Iso', key:'I' },
+      { id:'snap', icon:'snap', label:'Snap', key:'G' },
+    ]},
+  ];
+
+  const toolColors = { DRAW:'#2563eb', INSERT:'#7c3aed', EDIT:'#d97706', VIEW:'#059669' };
+
+  return (
+    <div style={S.app}>
+      {/* Slim title bar */}
+      <div style={{ ...S.titlebar, height:24 }}>
+        <div style={{ width:16, height:16, background:'#d97706', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:8, fontWeight:700, color:'#0d0f12' }}>PE</span>
+        </div>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:10, fontWeight:600, color:'#e8eaf0' }}>GLB-PCF EDITOR</span>
+        {/* Tabs */}
+        <div style={{ marginLeft:16, display:'flex', gap:1 }}>
+          {['2.5D Viewer','Debug'].map((t,i) => (
+            <button key={t} style={{ fontSize:9, fontFamily:'DM Sans', fontWeight:600, color: i===0 ? '#d97706':'#64748b', background: i===0 ? '#1c2130':'transparent', border: i===0 ? '1px solid #2d3340':'1px solid transparent', borderBottom:'none', borderRadius:'3px 3px 0 0', padding:'0 10px', height:24, cursor:'pointer' }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center' }}>
+          <select style={{ background:'transparent', border:'1px solid #2d3340', color:'#64748b', fontSize:9, fontFamily:'JetBrains Mono', padding:'1px 6px', borderRadius:3 }}>
+            <option>Dark Navis</option><option>Blueprint</option>
+          </select>
+          <button style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b', background:'transparent', border:'1px solid #2d3340', borderRadius:3, padding:'2px 8px', cursor:'pointer' }}>☀</button>
+        </div>
+      </div>
+
+      {/* Top mini-toolbar: just file ops + heatmap */}
+      <div style={{ ...S.toolbar, padding:'4px 8px', display:'flex', alignItems:'center', gap:6 }}>
+        <button style={{ display:'flex', alignItems:'center', gap:4, height:24, padding:'0 10px', background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'DM Sans', fontSize:9, cursor:'pointer' }}>
+          <Ico name="open" size={11}/> Open PCF/DXF
+        </button>
+        <button style={{ display:'flex', alignItems:'center', gap:4, height:24, padding:'0 10px', background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'DM Sans', fontSize:9, cursor:'pointer' }}>
+          <Ico name="open" size={11}/> Open GLB
+        </button>
+        <div style={S.sep}/>
+        <button style={{ display:'flex', alignItems:'center', gap:4, height:24, padding:'0 10px', background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'DM Sans', fontSize:9, cursor:'pointer' }}>
+          <Ico name="export" size={11}/> Export ▾
+        </button>
+        <div style={S.sep}/>
+        <span style={{ fontFamily:'DM Sans', fontSize:9, color:'#64748b' }}>Heatmap:</span>
+        <select style={{ background:'#1c2130', border:'1px solid #2d3340', color:'#94a3b8', fontSize:9, fontFamily:'DM Sans', padding:'2px 6px', borderRadius:3 }}>
+          <option>None</option><option>By OD</option><option>By Material</option><option>By Temp</option>
+        </select>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:4 }}>
+          <div style={{ width:6, height:6, borderRadius:'50%', background:'#059669' }}/>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b' }}>Ready</span>
+        </div>
+      </div>
+
+      {/* Main row */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+
+        {/* ── Left vertical tool palette ── */}
+        <div style={{ width:52, background:'#111318', borderRight:'1px solid #2d3340', display:'flex', flexDirection:'column', alignItems:'center', paddingTop:6, gap:0, overflowY:'auto', flexShrink:0 }}>
+          {sections.map((sec, si) => (
+            <React.Fragment key={sec.label}>
+              {si > 0 && <div style={{ width:32, height:1, background:'#1e2435', margin:'4px 0' }}/>}
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:7, color: toolColors[sec.label] || '#475569', letterSpacing:'0.08em', marginBottom:3, writingMode:'horizontal-tb', opacity:0.6 }}>{sec.label}</div>
+              {sec.tools.map(t => {
+                const color = toolColors[sec.label] || '#64748b';
+                const active = activeTool === t.id;
+                return (
+                  <button key={t.id} onClick={() => setActiveTool(t.id)} title={`${t.label} [${t.key}]`} style={{
+                    width:38, height:38, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2,
+                    background: active ? `${color}22` : 'transparent',
+                    border: `1px solid ${active ? color : 'transparent'}`,
+                    borderRadius:4, cursor:'pointer', marginBottom:2, flexShrink:0,
+                  }}>
+                    <Ico name={t.icon} size={15} color={active ? color : '#64748b'}/>
+                    <span style={{ fontFamily:'JetBrains Mono', fontSize:6, color: active ? color : '#3d4860' }}>{t.label}</span>
+                  </button>
+                );
+              })}
+            </React.Fragment>
+          ))}
+          {/* Bottom: snap + layers */}
+          <div style={{ marginTop:'auto', display:'flex', flexDirection:'column', alignItems:'center', gap:3, padding:'6px 0', borderTop:'1px solid #1e2435', width:'100%' }}>
+            {[['snap','#64748b'],['layers','#64748b'],['lock','#64748b']].map(([name, color]) => (
+              <button key={name} style={{ width:38, height:34, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2, background:'transparent', border:'1px solid transparent', borderRadius:4, cursor:'pointer' }}>
+                <Ico name={name} size={13} color={color}/>
+                <span style={{ fontFamily:'JetBrains Mono', fontSize:6, color:'#3d4860' }}>{name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Canvas ── */}
+        <div style={{ ...S.canvas, flex:1, position:'relative' }}>
+          <GridDots/>
+          <PipeGeometry style={{ opacity:0.9 }}/>
+
+          {/* Floating HUD card — anchored to active tool, not center screen */}
+          <div style={{ position:'absolute', left:12, top:12, width:220, background:'rgba(20,24,36,0.97)', border:'1px solid #2563eb55', borderRadius:6, boxShadow:'0 4px 24px rgba(0,0,0,0.6)', overflow:'hidden' }}>
+            <div style={{ background:'#2563eb18', borderBottom:'1px solid #2563eb33', padding:'5px 10px', display:'flex', alignItems:'center', gap:6 }}>
+              <div style={{ width:5, height:5, borderRadius:'50%', background:'#2563eb' }}/>
+              <span style={{ fontFamily:'JetBrains Mono', fontSize:9, fontWeight:600, color:'#60a5fa' }}>LINE DRAW</span>
+              <button style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:11 }}>×</button>
+            </div>
+            {/* Axis */}
+            <div style={{ padding:'6px 10px', borderBottom:'1px solid #1a1f2e' }}>
+              <div style={{ display:'flex', gap:3, marginBottom:4 }}>
+                <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', alignSelf:'center', width:32 }}>Axis</span>
+                {['X','Y','Z'].map(a => (
+                  <button key={a} style={{ flex:1, height:22, background: a==='X' ? '#2563eb33':'#1c2130', border:`1px solid ${a==='X' ? '#2563eb':'#2d3340'}`, borderRadius:3, color: a==='X' ? '#60a5fa':'#64748b', fontFamily:'JetBrains Mono', fontSize:10, fontWeight:700, cursor:'pointer' }}>{a}</button>
+                ))}
+                {['+','-'].map(s => (
+                  <button key={s} style={{ width:22, height:22, background:'#1c2130', border:'1px solid #2d3340', borderRadius:3, color:'#64748b', fontFamily:'JetBrains Mono', fontSize:11, cursor:'pointer' }}>{s}</button>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:3 }}>
+                <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', alignSelf:'center', width:32 }}>Len</span>
+                <div style={{ flex:1, height:22, background:'#0d1117', border:'1px solid #2563eb55', borderRadius:3, display:'flex', alignItems:'center', padding:'0 8px' }}>
+                  <span style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'#e8eaf0' }}>3000</span>
+                  <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginLeft:4 }}>mm</span>
+                </div>
+              </div>
+            </div>
+            {/* Info */}
+            <div style={{ padding:'5px 10px', fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b', lineHeight:1.7 }}>
+              <div>Anchor <span style={{ color:'#94a3b8' }}>5000, 0, 0</span></div>
+              <div>Preview <span style={{ color:'#60a5fa' }}>8000, 0, 0</span></div>
+            </div>
+            {/* Actions */}
+            <div style={{ padding:'6px 8px', display:'flex', gap:3 }}>
+              <button style={{ flex:1, height:24, background:'#2563eb', border:'none', borderRadius:3, color:'#fff', fontFamily:'JetBrains Mono', fontSize:9, fontWeight:600, cursor:'pointer' }}>↵ Commit</button>
+              <button style={{ width:52, height:24, background:'#1c2130', border:'1px solid #2d3340', borderRadius:3, color:'#94a3b8', fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer' }}>Esc</button>
+            </div>
+          </div>
+
+          {/* View cube — top right */}
+          <div style={{ position:'absolute', top:10, right:10, background:'rgba(20,23,32,0.92)', border:'1px solid #2d3340', borderRadius:4, padding:5 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:2 }}>
+              {['NE','NW','SE','SW','T ','F '].map((v,i) => (
+                <button key={v} style={{ width:i<4?26:54, height:20, background:'#252a3a', border:'1px solid #3a4255', borderRadius:2, color:'#64748b', fontSize:8, fontFamily:'JetBrains Mono', cursor:'pointer', gridColumn: i>=4?'1/3':undefined }}>{v.trim()}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Command hint at bottom */}
+          <div style={{ position:'absolute', bottom:30, left:'50%', transform:'translateX(-50%)', background:'rgba(15,18,28,0.92)', border:'1px solid #2d3340', borderRadius:4, padding:'4px 14px', fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b', whiteSpace:'nowrap' }}>
+            <span style={{ color:'#d97706' }}>LINE</span> — click to set anchor · Enter commit · Esc cancel
+          </div>
+
+          {/* Annotations */}
+          <Note x={240} y={8} text="HUD is a small floating card — not a screen-wide panel" dir="right"/>
+          <Note x={240} y={26} text="Draggable: user can move it out of the way" dir="right"/>
+        </div>
+      </div>
+
+      {/* ── AutoCAD-style command line at bottom ── */}
+      <div style={{ background:'#0d1117', borderTop:'1px solid #2d3340', padding:'3px 10px', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+        <Ico name="term" size={10} color="#d97706"/>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#d97706', fontWeight:600 }}>MACRO:</span>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b', flex:1 }}>
+          <span style={{ color:'#34d399' }}>✓ PIPE created — 5000mm</span>
+          <span style={{ color:'#475569' }}> | </span>
+          <span style={{ color:'#60a5fa' }}>Ctrl+` to open terminal</span>
+        </span>
+        <button style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#64748b', background:'transparent', border:'1px solid #2d3340', borderRadius:2, padding:'2px 8px', cursor:'pointer' }}>⌨ Terminal</button>
+      </div>
+      <div style={S.statusbar}>
+        <div style={{ width:5, height:5, borderRadius:'50%', background:'#2563eb' }}/>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b' }}>LINE active — Snap: 250mm grid</span>
+        <div style={{ marginLeft:'auto', fontFamily:'JetBrains Mono', fontSize:9, color:'#475569' }}>GLB-PCF-Editor v1A</div>
+      </div>
+
+      {/* Panel annotations */}
+      <div style={{ position:'absolute', left:58, bottom:60, zIndex:10, pointerEvents:'none' }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#7c3aed', background:'rgba(9,11,17,0.88)', padding:'2px 7px', borderRadius:3, lineHeight:1.5 }}>
+          ← Vertical palette: all tools visible, no overflow. Key shortcuts shown on hover.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   WIREFRAME C — AutoCAD Command Line Hybrid
+   (Context toolbar changes with mode; unified bottom bar)
+   ══════════════════════════════════════════════════════════ */
+function WireframeC() {
+  const [activeTool, setActiveTool] = React.useState('line');
+  const [cmdHistory] = React.useState([
+    { text: '> PIPE 0,0,0 5000,0,0 OD=168.3', color:'#64748b' },
+    { text: '✓ Created segment L01-SEG-001 — 5000mm', color:'#34d399' },
+    { text: '> VALVE 1500,0,0 TYPE=GATE PN16', color:'#64748b' },
+    { text: '✓ Inserted GATE VALVE — PN16 · 168.3 OD', color:'#34d399' },
+  ]);
+
+  const toolBand = {
+    line:    ['axis-x','axis-y','axis-z','sign-pos','sign-neg','|','rise','drop','|','commit'],
+    poly:    ['add-pt','close','|','commit'],
+    valve:   ['subtype','size','rating','facing','|','commit'],
+    flange:  ['subtype','size','rating','facing','|','commit'],
+    move:    ['base','target','|','commit'],
+    rotate:  ['pivot','angle','|','commit'],
+    cut:     ['segment','at','|','commit'],
+    del:     ['confirm','|','commit'],
+  };
+
+  const contextBtns = {
+    'axis-x': { label:'X', active:true },
+    'axis-y': { label:'Y' },
+    'axis-z': { label:'Z' },
+    'sign-pos': { label:'+' },
+    'sign-neg': { label:'−' },
+    '|': null,
+    'rise': { label:'↑ Rise' },
+    'drop': { label:'↓ Drop' },
+    'commit': { label:'↵ Commit', primary:true },
+    'subtype': { label:'Gate ▾' },
+    'size': { label:'168.3 OD' },
+    'rating': { label:'PN16' },
+    'facing': { label:'FW' },
+    'add-pt': { label:'+ Add Pt' },
+    'close': { label:'⬚ Close' },
+    'base': { label:'Base Pt' },
+    'target': { label:'Target Pt' },
+    'pivot': { label:'Pivot' },
+    'angle': { label:'90°' },
+    'segment': { label:'Segment' },
+    'at': { label:'At midpt' },
+    'confirm': { label:'Confirm ✗', danger:true },
+  };
+
+  const currentBand = toolBand[activeTool] || [];
+
+  return (
+    <div style={S.app}>
+      {/* Title + main tabs */}
+      <div style={S.titlebar}>
+        <div style={{ width:18, height:18, background:'#d97706', borderRadius:3, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:9, fontWeight:700, color:'#0d0f12' }}>PE</span>
+        </div>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:11, fontWeight:600, color:'#e8eaf0' }}>GLB-PCF EDITOR</span>
+        <div style={{ marginLeft:16, display:'flex', gap:1 }}>
+          {['2.5D Viewer','Debug'].map((t,i) => (
+            <button key={t} style={{ fontSize:9, fontFamily:'DM Sans', fontWeight:600, color: i===0 ? '#d97706':'#64748b', background:'transparent', border:'none', borderBottom: i===0 ? '2px solid #d97706':'2px solid transparent', padding:'0 12px', height:28, cursor:'pointer' }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center' }}>
+          <button style={{ fontFamily:'DM Sans', fontSize:9, color:'#64748b', background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, padding:'2px 8px', cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+            <Ico name="open" size={10}/> Open PCF/GLB
+          </button>
+          <button style={{ fontFamily:'DM Sans', fontSize:9, color:'#64748b', background:'#252a3a', border:'1px solid #2d3340', borderRadius:3, padding:'2px 8px', cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+            <Ico name="export" size={10}/> Export ▾
+          </button>
+        </div>
+      </div>
+
+      {/* Static tool row 1: mode selector */}
+      <div style={{ ...S.toolbar, padding:'4px 10px', display:'flex', alignItems:'center', gap:4 }}>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', width:40, flexShrink:0 }}>MODE</span>
+        {[
+          { id:'line', icon:'line', label:'Line', key:'L', grp:'DRAW', color:'#2563eb' },
+          { id:'poly', icon:'poly', label:'Poly', key:'P', grp:'DRAW', color:'#2563eb' },
+          { id:'spline', icon:'spline', label:'Spline', key:'S', grp:'DRAW', color:'#2563eb' },
+        ].concat([{ id:'|' }]).concat([
+          { id:'valve', icon:'valve', label:'Valve', key:'V', grp:'INSERT', color:'#7c3aed' },
+          { id:'flange', icon:'flange', label:'Flange', key:'F', grp:'INSERT', color:'#7c3aed' },
+          { id:'tee', icon:'tee', label:'Tee', key:'T', grp:'INSERT', color:'#7c3aed' },
+          { id:'elbow', icon:'elbow', label:'Elbow', key:'E', grp:'INSERT', color:'#7c3aed' },
+          { id:'support', icon:'support', label:'Support', key:'U', grp:'INSERT', color:'#7c3aed' },
+        ]).concat([{ id:'|' }]).concat([
+          { id:'move', icon:'move', label:'Move', key:'M', grp:'MODIFY', color:'#d97706' },
+          { id:'stretch', icon:'stretch', label:'Stretch', key:'H', grp:'MODIFY', color:'#d97706' },
+          { id:'rotate', icon:'rotate', label:'Rotate', key:'R', grp:'MODIFY', color:'#d97706' },
+          { id:'cut', icon:'cut', label:'Break', key:'B', grp:'MODIFY', color:'#d97706' },
+          { id:'del', icon:'del', label:'Delete', key:'Del', grp:'MODIFY', color:'#d97706' },
+        ]).concat([{ id:'|' }]).concat([
+          { id:'fit', icon:'fit', label:'Fit', key:'F5', grp:'VIEW', color:'#059669' },
+          { id:'snap', icon:'snap', label:'Snap', key:'G', grp:'VIEW', color:'#059669' },
+          { id:'heatmap', icon:'heatmap', label:'Heat', key:'', grp:'ANALYSE', color:'#dc2626' },
+          { id:'layers', icon:'layers', label:'Layers', key:'', grp:'ANALYSE', color:'#dc2626' },
+        ]).map((t, i) => {
+          if (t.id === '|') return <div key={i} style={S.sep}/>;
+          const active = activeTool === t.id;
+          const color = t.color || '#64748b';
+          return (
+            <button key={t.id} onClick={() => setActiveTool(t.id)} title={`${t.label} [${t.key}]`} style={{
+              display:'flex', alignItems:'center', gap:3, height:26, padding:'0 8px',
+              background: active ? `${color}22` : 'transparent',
+              border: `1px solid ${active ? color : 'transparent'}`,
+              borderRadius:3, cursor:'pointer',
+            }}>
+              <Ico name={t.icon} size={12} color={active ? color : '#64748b'}/>
+              <span style={{ fontFamily:'DM Sans', fontSize:9, color: active ? color : '#64748b', fontWeight: active ? 600 : 400 }}>{t.label}</span>
+            </button>
+          );
+        })}
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+          <select style={{ background:'#1c2130', border:'1px solid #2d3340', color:'#94a3b8', fontSize:8, fontFamily:'DM Sans', padding:'2px 6px', borderRadius:3 }}>
+            <option>Dark Navis</option><option>Blueprint</option>
+          </select>
+          <Badge text="Labels ON" color="#059669"/>
+        </div>
+      </div>
+
+      {/* Context toolbar row 2 — changes with active tool */}
+      <div style={{ background:'#111318', borderBottom:'1px solid #2d3340', padding:'3px 10px', display:'flex', alignItems:'center', gap:4, flexShrink:0, minHeight:32 }}>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#d97706', width:56, flexShrink:0 }}>{activeTool.toUpperCase()}</span>
+        {currentBand.map((key, i) => {
+          if (key === '|') return <div key={i} style={S.sep}/>;
+          const btn = contextBtns[key];
+          if (!btn) return null;
+          return (
+            <button key={key} style={{
+              height:24, padding:'0 8px',
+              background: btn.primary ? '#2563eb' : btn.active ? 'rgba(255,255,255,0.08)' : 'transparent',
+              border: `1px solid ${btn.primary ? '#2563eb' : btn.active ? '#475569' : '#2d3340'}`,
+              borderRadius:3, color: btn.primary ? '#fff' : btn.danger ? '#dc2626' : '#94a3b8',
+              fontFamily:'JetBrains Mono', fontSize:9, cursor:'pointer', flexShrink:0,
+              fontWeight: btn.primary ? 600 : 400,
+            }}>
+              {btn.label}
+            </button>
+          );
+        })}
+        <span style={{ marginLeft:'auto', fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', fontStyle:'italic' }}>
+          Context bar updates with tool selection
+        </span>
+      </div>
+
+      {/* Main area */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+        {/* Canvas */}
+        <div style={{ ...S.canvas, flex:1, position:'relative' }}>
+          <GridDots/>
+          <PipeGeometry style={{ opacity:0.9 }}/>
+
+          {/* View cube */}
+          <div style={{ position:'absolute', top:8, right:8, background:'rgba(20,23,32,0.92)', border:'1px solid #2d3340', borderRadius:4, padding:4 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:2, marginBottom:2 }}>
+              {['NE','NW','SE','SW'].map(v => (
+                <button key={v} style={{ width:24, height:18, background:'#252a3a', border:'1px solid #3a4255', borderRadius:2, color:'#64748b', fontSize:7, fontFamily:'JetBrains Mono', cursor:'pointer' }}>{v}</button>
+              ))}
+            </div>
+            <button style={{ width:'100%', height:18, background:'#252a3a', border:'1px solid #3a4255', borderRadius:2, color:'#64748b', fontSize:7, fontFamily:'JetBrains Mono', cursor:'pointer' }}>Plan · Front · ⊞Fit</button>
+          </div>
+
+          {/* Snap/grid status floating */}
+          <div style={{ position:'absolute', top:8, left:8, background:'rgba(20,23,32,0.85)', border:'1px solid #2d3340', borderRadius:3, padding:'3px 8px', display:'flex', gap:8, alignItems:'center' }}>
+            <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569' }}>SNAP <span style={{ color:'#34d399' }}>250mm</span></span>
+            <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569' }}>OD <span style={{ color:'#94a3b8' }}>168.3</span></span>
+            <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569' }}>PN <span style={{ color:'#94a3b8' }}>16</span></span>
+          </div>
+
+          {/* Annotations */}
+          <Note x={10} y={150} text="Canvas fully unobstructed — no panels over geometry" dir="right"/>
+          <Note x={10} y={168} text="All controls live in fixed toolbar rows above" dir="right"/>
+        </div>
+
+        {/* Right: compact component inspector */}
+        <div style={{ width:220, background:'#111318', borderLeft:'1px solid #2d3340', display:'flex', flexDirection:'column', flexShrink:0 }}>
+          <div style={{ background:'#1c2130', borderBottom:'1px solid #2d3340', padding:'5px 8px', display:'flex', alignItems:'center', gap:5 }}>
+            <span style={{ fontFamily:'JetBrains Mono', fontSize:9, color:'#64748b', letterSpacing:'0.06em' }}>INSPECTOR</span>
+            <span style={{ marginLeft:'auto', fontFamily:'JetBrains Mono', fontSize:8, color:'#d97706' }}>VALVE</span>
+          </div>
+          <div style={{ padding:'8px', flex:1, fontFamily:'JetBrains Mono', fontSize:9, lineHeight:2, color:'#64748b' }}>
+            {[['Type','Gate Valve'],['Size','168.3 OD'],['Rating','PN16'],['Facing','Full-weld'],['Material','CS'],['Pipeline','L01-P-001'],['Route','R-001'],['Pos','1500,0,0']].map(([k,v]) => (
+              <div key={k} style={{ display:'flex', gap:4 }}>
+                <span style={{ color:'#3d4860', width:70 }}>{k}</span>
+                <span style={{ color:'#94a3b8' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ borderTop:'1px solid #1e2435', padding:'6px 8px' }}>
+            <div style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', marginBottom:4 }}>HEATMAP</div>
+            <select style={{ width:'100%', background:'#0d1117', border:'1px solid #2d3340', color:'#94a3b8', fontSize:9, fontFamily:'DM Sans', padding:'3px 6px', borderRadius:3 }}>
+              <option>No heatmap</option><option>By OD / Bore</option><option>By Material</option><option>By Temp</option><option>By Pressure</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Unified bottom command line (AutoCAD style) ── */}
+      <div style={{ background:'#0d0f14', borderTop:'2px solid #1a1f2e', flexShrink:0 }}>
+        {/* Command output */}
+        <div style={{ height:52, padding:'4px 10px', overflow:'hidden', display:'flex', flexDirection:'column-reverse', gap:1 }}>
+          {[...cmdHistory].reverse().map((line, i) => (
+            <div key={i} style={{ fontFamily:'JetBrains Mono', fontSize:9, color: line.color, lineHeight:1.5 }}>{line.text}</div>
+          ))}
+        </div>
+        {/* Input row */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderTop:'1px solid #1a1f2e' }}>
+          <Ico name="term" size={10} color="#d97706"/>
+          <span style={{ color:'#d97706', fontFamily:'JetBrains Mono', fontSize:11, fontWeight:700 }}>›</span>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:10, color:'#e8eaf0', flex:1 }}>PIPE 0,0,0 <span style={{ color:'#60a5fa', borderRight:'1px solid #60a5fa' }}> </span></span>
+          <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569' }}>F1 help · ↑↓ history · Ctrl+Z undo</span>
+          <button style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#475569', background:'transparent', border:'1px solid #2d3340', borderRadius:2, padding:'2px 8px', cursor:'pointer' }}>⌘ Run</button>
+        </div>
+      </div>
+      <div style={{ ...S.statusbar, height:20 }}>
+        <div style={{ width:5, height:5, borderRadius:'50%', background:'#2563eb' }}/>
+        <span style={{ fontFamily:'JetBrains Mono', fontSize:8, color:'#64748b' }}>LINE — Enter length or click anchor · Esc cancel</span>
+        <div style={{ marginLeft:'auto', fontFamily:'JetBrains Mono', fontSize:8, color:'#475569' }}>GLB-PCF-Editor v1A</div>
+      </div>
+
+      {/* Annotation */}
+      <div style={{ position:'absolute', left:'25%', top:96, zIndex:20, pointerEvents:'none' }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#d97706', background:'rgba(9,11,17,0.9)', padding:'2px 7px', borderRadius:3 }}>
+          ↑ Row 1: all tools (flat, no groups — compact). Row 2: context options only for active tool.
+        </div>
+      </div>
+      <div style={{ position:'absolute', left:'25%', bottom:100, zIndex:20, pointerEvents:'none' }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:12, color:'#34d399', background:'rgba(9,11,17,0.9)', padding:'2px 7px', borderRadius:3 }}>
+          ↓ AutoCAD-style command line: macro + HUD merged. Always visible, minimal footprint (70px).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ICON AUDIT PANEL — show current vs proposed icons
+   ══════════════════════════════════════════════════════════ */
+function IconAudit() {
+  const audit = [
+    { current:'✏', proposed:'line', label:'Line Draw', keep:'proposed', note:'Replace unicode pencil with clean stroke icon' },
+    { current:'⑃', proposed:'poly', label:'Polyline', keep:'proposed', note:'⑃ is obscure — use connected-nodes icon' },
+    { current:'~', proposed:'spline', label:'Spline', keep:'proposed', note:'Tilde is not meaningful — use curve glyph' },
+    { current:'⛭', proposed:'valve', label:'Valve', keep:'proposed', note:'⛭ looks like settings gear — misleading' },
+    { current:'◍', proposed:'flange', label:'Flange', keep:'proposed', note:'◍ circle unrecognisable — pipe flange outline' },
+    { current:'⊢', proposed:'tee', label:'Tee Fit.', keep:'proposed', note:'⊢ looks like logic — use T-pipe glyph' },
+    { current:'⌂', proposed:'support', label:'Support', keep:'proposed', note:'House icon misleads — pipe hanger glyph' },
+    { current:'⬌', proposed:'move', label:'Move', keep:'proposed', note:'Double arrow fine — explicit 4-way move better' },
+    { current:'↔', proposed:'stretch', label:'Stretch', keep:'current', note:'OK — but use paired with label' },
+    { current:'↺', proposed:'rotate', label:'Rotate', keep:'proposed', note:'Rotate arrow better as arc+arrow SVG' },
+    { current:'✂', proposed:'cut', label:'Break', keep:'proposed', note:'Scissors ≠ break segment — use split glyph' },
+    { current:'✗', proposed:'del', label:'Delete', keep:'proposed', note:'✗ is fine but inconsistent weight — use X SVG' },
+    { current:'↱', proposed:'elbow', label:'Elbow', keep:'proposed', note:'Corner arrow OK but better as arc icon' },
+    { current:'⊣', proposed:'tee', label:'Conv.Tee', keep:'proposed', note:'DUPLICATE of ⊢ above — consolidate!' },
+    { current:'↱', proposed:'elbow', label:'Conv.Bend', keep:'proposed', note:'DUPLICATE of ↱ above — consolidate!' },
+  ];
+
+  const dupes = ['Conv.Tee', 'Conv.Bend'];
+
+  return (
+    <div style={{ background:'#111318', width:'100%', height:'100%', overflow:'auto', padding:16, fontFamily:'DM Sans, sans-serif' }}>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:20, color:'#d97706', fontWeight:700, marginBottom:4 }}>Icon Audit — Current vs Proposed</div>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:13, color:'#64748b' }}>
+          2 duplicates found · 13 of 15 icons should be replaced · Propose: lucide-react SVG icons (already imported!) with consistent 14px stroke-2
+        </div>
+      </div>
+
+      {/* Summary badges */}
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+        <div style={{ background:'#dc262622', border:'1px solid #dc2626', borderRadius:4, padding:'4px 12px', fontFamily:'JetBrains Mono', fontSize:11, color:'#dc2626' }}>2 Duplicates — remove</div>
+        <div style={{ background:'#d9770622', border:'1px solid #d97706', borderRadius:4, padding:'4px 12px', fontFamily:'JetBrains Mono', fontSize:11, color:'#d97706' }}>11 Replace with SVG</div>
+        <div style={{ background:'#05966922', border:'1px solid #059669', borderRadius:4, padding:'4px 12px', fontFamily:'JetBrains Mono', fontSize:11, color:'#059669' }}>2 Keep (minor update)</div>
+        <div style={{ background:'#2563eb22', border:'1px solid #2563eb', borderRadius:4, padding:'4px 12px', fontFamily:'JetBrains Mono', fontSize:11, color:'#60a5fa' }}>Lucide-react already in codebase — use it</div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:8 }}>
+        {audit.map((item, i) => {
+          const isDupe = dupes.includes(item.label);
+          return (
+            <div key={i} style={{ background:'#1c2130', border:`1px solid ${isDupe ? '#dc2626' : '#2d3340'}`, borderRadius:5, padding:'10px 12px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+                {/* Current */}
+                <div style={{ width:36, height:36, background:'#111318', border:'1px solid #2d3340', borderRadius:4, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>
+                  {item.current}
+                </div>
+                <div style={{ color:'#475569', fontSize:18, fontWeight:300 }}>→</div>
+                {/* Proposed */}
+                <div style={{ width:36, height:36, background: item.keep==='proposed' ? '#2563eb15':'#05966915', border:`1px solid ${item.keep==='proposed' ? '#2563eb55':'#05966955'}`, borderRadius:4, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <Ico name={item.proposed} size={16} color={item.keep==='proposed' ? '#60a5fa':'#34d399'}/>
+                </div>
+                {isDupe && <div style={{ background:'#dc262622', border:'1px solid #dc2626', borderRadius:3, padding:'1px 5px', fontFamily:'JetBrains Mono', fontSize:9, color:'#dc2626' }}>DUPE</div>}
+              </div>
+              <div style={{ fontFamily:'DM Sans', fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:2 }}>{item.label}</div>
+              <div style={{ fontFamily:'DM Sans', fontSize:10, color:'#475569', lineHeight:1.4 }}>{item.note}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Color contrast note */}
+      <div style={{ marginTop:20, background:'#1c2130', border:'1px solid #2d3340', borderRadius:5, padding:14 }}>
+        <div style={{ fontFamily:'Caveat,cursive', fontSize:16, color:'#d97706', fontWeight:700, marginBottom:8 }}>Color Contrast Recommendations</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+          {[
+            { label:'Active tool state', current:'amber on #252a3a', score:'3.4:1 ⚠ borderline', fix:'amber on #111318 → 4.8:1 ✓', color:'#d97706' },
+            { label:'Secondary text', current:'#94a3b8 on #1c2030', score:'3.9:1 ✓ ok', fix:'Use #b0bec5 on darker bg → 5.2:1 ✓', color:'#059669' },
+            { label:'Toolbar buttons', current:'#64748b on #1c2030', score:'2.8:1 ✗ fail', fix:'#94a3b8 on #1c2030 → 3.9:1 ✓', color:'#dc2626' },
+            { label:'Inactive icons', current:'unicode on #1c2030', score:'varies — inconsistent', fix:'Unified #7a8a9e SVG stroke-2 icons', color:'#d97706' },
+            { label:'HUD overlay', current:'floating white over canvas', score:'Blocks geometry — bad UX', fix:'Dock to panel or constrain to corner', color:'#dc2626' },
+            { label:'Macro terminal', current:'full-width 200px black bar', score:'Blocks 30% of canvas', fix:'Collapse to 70px or slide-in tray', color:'#dc2626' },
+          ].map(item => (
+            <div key={item.label} style={{ background:'#111318', borderRadius:4, padding:10, borderLeft:`3px solid ${item.color}` }}>
+              <div style={{ fontFamily:'JetBrains Mono', fontSize:9, color: item.color, fontWeight:600, marginBottom:4 }}>{item.label}</div>
+              <div style={{ fontFamily:'DM Sans', fontSize:10, color:'#64748b', marginBottom:3 }}>Now: {item.current}</div>
+              <div style={{ fontFamily:'DM Sans', fontSize:10, color:'#475569', marginBottom:3 }}>Score: {item.score}</div>
+              <div style={{ fontFamily:'DM Sans', fontSize:10, color:'#94a3b8', fontWeight:500 }}>Fix: {item.fix}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ROOT — Design Canvas with 4 artboards
+   ══════════════════════════════════════════════════════════ */
+function App() {
+  return (
+    <DCCanvas
+      title="GLB-PCF 2.5D Editor — UI Wireframes"
+      subtitle="HUD revamp · icon audit · Macro consolidation · AutoCAD-inspired layout"
+      background="#1a1d24"
+    >
+      <DCSection id="wf" title="Layout Explorations">
+        <DCArtboard id="wf-a" label="Option A — Ribbon + Docked HUD" width={820} height={560}>
+          <WireframeA/>
+        </DCArtboard>
+        <DCArtboard id="wf-b" label="Option B — Vertical Palette + Floating Card" width={760} height={560}>
+          <WireframeB/>
+        </DCArtboard>
+        <DCArtboard id="wf-c" label="Option C — Flat Toolbar + AutoCAD Command Line" width={820} height={560}>
+          <WireframeC/>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="audit" title="Icon & Contrast Audit">
+        <DCArtboard id="audit-icons" label="Icon Audit — Replace Unicode with SVG" width={900} height={640}>
+          <IconAudit/>
+        </DCArtboard>
+      </DCSection>
+    </DCCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

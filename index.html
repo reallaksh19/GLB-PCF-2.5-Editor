@@ -1,0 +1,737 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLB-PCF-Editor</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231e293b'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-size='16' font-family='monospace' fill='%23f59e0b'>PE</text></svg>">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":               "https://esm.sh/three@0.160.0",
+      "three/addons/":       "https://esm.sh/three@0.160.0/examples/jsm/",
+      "react":               "https://esm.sh/react@19.2.4",
+      "react-dom/client":    "https://esm.sh/react-dom@19.2.4/client",
+      "react-dom":           "https://esm.sh/react-dom@19.2.4",
+      "konva":               "https://esm.sh/konva@9.3.20",
+      "react-konva":         "https://esm.sh/react-konva@19.0.3?deps=react@19.2.4",
+      "lucide-react":        "https://esm.sh/lucide-react@0.468.0?deps=react@19.2.4",
+      "uuid":                "https://esm.sh/uuid@11.1.0",
+      "immer":               "https://esm.sh/immer@10.1.1",
+      "zustand":             "https://esm.sh/zustand@5.0.11",
+      "zustand/vanilla":     "https://esm.sh/zustand@5.0.11/vanilla",
+      "zustand/middleware":  "https://esm.sh/zustand@5.0.11/middleware",
+      "dxf-parser":          "https://esm.sh/dxf-parser@1.1.2"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="css/app.css">
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-0, #0d0f12);
+      color: var(--text-primary, #e8eaf0);
+      font-family: var(--font-ui, 'DM Sans', sans-serif);
+    }
+
+    #hifi-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      background: var(--bg-0, #0d0f12);
+    }
+
+    #hifi-topbar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      flex-shrink: 0;
+    }
+
+    .hifi-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: 10px;
+      user-select: none;
+    }
+
+    .hifi-brand-mark {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: var(--amber, #f59e0b);
+      color: #101620;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .hifi-brand-text {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .hifi-nav-tab {
+      height: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-muted, #64748b);
+      padding: 0 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hifi-nav-tab.active {
+      color: var(--amber, #f59e0b);
+      border-bottom-color: var(--amber, #f59e0b);
+    }
+
+    .hifi-nav-tab:hover {
+      color: var(--text-primary, #e8eaf0);
+      background: var(--bg-2, #1c2030);
+    }
+
+    .hifi-nav-tab.disabled {
+      pointer-events: none;
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .hifi-topbar-spacer {
+      margin-left: auto;
+    }
+
+    .hifi-icon-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      border: 1px solid var(--steel, #3a4255);
+      background: var(--bg-3, #252a3a);
+      color: var(--text-secondary, #94a3b8);
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    #hifi-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+
+    .hifi-tab-panel {
+      display: none;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .hifi-tab-panel.active {
+      display: flex;
+    }
+
+    #hifi-panel-viewer {
+      flex-direction: column;
+      gap: 0;
+    }
+
+    #hifi-viewer-toolbar {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      flex-shrink: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    #hifi-viewer-toolbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hifi-tool-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 5px;
+      background: var(--bg-2, #1c2030);
+    }
+
+    .hifi-btn,
+    .hifi-select,
+    .hifi-toggle,
+    .hifi-tool-btn {
+      height: 24px;
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      background: var(--bg-3, #252a3a);
+      color: var(--text-secondary, #94a3b8);
+      font-size: 11px;
+      padding: 0 8px;
+      cursor: pointer;
+      font-family: var(--font-ui, 'DM Sans', sans-serif);
+    }
+
+    .hifi-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hifi-btn:hover,
+    .hifi-select:hover,
+    .hifi-toggle:hover,
+    .hifi-tool-btn:hover {
+      background: var(--bg-4, #2e3448);
+      color: var(--text-primary, #e8eaf0);
+    }
+
+    .hifi-btn.active,
+    .hifi-tool-btn.active,
+    .hifi-palette-btn.active {
+      background: rgba(245, 158, 11, 0.16);
+      color: var(--amber, #f59e0b);
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    #hifi-viewer-status {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-muted, #64748b);
+      min-width: 110px;
+      text-align: right;
+    }
+
+    #hifi-viewer-workspace {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      background: var(--bg-0, #0d0f12);
+    }
+
+    #hifi-left-palette {
+      width: 56px;
+      border-right: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 4px 8px;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: width 0.16s ease, padding 0.16s ease;
+    }
+
+    .hifi-rail-toggle {
+      width: 100%;
+      height: 18px;
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      background: var(--bg-2, #1c2030);
+      color: var(--text-muted, #64748b);
+      font-size: 10px;
+      line-height: 1;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .hifi-rail-content {
+      width: 100%;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #hifi-left-palette.collapsed {
+      width: 24px;
+      padding: 6px 2px;
+    }
+
+    #hifi-left-palette.collapsed .hifi-rail-content {
+      display: none;
+    }
+
+    .hifi-palette-label {
+      font-size: 9px;
+      color: var(--text-muted, #64748b);
+      letter-spacing: 0.06em;
+      margin: 6px 0 2px;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .hifi-palette-btn {
+      width: 40px;
+      height: 28px;
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      background: var(--bg-2, #1c2030);
+      color: var(--text-secondary, #94a3b8);
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    #hifi-viewer-stage {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      background: #eff1f3;
+      border-right: 1px solid var(--steel, #3a4255);
+    }
+
+    #hifi-viewer-canvas {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(to right, rgba(59,130,246,0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(59,130,246,0.08) 1px, transparent 1px),
+        #eceff3;
+      background-size: 40px 40px, 40px 40px, auto;
+    }
+
+    #hifi-viewer-canvas canvas,
+    #hifi-viewer-canvas > div {
+      position: absolute;
+      inset: 0;
+    }
+
+    #hifi-right-viewbar {
+      width: 60px;
+      border-right: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 4px 8px;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width 0.16s ease, padding 0.16s ease;
+    }
+
+    #hifi-right-viewbar .hifi-rail-content {
+      width: 100%;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #hifi-right-viewbar.collapsed {
+      width: 24px;
+      padding: 6px 2px;
+    }
+
+    #hifi-right-viewbar.collapsed .hifi-rail-content {
+      display: none;
+    }
+
+    #hifi-inspector-shell {
+      width: 300px;
+      border-left: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      flex-shrink: 0;
+      transition: width 0.16s ease;
+    }
+
+    #hifi-inspector-shell.collapsed {
+      width: 22px;
+    }
+
+    #hifi-inspector-toggle {
+      width: 20px;
+      border: none;
+      border-right: 1px solid var(--steel, #3a4255);
+      background: var(--bg-2, #1c2030);
+      color: var(--text-muted, #64748b);
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    #hifi-inspector-shell.collapsed #hifi-inspector-toggle {
+      border-right: none;
+    }
+
+    #hifi-inspector-shell.collapsed #hifi-viewer-inspector {
+      display: none;
+    }
+
+    .hifi-viewbar-label {
+      font-size: 9px;
+      color: var(--text-muted, #64748b);
+      letter-spacing: 0.05em;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+      margin-bottom: 2px;
+    }
+
+    .hifi-view-btn {
+      width: 42px;
+      height: 24px;
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      background: var(--bg-2, #1c2030);
+      color: var(--text-secondary, #94a3b8);
+      font-size: 10px;
+      cursor: pointer;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .hifi-view-btn:hover {
+      background: var(--bg-4, #2e3448);
+      color: var(--text-primary, #e8eaf0);
+    }
+
+    #hifi-viewer-inspector {
+      width: 280px;
+      background: var(--bg-1, #141720);
+      color: var(--text-secondary, #94a3b8);
+      padding: 10px;
+      font-size: 12px;
+      font-family: var(--font-code, monospace);
+      overflow: auto;
+      flex-shrink: 0;
+    }
+
+    #hifi-viewer-inspector.empty::after {
+      content: 'Select a component to inspect';
+      color: var(--text-muted, #64748b);
+      font-style: italic;
+    }
+
+    #hifi-macro-tray {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.18s ease;
+      background: var(--bg-1, #141720);
+      border-top: 1px solid var(--steel, #3a4255);
+      flex-shrink: 0;
+    }
+
+    #hifi-macro-tray.open {
+      max-height: 154px;
+    }
+
+    #hifi-panel-debug {
+      flex-direction: column;
+      background: var(--bg-0, #0d0f12);
+    }
+
+    #hifi-debug-toolbar {
+      height: 34px;
+      border-bottom: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      flex-shrink: 0;
+    }
+
+    #hifi-debug-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #hifi-debug-nav {
+      width: 160px;
+      border-right: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      flex-direction: column;
+      padding: 6px;
+      gap: 4px;
+    }
+
+    .hifi-debug-nav-btn {
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      background: var(--bg-2, #1c2030);
+      color: var(--text-secondary, #94a3b8);
+      font-size: 11px;
+      text-align: left;
+      padding: 6px 8px;
+      cursor: pointer;
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .hifi-debug-nav-btn.active,
+    .hifi-debug-nav-btn:hover {
+      color: var(--text-primary, #e8eaf0);
+      background: var(--bg-4, #2e3448);
+    }
+
+    #hifi-debug-content {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      font-size: 12px;
+      overflow: auto;
+      font-family: var(--font-code, monospace);
+    }
+
+    #hifi-panel-design {
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-0, #0d0f12);
+      color: var(--text-muted, #64748b);
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    #hifi-statusbar {
+      height: 24px;
+      border-top: 1px solid var(--steel, #3a4255);
+      background: var(--bg-1, #141720);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .hifi-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    .hifi-status-dot.idle { background: #64748b; }
+    .hifi-status-dot.active { background: #60a5fa; }
+    .hifi-status-dot.ok { background: #10b981; }
+    .hifi-status-dot.error { background: #ef4444; }
+
+    #hifi-status-text {
+      font-size: 11px;
+      color: var(--text-secondary, #94a3b8);
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    #hifi-status-info {
+      margin-left: auto;
+      font-size: 10px;
+      color: var(--text-muted, #64748b);
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+    }
+
+    .panel-section        { margin-bottom: 10px; }
+    .panel-section-title  { font-weight: 600; color: var(--amber, #f59e0b); margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+    .panel-table          { width: 100%; border-collapse: collapse; }
+    .panel-table td       { padding: 1px 0; vertical-align: top; }
+    .panel-label          { color: var(--text-muted, #64748b); width: 45%; padding-right: 6px; }
+    .panel-value          { color: var(--text-primary, #e8eaf0); word-break: break-all; }
+    .row-highlight td     { color: var(--amber, #f59e0b); }
+
+    .debug-search {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg-2, #1c2030);
+      border: 1px solid var(--steel, #3a4255);
+      border-radius: 4px;
+      padding: 5px 8px;
+      color: var(--text-primary, #e8eaf0);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .log-ERROR { color: var(--red-err, #ef4444); }
+    .log-WARN  { color: var(--yellow-warn, #fbbf24); }
+    .log-INFO  { color: var(--blue-info, #60a5fa); }
+    .val-error { color: var(--red-err, #ef4444); }
+    .val-warn  { color: var(--yellow-warn, #fbbf24); }
+    .val-info  { color: var(--blue-info, #60a5fa); }
+  </style>
+</head>
+<body>
+  <div id="hifi-shell">
+    <header id="hifi-topbar">
+      <div class="hifi-brand">
+        <span class="hifi-brand-mark">PE</span>
+        <span class="hifi-brand-text">GLB-PCF-EDITOR</span>
+      </div>
+      <button class="hifi-nav-tab active" id="hifi-tab-viewer" role="tab">2.5D Viewer</button>
+      <button class="hifi-nav-tab" id="hifi-tab-debug" role="tab">Debug</button>
+      <button class="hifi-nav-tab" id="hifi-tab-design" role="tab">Design</button>
+      <div class="hifi-topbar-spacer"></div>
+      <button class="hifi-icon-btn" id="hifi-theme-toggle" title="Toggle light/dark">THEME</button>
+    </header>
+
+    <main id="hifi-main">
+      <section id="hifi-panel-viewer" class="hifi-tab-panel active" role="tabpanel">
+        <div id="hifi-viewer-toolbar">
+          <div class="hifi-tool-group">
+            <input type="file" id="hifi-input-pcf" accept=".pcf,.pcfx,.dxf" style="display:none">
+            <button class="hifi-btn" id="hifi-btn-open-pcf">Open PCF/DXF</button>
+            <input type="file" id="hifi-input-glb" accept=".glb,.gltf" style="display:none">
+            <button class="hifi-btn" id="hifi-btn-open-glb">Open GLB</button>
+          </div>
+
+          <div class="hifi-tool-group">
+            <button class="hifi-btn active" id="hifi-btn-mode-draft2d" title="2D Draft mode">2D</button>
+            <button class="hifi-btn" id="hifi-btn-toggle-stick" title="Line diagram stick mode">Stick</button>
+            <button class="hifi-btn" id="hifi-btn-mode-3d" title="3D mode">3D</button>
+          </div>
+
+          <div class="hifi-tool-group">
+            <label class="hifi-toggle"><input type="checkbox" id="hifi-toggle-labels" checked>Labels</label>
+            <select id="hifi-select-heatmap" class="hifi-select" title="Heatmap">
+              <option value="none">No heatmap</option>
+              <option value="OD">By OD / Bore</option>
+              <option value="material">By Material</option>
+              <option value="T1">By Temp (T1)</option>
+              <option value="P1">By Pressure (P1)</option>
+            </select>
+            <select id="hifi-select-theme" class="hifi-select" title="Theme">
+              <option value="NavisDark">Dark Theme</option>
+              <option value="DraftLight" selected>Draft Light</option>
+              <option value="DraftDark">Draft Dark</option>
+              <option value="Blueprint">Blueprint</option>
+              <option value="MonochromeTechnical">Monochrome</option>
+              <option value="HighContrastReview">High Contrast</option>
+            </select>
+          </div>
+
+          <div class="hifi-tool-group">
+            <button class="hifi-btn" id="hifi-btn-export-glb">Export GLB</button>
+            <button class="hifi-btn" id="hifi-btn-export-dxf">Export DXF</button>
+            <button class="hifi-btn" id="hifi-btn-masterdb">Master DB</button>
+          </div>
+
+          <button class="hifi-btn" id="hifi-btn-fit-main">Fit</button>
+          <button class="hifi-btn" id="hifi-btn-macro-toggle">Macro</button>
+          <span id="hifi-viewer-status">Ready</span>
+        </div>
+
+        <div id="hifi-viewer-workspace">
+          <aside id="hifi-left-palette">
+            <button class="hifi-rail-toggle" id="hifi-left-palette-toggle" title="Toggle left tools">&lsaquo;</button>
+            <div class="hifi-rail-content">
+              <div class="hifi-palette-label">Draw</div>
+              <button class="hifi-palette-btn" id="hifi-tool-line" data-hifi-tool="line" title="Line">L</button>
+              <button class="hifi-palette-btn" id="hifi-tool-polyline" data-hifi-tool="polyline" title="Polyline">PL</button>
+              <button class="hifi-palette-btn" id="hifi-tool-spline" data-hifi-tool="spline" title="Spline">SP</button>
+
+              <div class="hifi-palette-label">Insert</div>
+              <button class="hifi-palette-btn" id="hifi-tool-valve" data-hifi-tool="valve" title="Valve">V</button>
+              <button class="hifi-palette-btn" id="hifi-tool-flange" data-hifi-tool="flange" title="Flange">F</button>
+              <button class="hifi-palette-btn" id="hifi-tool-tee" data-hifi-tool="tee" title="Tee">T</button>
+              <button class="hifi-palette-btn" id="hifi-tool-support" data-hifi-tool="support" title="Support">S</button>
+
+              <div class="hifi-palette-label">Modify</div>
+              <button class="hifi-palette-btn" id="hifi-tool-move" data-hifi-tool="move" title="Move">M</button>
+              <button class="hifi-palette-btn" id="hifi-tool-stretch" data-hifi-tool="stretch" title="Stretch">ST</button>
+              <button class="hifi-palette-btn" id="hifi-tool-rotate" data-hifi-tool="rotate" title="Rotate">R</button>
+              <button class="hifi-palette-btn" id="hifi-tool-break" data-hifi-tool="break" title="Break">B</button>
+              <button class="hifi-palette-btn" id="hifi-tool-delete" data-hifi-tool="delete" title="Delete">D</button>
+
+              <div class="hifi-palette-label">Convert</div>
+              <button class="hifi-palette-btn" id="hifi-btn-convert-bend" title="Auto bend">AB</button>
+              <button class="hifi-palette-btn" id="hifi-btn-convert-tee" title="Auto tee">AT</button>
+            </div>
+          </aside>
+
+          <div id="hifi-viewer-stage">
+            <div id="hifi-viewer-canvas"></div>
+          </div>
+
+          <aside id="hifi-right-viewbar">
+            <button class="hifi-rail-toggle" id="hifi-right-viewbar-toggle" title="Toggle right view bar">&rsaquo;</button>
+            <div class="hifi-rail-content">
+              <div class="hifi-viewbar-label">View</div>
+              <button class="hifi-view-btn" data-view="iso-ne">NE</button>
+              <button class="hifi-view-btn" data-view="iso-nw">NW</button>
+              <button class="hifi-view-btn" data-view="iso-se">SE</button>
+              <button class="hifi-view-btn" data-view="iso-sw">SW</button>
+              <button class="hifi-view-btn" data-view="plan">Plan</button>
+              <button class="hifi-view-btn" data-view="front">Front</button>
+              <button class="hifi-view-btn" id="hifi-btn-fit-viewbar">Fit</button>
+            </div>
+          </aside>
+
+          <div id="hifi-inspector-shell">
+            <button id="hifi-inspector-toggle" title="Toggle inspector">&rsaquo;</button>
+            <aside id="hifi-viewer-inspector" class="empty"></aside>
+          </div>
+        </div>
+
+        <div id="hifi-macro-tray"></div>
+      </section>
+
+      <section id="hifi-panel-debug" class="hifi-tab-panel" role="tabpanel">
+        <div id="hifi-debug-toolbar">
+          <button class="hifi-btn" id="hifi-debug-refresh">Refresh</button>
+          <button class="hifi-btn" id="hifi-debug-copy-json">Copy JSON</button>
+          <button class="hifi-btn" id="hifi-debug-export-log">Export Log</button>
+          <span id="hifi-debug-domain-label" style="margin-left:auto;font-size:11px;color:var(--amber,#f59e0b);font-family:var(--font-code,monospace);">domain: -</span>
+        </div>
+        <div id="hifi-debug-main">
+          <nav id="hifi-debug-nav">
+            <button class="hifi-debug-nav-btn active" data-hifi-debug-section="summary">Summary</button>
+            <button class="hifi-debug-nav-btn" data-hifi-debug-section="log">Parse Log</button>
+            <button class="hifi-debug-nav-btn" data-hifi-debug-section="components">Components</button>
+            <button class="hifi-debug-nav-btn" data-hifi-debug-section="validation">Validation</button>
+          </nav>
+          <div id="hifi-debug-content">Load a model in Viewer tab to populate diagnostics.</div>
+        </div>
+      </section>
+
+      <section id="hifi-panel-design" class="hifi-tab-panel" role="tabpanel">
+        Design Tab Disabled
+      </section>
+    </main>
+
+    <footer id="hifi-statusbar">
+      <div id="hifi-status-dot" class="hifi-status-dot idle"></div>
+      <span id="hifi-status-text">Ready</span>
+      <span id="hifi-status-info">GLB-PCF-Editor - Release 1A</span>
+    </footer>
+  </div>
+
+  <script type="module" src="core/app.js"></script>
+</body>
+</html>

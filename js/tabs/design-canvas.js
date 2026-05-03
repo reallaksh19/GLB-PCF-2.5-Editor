@@ -1,0 +1,650 @@
+/**
+ * js/tabs/design-canvas.js
+ *
+ * Figma-style design canvas: infinite pan/zoom viewport, sections,
+ * artboards (reorderable, deletable, focus-overlay), inline rename,
+ * sticky notes.
+ *
+ * Adapted from design-canvas.jsx (2.5 D design Tool UI upgrade).
+ * JSX converted to React.createElement so no build step is required.
+ * State persists to localStorage (viewport) and window.omelette bridge
+ * (section/artboard order). The omelette bridge is optional; without
+ * it the canvas still functions — state just won't persist across loads.
+ *
+ * Exports:
+ *   DesignCanvas, DCSection, DCArtboard, DCPostIt
+ */
+
+import React     from 'react';
+import ReactDOM  from 'react-dom';
+
+const e = React.createElement;
+
+// ── Design token palette ──────────────────────────────────────────────────
+const DC = {
+  bg:        '#f0eee9',
+  grid:      'rgba(0,0,0,0.06)',
+  label:     'rgba(60,50,40,0.7)',
+  title:     'rgba(40,30,20,0.85)',
+  subtitle:  'rgba(60,50,40,0.6)',
+  postitBg:  '#fef4a8',
+  postitText:'#5a4a2a',
+  font:      '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+};
+
+// ── One-time CSS injection ────────────────────────────────────────────────
+if (typeof document !== 'undefined' && !document.getElementById('dc-styles')) {
+  const s = document.createElement('style');
+  s.id = 'dc-styles';
+  s.textContent = [
+    '.dc-editable{cursor:text;outline:none;white-space:nowrap;border-radius:3px;padding:0 2px;margin:0 -2px}',
+    '.dc-editable:focus{background:#fff;box-shadow:0 0 0 1.5px #c96442}',
+    '[data-dc-slot]{transition:transform .18s cubic-bezier(.2,.7,.3,1)}',
+    '[data-dc-slot].dc-dragging{transition:none;z-index:10;pointer-events:none}',
+    '[data-dc-slot].dc-dragging .dc-card{box-shadow:0 12px 40px rgba(0,0,0,.25),0 0 0 2px #c96442;transform:scale(1.02)}',
+    '.dc-card{transition:box-shadow .15s,transform .15s}',
+    '.dc-card *{scrollbar-width:none}',
+    '.dc-card *::-webkit-scrollbar{display:none}',
+    '.dc-header{position:absolute;bottom:100%;left:-4px;margin-bottom:calc(4px * var(--dc-inv-zoom,1));z-index:2;display:flex;align-items:center;container-type:inline-size}',
+    '.dc-labelrow{display:flex;align-items:center;gap:4px;height:24px;flex:1 1 auto;min-width:0}',
+    '.dc-grip{flex:0 0 auto;cursor:grab;display:flex;align-items:center;padding:5px 4px;border-radius:4px;transition:background .12s,opacity .12s}',
+    '.dc-grip:hover{background:rgba(0,0,0,.08)}',
+    '.dc-grip:active{cursor:grabbing}',
+    '.dc-labeltext{flex:1 1 auto;min-width:0;cursor:pointer;border-radius:4px;padding:3px 6px;display:flex;align-items:center;transition:background .12s;overflow:hidden}',
+    '@container (max-width: 110px){.dc-labeltext{display:none}.dc-grip{opacity:0}[data-dc-slot]:hover .dc-grip{opacity:1}}',
+    '.dc-labeltext:hover{background:rgba(0,0,0,.05)}',
+    '.dc-labeltext .dc-editable{overflow:hidden;text-overflow:ellipsis;max-width:100%}',
+    '.dc-labeltext .dc-editable:focus{overflow:visible;text-overflow:clip}',
+    '.dc-btns{flex:0 0 auto;margin-left:auto;display:flex;gap:2px;opacity:0;transition:opacity .12s}',
+    '[data-dc-slot]:hover .dc-btns,.dc-btns:has(.dc-confirm){opacity:1}',
+    '.dc-expand,.dc-delete{width:22px;height:22px;border-radius:5px;border:none;cursor:pointer;padding:0;background:transparent;color:rgba(60,50,40,.7);display:flex;align-items:center;justify-content:center;font:inherit;transition:background .12s,color .12s}',
+    '.dc-expand:hover{background:rgba(0,0,0,.06);color:#2a251f}',
+    '.dc-delete:hover{background:rgba(201,100,66,.12);color:#c96442}',
+    '.dc-delete.dc-confirm{width:auto;padding:0 7px;gap:5px;background:#c96442;color:#fff;font-size:12px;font-weight:500}',
+    '.dc-delete.dc-confirm:hover{background:#b5563a}',
+    '.dc-header{width:calc((100% + 4px) / var(--dc-inv-zoom,1));transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom left}',
+    '.dc-sectionhead{zoom:var(--dc-inv-zoom,1)}',
+  ].join('\n');
+  document.head.appendChild(s);
+}
+
+// ── Context ───────────────────────────────────────────────────────────────
+const DCCtx = React.createContext(null);
+const DC_STATE_FILE = 'design-canvas.state.json';
+
+// ── DesignCanvas ──────────────────────────────────────────────────────────
+export function DesignCanvas({ children, minScale, maxScale, style }) {
+  const [state,    setState]  = React.useState({ sections: {}, focus: null });
+  const [ready,    setReady]  = React.useState(false);
+  const didRead        = React.useRef(false);
+  const skipNextWrite  = React.useRef(false);
+
+  React.useEffect(() => {
+    let off = false;
+    fetch('./' + DC_STATE_FILE)
+      .then(r => r.ok ? r.json() : null)
+      .then(saved => {
+        if (off || !saved || !saved.sections) return;
+        skipNextWrite.current = true;
+        setState(s => ({ ...s, sections: saved.sections }));
+      })
+      .catch(() => {})
+      .finally(() => { didRead.current = true; if (!off) setReady(true); });
+    const t = setTimeout(() => { if (!off) setReady(true); }, 150);
+    return () => { off = true; clearTimeout(t); };
+  }, []);
+
+  React.useEffect(() => {
+    if (!didRead.current) return;
+    if (skipNextWrite.current) { skipNextWrite.current = false; return; }
+    const t = setTimeout(() => {
+      const writePromise = window.omelette?.writeFile?.(DC_STATE_FILE, JSON.stringify({ sections: state.sections }));
+      if (writePromise && typeof writePromise.catch === 'function') {
+        writePromise.catch(() => {});
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [state.sections]);
+
+  // Build section/artboard registries from children
+  const registry    = {};
+  const sectionMeta = {};
+  const sectionOrder = [];
+  React.Children.forEach(children, sec => {
+    if (!sec || sec.type !== DCSection) return;
+    const sid = sec.props.id ?? sec.props.title;
+    if (!sid) return;
+    sectionOrder.push(sid);
+    const persisted = state.sections[sid] || {};
+    const abs = [];
+    React.Children.forEach(sec.props.children, ab => {
+      if (!ab || ab.type !== DCArtboard) return;
+      const aid = ab.props.id ?? ab.props.label;
+      if (aid) abs.push([aid, ab]);
+    });
+    const srcKey = abs.map(([k]) => k).join('\x1f');
+    const hidden = persisted.srcKey === srcKey ? (persisted.hidden || []) : [];
+    const srcIds = [];
+    abs.forEach(([aid, ab]) => {
+      if (hidden.includes(aid)) return;
+      registry[`${sid}/${aid}`] = { sectionId: sid, artboard: ab };
+      srcIds.push(aid);
+    });
+    const kept = (persisted.order || []).filter(k => srcIds.includes(k));
+    sectionMeta[sid] = {
+      title:    persisted.title ?? sec.props.title,
+      subtitle: sec.props.subtitle,
+      slotIds:  [...kept, ...srcIds.filter(k => !kept.includes(k))],
+    };
+  });
+
+  const api = React.useMemo(() => ({
+    state,
+    section:      id  => state.sections[id] || {},
+    patchSection: (id, p) => setState(s => ({
+      ...s,
+      sections: { ...s.sections, [id]: { ...s.sections[id], ...(typeof p === 'function' ? p(s.sections[id] || {}) : p) } }
+    })),
+    setFocus: slotId => setState(s => ({ ...s, focus: slotId })),
+  }), [state]);
+
+  React.useEffect(() => {
+    const onKey = ev => { if (ev.key === 'Escape') api.setFocus(null); };
+    const onPd  = ev => {
+      const ae = document.activeElement;
+      if (ae && ae.isContentEditable && !ae.contains(ev.target)) ae.blur();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPd, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPd, true);
+    };
+  }, [api]);
+
+  return e(DCCtx.Provider, { value: api },
+    e(DCViewport, { minScale, maxScale, style }, ready && children),
+    state.focus && registry[state.focus] &&
+      e(DCFocusOverlay, { entry: registry[state.focus], sectionMeta, sectionOrder })
+  );
+}
+
+// ── DCViewport ────────────────────────────────────────────────────────────
+function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
+  const vpRef    = React.useRef(null);
+  const worldRef = React.useRef(null);
+  const tf       = React.useRef({ x: 0, y: 0, scale: 1 });
+  const tfKey    = 'dc-viewport:' + location.pathname;
+  const saveT    = React.useRef(0);
+  const lastPostedScale = React.useRef();
+
+  const apply = React.useCallback(() => {
+    const { x, y, scale } = tf.current;
+    const el = worldRef.current;
+    if (!el) return;
+    el.style.transform = `translate3d(${x}px,${y}px,0) scale(${scale})`;
+    el.style.setProperty('--dc-inv-zoom', String(1 / scale));
+    if (lastPostedScale.current !== scale) {
+      lastPostedScale.current = scale;
+      window.parent.postMessage({ type: '__dc_zoom', scale }, '*');
+    }
+    clearTimeout(saveT.current);
+    saveT.current = setTimeout(() => {
+      try { localStorage.setItem(tfKey, JSON.stringify(tf.current)); } catch {}
+    }, 200);
+  }, [tfKey]);
+
+  React.useLayoutEffect(() => {
+    const flush = () => {
+      clearTimeout(saveT.current);
+      try { localStorage.setItem(tfKey, JSON.stringify(tf.current)); } catch {}
+    };
+    try {
+      const s = JSON.parse(localStorage.getItem(tfKey) || 'null');
+      if (s && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.scale)) {
+        tf.current = { x: s.x, y: s.y, scale: Math.min(maxScale, Math.max(minScale, s.scale)) };
+        apply();
+      }
+    } catch {}
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, []);
+
+  React.useEffect(() => {
+    const vp = vpRef.current;
+    if (!vp) return;
+
+    const zoomAt = (cx, cy, factor) => {
+      const r  = vp.getBoundingClientRect();
+      const px = cx - r.left, py = cy - r.top;
+      const t  = tf.current;
+      const next = Math.min(maxScale, Math.max(minScale, t.scale * factor));
+      const k    = next / t.scale;
+      t.x = px - (px - t.x) * k; t.y = py - (py - t.y) * k; t.scale = next;
+      apply();
+    };
+
+    const isMouseWheel = ev =>
+      ev.deltaMode !== 0 || (ev.deltaX === 0 && Number.isInteger(ev.deltaY) && Math.abs(ev.deltaY) >= 40);
+
+    let isGesturing = false;
+    let gsBase = 1;
+
+    const onWheel = ev => {
+      ev.preventDefault();
+      if (isGesturing) return;
+      if (ev.ctrlKey)            zoomAt(ev.clientX, ev.clientY, Math.exp(-ev.deltaY * 0.01));
+      else if (isMouseWheel(ev)) zoomAt(ev.clientX, ev.clientY, Math.exp(-Math.sign(ev.deltaY) * 0.18));
+      else { tf.current.x -= ev.deltaX; tf.current.y -= ev.deltaY; apply(); }
+    };
+    const onGestureStart  = ev => { ev.preventDefault(); isGesturing = true; gsBase = tf.current.scale; };
+    const onGestureChange = ev => { ev.preventDefault(); zoomAt(ev.clientX, ev.clientY, (gsBase * ev.scale) / tf.current.scale); };
+    const onGestureEnd    = ev => { ev.preventDefault(); isGesturing = false; };
+
+    let drag = null;
+    const onPointerDown = ev => {
+      const onBg = !ev.target.closest('[data-dc-slot], .dc-editable');
+      if (!(ev.button === 1 || (ev.button === 0 && onBg))) return;
+      ev.preventDefault();
+      vp.setPointerCapture(ev.pointerId);
+      drag = { id: ev.pointerId, lx: ev.clientX, ly: ev.clientY };
+      vp.style.cursor = 'grabbing';
+    };
+    const onPointerMove = ev => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      tf.current.x += ev.clientX - drag.lx; tf.current.y += ev.clientY - drag.ly;
+      drag.lx = ev.clientX; drag.ly = ev.clientY;
+      apply();
+    };
+    const onPointerUp = ev => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      vp.releasePointerCapture(ev.pointerId); drag = null; vp.style.cursor = '';
+    };
+
+    const onHostMsg = ev => {
+      const d = ev.data;
+      if (d && d.type === '__dc_set_zoom' && typeof d.scale === 'number') {
+        const r = vp.getBoundingClientRect();
+        zoomAt(r.left + r.width / 2, r.top + r.height / 2, d.scale / tf.current.scale);
+      } else if (d && d.type === '__dc_probe') {
+        window.parent.postMessage({ type: '__dc_present' }, '*');
+        lastPostedScale.current = undefined;
+        apply();
+      }
+    };
+
+    window.addEventListener('message', onHostMsg);
+    window.parent.postMessage({ type: '__dc_present' }, '*');
+    lastPostedScale.current = undefined;
+    apply();
+
+    vp.addEventListener('wheel',          onWheel,          { passive: false });
+    vp.addEventListener('gesturestart',   onGestureStart,   { passive: false });
+    vp.addEventListener('gesturechange',  onGestureChange,  { passive: false });
+    vp.addEventListener('gestureend',     onGestureEnd,     { passive: false });
+    vp.addEventListener('pointerdown',    onPointerDown);
+    vp.addEventListener('pointermove',    onPointerMove);
+    vp.addEventListener('pointerup',      onPointerUp);
+    vp.addEventListener('pointercancel',  onPointerUp);
+    return () => {
+      window.removeEventListener('message', onHostMsg);
+      vp.removeEventListener('wheel',          onWheel);
+      vp.removeEventListener('gesturestart',   onGestureStart);
+      vp.removeEventListener('gesturechange',  onGestureChange);
+      vp.removeEventListener('gestureend',     onGestureEnd);
+      vp.removeEventListener('pointerdown',    onPointerDown);
+      vp.removeEventListener('pointermove',    onPointerMove);
+      vp.removeEventListener('pointerup',      onPointerUp);
+      vp.removeEventListener('pointercancel',  onPointerUp);
+    };
+  }, [apply, minScale, maxScale]);
+
+  const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
+
+  return e('div', {
+    ref: vpRef,
+    className: 'design-canvas',
+    style: {
+      height: '100%', width: '100%',
+      background: DC.bg, overflow: 'hidden',
+      overscrollBehavior: 'none', touchAction: 'none',
+      position: 'relative', fontFamily: DC.font, boxSizing: 'border-box', ...style,
+    },
+  },
+    e('div', {
+      ref: worldRef,
+      style: {
+        position: 'absolute', top: 0, left: 0,
+        transformOrigin: '0 0', willChange: 'transform',
+        width: 'max-content', minWidth: '100%', minHeight: '100%',
+        padding: '60px 0 80px',
+      },
+    },
+      e('div', { style: { position: 'absolute', inset: -6000, backgroundImage: gridSvg, backgroundSize: '120px 120px', pointerEvents: 'none', zIndex: -1 } }),
+      children
+    )
+  );
+}
+
+// ── DCSection ─────────────────────────────────────────────────────────────
+export function DCSection({ id, title, subtitle, children, gap = 48 }) {
+  const ctx = React.useContext(DCCtx);
+  const sid = id ?? title;
+  const all       = React.Children.toArray(children);
+  const artboards = all.filter(c => c && c.type === DCArtboard);
+  const rest      = all.filter(c => !(c && c.type === DCArtboard));
+  const sec       = (ctx && sid && ctx.section(sid)) || {};
+
+  const allIds = artboards.map(a => a.props.id ?? a.props.label).filter(Boolean);
+  const srcKey = allIds.join('\x1f');
+  const hidden = sec.srcKey === srcKey ? (sec.hidden || []) : [];
+  const srcOrder = allIds.filter(k => !hidden.includes(k));
+
+  const order = React.useMemo(() => {
+    const kept = (sec.order || []).filter(k => srcOrder.includes(k));
+    return [...kept, ...srcOrder.filter(k => !kept.includes(k))];
+  }, [sec.order, srcOrder.join('|')]);
+
+  const byId = Object.fromEntries(artboards.map(a => [a.props.id ?? a.props.label, a]));
+
+  return e('div', { 'data-dc-section': sid, style: { marginBottom: 'calc(80px * var(--dc-inv-zoom, 1))', position: 'relative' } },
+    e('div', { style: { padding: '0 60px' } },
+      e('div', { className: 'dc-sectionhead', style: { paddingBottom: 36 } },
+        e(DCEditable, {
+          tag: 'div', value: sec.title ?? title,
+          onChange: v => ctx && sid && ctx.patchSection(sid, { title: v }),
+          style: { fontSize: 28, fontWeight: 600, color: DC.title, letterSpacing: -0.4, marginBottom: 6, display: 'inline-block' }
+        }),
+        subtitle && e('div', { style: { fontSize: 16, color: DC.subtitle } }, subtitle)
+      )
+    ),
+    e('div', { style: { display: 'flex', gap, padding: '0 60px', alignItems: 'flex-start', width: 'max-content' } },
+      ...order.map(k =>
+        e(DCArtboardFrame, {
+          key: k, sectionId: sid, artboard: byId[k], order,
+          label: (sec.labels || {})[k] ?? byId[k].props.label,
+          onRename:  v   => ctx && ctx.patchSection(sid, x => ({ labels: { ...x.labels, [k]: v } })),
+          onReorder: next => ctx && ctx.patchSection(sid, { order: next }),
+          onDelete:  ()  => ctx && ctx.patchSection(sid, x => ({
+            hidden: [...(x.srcKey === srcKey ? (x.hidden || []) : []), k],
+            srcKey,
+          })),
+          onFocus: () => ctx && ctx.setFocus(`${sid}/${k}`),
+        })
+      )
+    ),
+    ...rest
+  );
+}
+
+// ── DCArtboard — marker only; rendered by DCArtboardFrame ─────────────────
+export function DCArtboard() { return null; }
+
+// ── DCArtboardFrame ───────────────────────────────────────────────────────
+function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorder, onFocus, onDelete }) {
+  const { id: rawId, label: rawLabel, width = 260, height = 480, children, style = {} } = artboard.props;
+  const id     = rawId ?? rawLabel;
+  const ref    = React.useRef(null);
+  const delRef = React.useRef(null);
+  const [confirming, setConfirming] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!confirming) return;
+    const off = ev => { if (!delRef.current || !delRef.current.contains(ev.target)) setConfirming(false); };
+    document.addEventListener('pointerdown', off, true);
+    return () => document.removeEventListener('pointerdown', off, true);
+  }, [confirming]);
+
+  const onGripDown = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const me    = ref.current;
+    const scale = me.getBoundingClientRect().width / me.offsetWidth || 1;
+    const peers = Array.from(document.querySelectorAll(`[data-dc-section="${sectionId}"] [data-dc-slot]`));
+    const homes = peers.map(el => ({ el, id: el.dataset.dcSlot, x: el.getBoundingClientRect().left }));
+    const slotXs    = homes.map(h => h.x);
+    const startIdx  = order.indexOf(id);
+    const startX    = ev.clientX;
+    let liveOrder   = order.slice();
+    me.classList.add('dc-dragging');
+
+    const layout = () => {
+      for (const h of homes) {
+        if (h.id === id) continue;
+        const slot = liveOrder.indexOf(h.id);
+        h.el.style.transform = `translateX(${(slotXs[slot] - h.x) / scale}px)`;
+      }
+    };
+    const move = mev => {
+      const dx = mev.clientX - startX;
+      me.style.transform = `translateX(${dx / scale}px)`;
+      const cur = homes[startIdx].x + dx;
+      let nearest = 0, best = Infinity;
+      for (let i = 0; i < slotXs.length; i++) { const d = Math.abs(slotXs[i] - cur); if (d < best) { best = d; nearest = i; } }
+      if (liveOrder.indexOf(id) !== nearest) {
+        liveOrder = order.filter(k => k !== id);
+        liveOrder.splice(nearest, 0, id);
+        layout();
+      }
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      const finalSlot = liveOrder.indexOf(id);
+      me.classList.remove('dc-dragging');
+      me.style.transform = `translateX(${(slotXs[finalSlot] - homes[startIdx].x) / scale}px)`;
+      setTimeout(() => {
+        for (const h of homes) { h.el.style.transition = 'none'; h.el.style.transform = ''; }
+        if (liveOrder.join('|') !== order.join('|')) onReorder(liveOrder);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          for (const h of homes) h.el.style.transition = '';
+        }));
+      }, 180);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  };
+
+  // SVG icons (inline to avoid asset loading)
+  const GripSvg = e('svg', { width: 9, height: 13, viewBox: '0 0 9 13', fill: 'currentColor' },
+    e('circle', { cx: 2, cy: 2, r: 1.1 }), e('circle', { cx: 7, cy: 2, r: 1.1 }),
+    e('circle', { cx: 2, cy: 6.5, r: 1.1 }), e('circle', { cx: 7, cy: 6.5, r: 1.1 }),
+    e('circle', { cx: 2, cy: 11, r: 1.1 }), e('circle', { cx: 7, cy: 11, r: 1.1 })
+  );
+  const TrashSvg = e('svg', { width: 12, height: 12, viewBox: '0 0 12 12', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' },
+    e('path', { d: 'M2 3.5h8M4.5 3.5v-1a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1M3 3.5v6a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6M5 5.5v3M7 5.5v3' })
+  );
+  const ExpandSvg = e('svg', { width: 12, height: 12, viewBox: '0 0 12 12', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' },
+    e('path', { d: 'M7 1h4v4M5 11H1V7M11 1L7.5 4.5M1 11l3.5-3.5' })
+  );
+
+  return e('div', { ref, 'data-dc-slot': id, style: { position: 'relative', flexShrink: 0 } },
+    e('div', { className: 'dc-header', style: { color: DC.label }, onPointerDown: ev => ev.stopPropagation() },
+      e('div', { className: 'dc-labelrow' },
+        e('div', { className: 'dc-grip', onPointerDown: onGripDown, title: 'Drag to reorder' }, GripSvg),
+        e('div', { className: 'dc-labeltext', onClick: onFocus, title: 'Click to focus' },
+          e(DCEditable, {
+            value: label, onChange: onRename, onClick: ev => ev.stopPropagation(),
+            style: { fontSize: 15, fontWeight: 500, color: DC.label, lineHeight: 1 }
+          })
+        )
+      ),
+      e('div', { className: 'dc-btns' },
+        e('button', {
+          ref: delRef,
+          className: 'dc-delete' + (confirming ? ' dc-confirm' : ''),
+          onClick: () => { if (confirming) onDelete(); else setConfirming(true); },
+          title: confirming ? 'Click again to delete' : 'Delete',
+        }, confirming ? e(React.Fragment, null, TrashSvg, 'Delete?') : TrashSvg),
+        e('button', { className: 'dc-expand', onClick: onFocus, title: 'Focus' }, ExpandSvg)
+      )
+    ),
+    e('div', {
+      className: 'dc-card',
+      style: { borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06)', overflow: 'hidden', width, height, background: '#fff', ...style }
+    },
+      children || e('div', { style: { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 13, fontFamily: DC.font } }, id)
+    )
+  );
+}
+
+// ── DCEditable — inline rename ─────────────────────────────────────────────
+function DCEditable({ value, onChange, style, tag = 'span', onClick }) {
+  return e(tag, {
+    className: 'dc-editable',
+    contentEditable: true,
+    suppressContentEditableWarning: true,
+    onClick,
+    onPointerDown: ev => ev.stopPropagation(),
+    onBlur:    ev => onChange && onChange(ev.currentTarget.textContent),
+    onKeyDown: ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.currentTarget.blur(); } },
+    style,
+    dangerouslySetInnerHTML: { __html: value ?? '' },
+  });
+}
+
+// ── DCFocusOverlay ─────────────────────────────────────────────────────────
+function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
+  const ctx = React.useContext(DCCtx);
+  const { sectionId, artboard } = entry;
+  const sec    = ctx.section(sectionId);
+  const meta   = sectionMeta[sectionId];
+  const peers  = meta.slotIds;
+  const aid    = artboard.props.id ?? artboard.props.label;
+  const idx    = peers.indexOf(aid);
+  const secIdx = sectionOrder.indexOf(sectionId);
+
+  const go = d => { const n = peers[(idx + d + peers.length) % peers.length]; if (n) ctx.setFocus(`${sectionId}/${n}`); };
+  const goSection = d => {
+    const n = sectionOrder.length;
+    for (let i = 1; i < n; i++) {
+      const ns    = sectionOrder[(((secIdx + d * i) % n) + n) % n];
+      const first = sectionMeta[ns]?.slotIds[0];
+      if (first) { ctx.setFocus(`${ns}/${first}`); return; }
+    }
+  };
+
+  React.useEffect(() => {
+    const k = ev => {
+      if (ev.key === 'ArrowLeft')  { ev.preventDefault(); go(-1); }
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); go(1);  }
+      if (ev.key === 'ArrowUp')    { ev.preventDefault(); goSection(-1); }
+      if (ev.key === 'ArrowDown')  { ev.preventDefault(); goSection(1);  }
+    };
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  });
+
+  const { width = 260, height = 480, children } = artboard.props;
+  const [vp, setVp] = React.useState({ w: window.innerWidth, h: window.innerHeight });
+  React.useEffect(() => {
+    const r = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', r);
+    return () => window.removeEventListener('resize', r);
+  }, []);
+  const scale   = Math.max(0.1, Math.min((vp.w - 200) / width, (vp.h - 260) / height, 2));
+  const [ddOpen, setDd] = React.useState(false);
+
+  const Arrow = ({ dir, onClick: oc }) =>
+    e('button', {
+      onClick: ev => { ev.stopPropagation(); oc(); },
+      style: { position: 'absolute', top: '50%', [dir]: 28, transform: 'translateY(-50%)', border: 'none', background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.9)', width: 44, height: 44, borderRadius: 22, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .15s' },
+      onMouseEnter: ev => (ev.currentTarget.style.background = 'rgba(255,255,255,.18)'),
+      onMouseLeave: ev => (ev.currentTarget.style.background = 'rgba(255,255,255,.08)'),
+    },
+      e('svg', { width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' },
+        e('path', { d: dir === 'left' ? 'M11 3L5 9l6 6' : 'M7 3l6 6-6 6' })
+      )
+    );
+
+  return ReactDOM.createPortal(
+    e('div', {
+      onClick: () => ctx.setFocus(null),
+      onWheel: ev => ev.preventDefault(),
+      style: { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(24,20,16,.6)', backdropFilter: 'blur(14px)', fontFamily: DC.font, color: '#fff' },
+    },
+      // Top bar
+      e('div', {
+        onClick: ev => ev.stopPropagation(),
+        style: { position: 'absolute', top: 0, left: 0, right: 0, height: 72, display: 'flex', alignItems: 'flex-start', padding: '16px 20px 0', gap: 16 },
+      },
+        e('div', { style: { position: 'relative' } },
+          e('button', {
+            onClick: () => setDd(o => !o),
+            style: { border: 'none', background: 'transparent', color: '#fff', cursor: 'pointer', padding: '6px 8px', borderRadius: 6, textAlign: 'left', fontFamily: 'inherit' },
+          },
+            e('span', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              e('span', { style: { fontSize: 18, fontWeight: 600, letterSpacing: -0.3 } }, meta.title),
+              e('svg', { width: 11, height: 11, viewBox: '0 0 11 11', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', style: { opacity: .7 } },
+                e('path', { d: 'M2 4l3.5 3.5L9 4' })
+              )
+            ),
+            meta.subtitle && e('span', { style: { display: 'block', fontSize: 13, opacity: .6, fontWeight: 400, marginTop: 2 } }, meta.subtitle)
+          ),
+          ddOpen && e('div', {
+            style: { position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#2a251f', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,.4)', padding: 4, minWidth: 200, zIndex: 10 },
+          },
+            ...sectionOrder
+              .filter(sid => sectionMeta[sid].slotIds.length)
+              .map(sid => e('button', {
+                key: sid,
+                onClick: () => { setDd(false); const f = sectionMeta[sid].slotIds[0]; if (f) ctx.setFocus(`${sid}/${f}`); },
+                style: { display: 'block', width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: sid === sectionId ? 'rgba(255,255,255,.1)' : 'transparent', color: '#fff', padding: '8px 12px', borderRadius: 5, fontSize: 14, fontWeight: sid === sectionId ? 600 : 400, fontFamily: 'inherit' },
+              }, sectionMeta[sid].title))
+          )
+        ),
+        e('div', { style: { flex: 1 } }),
+        e('button', {
+          onClick: () => ctx.setFocus(null),
+          onMouseEnter: ev => (ev.currentTarget.style.background = 'rgba(255,255,255,.12)'),
+          onMouseLeave: ev => (ev.currentTarget.style.background = 'transparent'),
+          style: { border: 'none', background: 'transparent', color: 'rgba(255,255,255,.7)', width: 32, height: 32, borderRadius: 16, fontSize: 20, cursor: 'pointer', lineHeight: 1, transition: 'background .12s' },
+        }, '×')
+      ),
+      // Centered card
+      e('div', {
+        style: { position: 'absolute', top: 64, bottom: 56, left: 100, right: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 },
+      },
+        e('div', { onClick: ev => ev.stopPropagation(), style: { width: width * scale, height: height * scale, position: 'relative' } },
+          e('div', { style: { width, height, transform: `scale(${scale})`, transformOrigin: 'top left', background: '#fff', borderRadius: 2, overflow: 'hidden', boxShadow: '0 20px 80px rgba(0,0,0,.4)' } },
+            children || e('div', { style: { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb' } }, aid)
+          )
+        ),
+        e('div', {
+          onClick: ev => ev.stopPropagation(),
+          style: { fontSize: 14, fontWeight: 500, opacity: .85, textAlign: 'center' },
+        },
+          (sec.labels || {})[aid] ?? artboard.props.label,
+          e('span', { style: { opacity: .5, marginLeft: 10, fontVariantNumeric: 'tabular-nums' } }, `${idx + 1} / ${peers.length}`)
+        )
+      ),
+      e(Arrow, { dir: 'left',  onClick: () => go(-1) }),
+      e(Arrow, { dir: 'right', onClick: () => go(1)  }),
+      // Dot navigation
+      e('div', {
+        onClick: ev => ev.stopPropagation(),
+        style: { position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 8 },
+      },
+        ...peers.map((p, i) => e('button', {
+          key: p,
+          onClick: () => ctx.setFocus(`${sectionId}/${p}`),
+          style: { border: 'none', padding: 0, cursor: 'pointer', width: 6, height: 6, borderRadius: 3, background: i === idx ? '#fff' : 'rgba(255,255,255,.3)' },
+        }))
+      )
+    ),
+    document.body
+  );
+}
+
+// ── DCPostIt — absolute-positioned sticky note ────────────────────────────
+export function DCPostIt({ children, top, left, right, bottom, rotate = -2, width = 180 }) {
+  return e('div', {
+    style: {
+      position: 'absolute', top, left, right, bottom, width,
+      background: DC.postitBg, padding: '14px 16px',
+      fontFamily: '"Comic Sans MS","Marker Felt","Segoe Print",cursive',
+      fontSize: 14, lineHeight: 1.4, color: DC.postitText,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.08)',
+      transform: `rotate(${rotate}deg)`, zIndex: 5,
+    },
+  }, children);
+}

@@ -1,0 +1,31 @@
+[
+  {
+    "type": "MOVE_COMPONENTS",
+    "selection": ["line_001"],
+    "payload": { "delta": { "x": 1000, "y": 0, "z": 0 } },
+    "timestamp": 1
+  },
+  {
+    "type": "EXTEND_LINEAR",
+    "payload": { "componentId": "line_001", "endpoint": "a2", "newLength": 5000 },
+    "timestamp": 2
+  },
+  {
+    "type": "STRETCH_ANCHORS",
+    "payload": { "anchors": ["a2"], "delta": { "x": 0, "y": 0, "z": -1200 } },
+    "timestamp": 3
+  },
+  {
+    "type": "DELETE_COMPONENTS",
+    "selection": ["block_001"],
+    "timestamp": 4
+  },
+  {
+    "type": "UNDO",
+    "timestamp": 5
+  },
+  {
+    "type": "REDO",
+    "timestamp": 6
+  }
+]

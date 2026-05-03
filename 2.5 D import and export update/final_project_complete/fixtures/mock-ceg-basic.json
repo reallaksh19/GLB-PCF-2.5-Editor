@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "CEG-1.0",
+  "document": {
+    "id": "mock_doc",
+    "name": "Mock CEG Basic",
+    "units": "mm",
+    "sourceFormat": "MOCK",
+    "coordinateSystem": "WORLD_XYZ"
+  },
+  "components": {
+    "line_001": {
+      "id": "line_001",
+      "type": "LINE",
+      "layerId": "default",
+      "anchorIds": ["a1", "a2"],
+      "geometryRole": "LINEAR",
+      "attributes": {},
+      "rawAttributes": {},
+      "derived": {},
+      "capabilities": {
+        "canMove": true,
+        "canDelete": true,
+        "canStretch": true,
+        "canExtend": true,
+        "canExportDXF": true,
+        "canExportGLB": true
+      },
+      "diagnostics": []
+    },
+    "block_001": {
+      "id": "block_001",
+      "type": "BLOCK_COMPONENT",
+      "layerId": "default",
+      "anchorIds": ["a3"],
+      "geometryRole": "POINT",
+      "attributes": {},
+      "rawAttributes": {},
+      "derived": {},
+      "capabilities": {
+        "canMove": true,
+        "canDelete": true,
+        "canStretch": false,
+        "canExtend": false,
+        "canExportDXF": true,
+        "canExportGLB": true
+      },
+      "diagnostics": []
+    },
+    "mesh_001": {
+      "id": "mesh_001",
+      "type": "MESH_OBJECT",
+      "layerId": "default",
+      "anchorIds": ["a4"],
+      "geometryRole": "POINT",
+      "attributes": {},
+      "rawAttributes": {},
+      "derived": {},
+      "capabilities": {
+        "canMove": true,
+        "canDelete": true,
+        "canStretch": false,
+        "canExtend": false,
+        "canExportDXF": false,
+        "canExportGLB": true
+      },
+      "diagnostics": []
+    }
+  },
+  "anchors": {
+    "a1": { "id": "a1", "role": "EP1", "point": { "x": 0, "y": 0, "z": 0 }, "connectedTo": [], "locked": false, "sourceRef": null },
+    "a2": { "id": "a2", "role": "EP2", "point": { "x": 4200, "y": 0, "z": 0 }, "connectedTo": [], "locked": false, "sourceRef": null },
+    "a3": { "id": "a3", "role": "ORIGIN", "point": { "x": 1000, "y": 1000, "z": 0 }, "connectedTo": [], "locked": false, "sourceRef": null },
+    "a4": { "id": "a4", "role": "ORIGIN", "point": { "x": -1000, "y": -1000, "z": 0 }, "connectedTo": [], "locked": false, "sourceRef": null }
+  },
+  "topologyLinks": [],
+  "layers": {
+    "default": { "visible": true }
+  },
+  "sourceRefs": {},
+  "renderRefs": {},
+  "diagnostics": [
+    { "code": "PROXY_ENTITY", "message": "A proxy entity was created for an unsupported DXF entity", "componentId": "proxy_001" }
+  ],
+  "lossContract": {
+    "unsupportedEntities": ["proxy_001"],
+    "downgradedEntities": [],
+    "proxyEntities": [],
+    "exportWarnings": []
+  },
+  "commandJournal": []
+}
