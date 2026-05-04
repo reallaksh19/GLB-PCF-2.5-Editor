@@ -1,4 +1,4 @@
-﻿import { formatMm, formatPt, formatProvenanceLabel } from './hud-format.js';
+import { formatMm, formatPt, formatProvenanceLabel } from './hud-format.js';
 
 function esc(value) {
   return String(value ?? '')
@@ -8,309 +8,397 @@ function esc(value) {
     .replaceAll('"', '&quot;');
 }
 
-// Width and label per mode for smart sizing
-const MODE_META = {
-  'line-draw':        { width: '252px', label: 'LINE DRAW' },
-  'insert-component': { width: '268px', label: 'INSERT' },
-  'polyline-draw':    { width: '228px', label: 'POLYLINE' },
-  'spline-draw':      { width: '228px', label: 'SPLINE' },
-  'modify-tool':      { width: '224px', label: 'MODIFY' },
-  'idle':             { width: '216px', label: 'HUD' },
+/* ── Per-mode colour, title, icon ── */
+const TOOL_COLOR = {
+  'line-draw':        '#3b82f6',
+  'polyline-draw':    '#3b82f6',
+  'spline-draw':      '#3b82f6',
+  'insert-component': '#a78bfa',
+  'modify-tool':      '#f59e0b',
+  'idle':             '#64748b',
 };
 
-function topbarHtml(state) {
+const TOOL_TITLE = {
+  'line-draw':        'LINE DRAW',
+  'polyline-draw':    'POLYLINE',
+  'spline-draw':      'SPLINE GUIDE',
+  'insert-component': 'INSERT',
+  'modify-tool':      'MODIFY',
+  'idle':             'HUD',
+};
+
+const INSERT_TITLE  = { VALVE:'VALVE', FLANGE:'FLANGE', ELBOW:'ELBOW', TEE:'TEE', REDUCER:'REDUCER', SUPPORT:'SUPPORT' };
+const MODIFY_TITLE  = { MOVE:'MOVE', STRETCH:'STRETCH', ROTATE:'ROTATE', BREAK:'BREAK', DELETE:'DELETE' };
+
+/* Unicode stand-ins for SVG icons */
+const TOOL_ICON = {
+  'line-draw':        '╱',
+  'polyline-draw':    '⌇',
+  'spline-draw':      '∿',
+  'insert-component': '⊕',
+  'modify-tool':      '⟐',
+  'idle':             '◈',
+};
+const INSERT_ICON  = { VALVE:'⊗', FLANGE:'⊞', ELBOW:'⌐', TEE:'⊤', REDUCER:'⊳', SUPPORT:'⊥' };
+const MODIFY_ICON  = { MOVE:'✛', STRETCH:'↔', ROTATE:'↻', BREAK:'✂', DELETE:'✕' };
+
+/* ── Header ── */
+function headerHtml(state) {
   const mode = state.mode || 'idle';
-  const ins = state.insertContext?.component;
+  const ac   = TOOL_COLOR[mode] || '#64748b';
+  const ins  = state.insertContext?.component;
   const tool = state.activeTool;
 
-  const btn = (action, icon, label, active) =>
-    `<button data-action="${action}" class="hud-mode${active ? ' active' : ''}" title="${label}">${icon}</button>`;
+  let title = TOOL_TITLE[mode] || 'HUD';
+  let icon  = TOOL_ICON[mode]  || '◈';
+  if (mode === 'insert-component' && ins) { title = INSERT_TITLE[ins] || ins; icon = INSERT_ICON[ins] || icon; }
+  if (mode === 'modify-tool'      && tool){ title = MODIFY_TITLE[tool] || tool; icon = MODIFY_ICON[tool] || icon; }
 
   return `
-    <div class="hud-topbar">
-      <span class="hud-mode-label">${esc(MODE_META[mode]?.label || 'HUD')}</span>
-      <span class="hud-spacer"></span>
+    <div class="hud-header" data-drag style="border-bottom:1px solid ${ac}30;background:${ac}14;">
+      <span class="hud-header-icon" style="color:${ac}">${esc(icon)}</span>
+      <span class="hud-header-title" style="color:${ac}">${esc(title)}</span>
       <span class="hud-drag-handle" title="Drag HUD">::</span>
-      <button data-action="hide" class="hud-hide" title="Close HUD">x</button>
-    </div>
-    <div class="hud-topbar-tools">
-      ${btn('line',           'L',  'Line draw',        mode === 'line-draw')}
-      ${btn('polyline',       'PL', 'Polyline draw',    mode === 'polyline-draw')}
-      ${btn('spline',         'SP', 'Spline guide',     mode === 'spline-draw')}
-      ${btn('insert-valve',   'V',  'Valve',            mode === 'insert-component' && ins === 'VALVE')}
-      ${btn('insert-flange',  'F',  'Flange',           mode === 'insert-component' && ins === 'FLANGE')}
-      ${btn('insert-elbow',   'E',  'Elbow',            mode === 'insert-component' && ins === 'ELBOW')}
-      ${btn('insert-tee',     'T',  'Tee',              mode === 'insert-component' && ins === 'TEE')}
-      ${btn('insert-support', 'S',  'Support',          mode === 'insert-component' && ins === 'SUPPORT')}
-      ${btn('modify-move',    'M',  'Move node',        mode === 'modify-tool' && tool === 'MOVE')}
-      ${btn('modify-stretch', 'ST', 'Stretch node',     mode === 'modify-tool' && tool === 'STRETCH')}
-      ${btn('modify-rotate',  'R',  'Rotate',           mode === 'modify-tool' && tool === 'ROTATE')}
-      ${btn('modify-break',   'B',  'Break segment',    mode === 'modify-tool' && tool === 'BREAK')}
-      ${btn('modify-delete',  'D',  'Delete',           mode === 'modify-tool' && tool === 'DELETE')}
-      ${btn('auto-bend',      'AB', 'Convert Bend',     false)}
-      ${btn('auto-tee',       'AT', 'Convert Tee',      false)}
+      <button data-action="hide" class="hud-hide" title="Close">×</button>
     </div>`;
 }
+
+/* ── Field row builder ── */
+function fieldRow(fields) {
+  const cells = fields.map(f => {
+    let ctrl;
+    if (f.type === 'seg') {
+      ctrl = `<div class="hud-seg-group">${f.opts.map(o =>
+        `<button class="hud-seg-btn${o === f.val ? ' active' : ''}" data-action="seg-${esc(f.id)}" data-val="${esc(o)}">${esc(o)}</button>`
+      ).join('')}</div>`;
+    } else if (f.type === 'select') {
+      ctrl = `<select class="hud-field-input" data-field="${esc(f.id)}">${f.opts.map(o =>
+        `<option${o === f.val ? ' selected' : ''}>${esc(o)}</option>`
+      ).join('')}</select>`;
+    } else if (f.type === 'badge') {
+      ctrl = `<div class="hud-field-badge">${esc(f.val)}</div>`;
+    } else {
+      ctrl = `<input class="hud-field-input" data-field="${esc(f.id)}" type="${f.type === 'number' ? 'number' : 'text'}" value="${esc(f.val || '')}" />`;
+    }
+    return `<div class="hud-field-cell" style="flex:${f.flex || 1}">
+      <div class="hud-field-label">${esc(f.label.toUpperCase())}</div>
+      ${ctrl}
+    </div>`;
+  });
+  return `<div class="hud-field-row">${cells.join('')}</div>`;
+}
+
+/* ── Info strip (2-col grid, pairs: key, value, key, value …) ── */
+function infoStrip(pairs) {
+  if (!pairs.length) return '';
+  const rows = [];
+  for (let i = 0; i < pairs.length; i += 2) {
+    rows.push(`<span class="hud-info-key">${esc(pairs[i])}</span><span class="hud-info-val">${esc(pairs[i + 1] ?? '')}</span>`);
+  }
+  return `<div class="hud-info-strip">${rows.join('')}</div>`;
+}
+
+/* ── Actions bar ── */
+function actionsBar(actions, ac) {
+  return `<div class="hud-actions-bar">${actions.map(a => {
+    let bg, bdr, clr;
+    if (a.primary) {
+      bg = ac; bdr = ac; clr = '#0d1117';
+    } else if (a.danger) {
+      bg = 'rgba(239,68,68,0.15)'; bdr = 'rgba(239,68,68,0.5)'; clr = '#ef4444';
+    } else {
+      bg = 'var(--bg-3)'; bdr = 'var(--steel)'; clr = 'var(--text-secondary)';
+    }
+    return `<button class="hud-action-btn" data-action="${esc(a.action)}"
+      style="background:${bg};border-color:${bdr};color:${clr}">${esc(a.label)}</button>`;
+  }).join('')}</div>`;
+}
+
+/* ═══════════════ Mode bodies ═══════════════ */
+
 function lineDraftHtml(state) {
   const draft = state.draft || {};
-  return `
-    <div class="hud-body">
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">Route: ${esc(draft.routeId || 'new')}</span>
-        <span class="hud-chip">Anchor: ${esc(formatPt(draft.anchorPoint))}</span>
-      </div>
-      <div class="hud-row hud-axis-row">
-        <button data-action="axis" data-axis="X" class="hud-mini ${draft.axis === 'X' ? 'active' : ''}">X</button>
-        <button data-action="axis" data-axis="Y" class="hud-mini ${draft.axis === 'Y' ? 'active' : ''}">Y</button>
-        <button data-action="axis" data-axis="Z" class="hud-mini ${draft.axis === 'Z' ? 'active' : ''}">Z</button>
-        <button data-action="sign" data-sign="1"  class="hud-mini ${draft.sign >= 0 ? 'active' : ''}">+</button>
-        <button data-action="sign" data-sign="-1" class="hud-mini ${draft.sign < 0 ? 'active' : ''}">âˆ’</button>
-      </div>
-      <div class="hud-row hud-fields-row">
-        <label>Length <input data-field="lengthMm" type="number" min="1" step="1" value="${esc(draft.lengthMm || '')}" /></label>
-        <label>Axis   <input data-field="axis"     type="text"   maxlength="1"     value="${esc(draft.axis || 'X')}" /></label>
-      </div>
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">Last: ${esc(formatMm(state.lastLengthMm))}</span>
-        <span class="hud-chip">Next: ${esc(formatPt(draft.previewPoint))}</span>
-      </div>
-      <div class="hud-row hud-actions-row">
-        <button data-action="commit-line" class="hud-primary">â†µ Commit</button>
-        <button data-action="rise"   class="hud-mini">â†‘ Rise</button>
-        <button data-action="drop"   class="hud-mini">â†“ Drop</button>
-        <button data-action="cancel" class="hud-mini">Esc</button>
-      </div>
-      <div class="hud-settings-row">
-        <label><input type="checkbox" data-action="toggle-compact" ${state.isCompact ? 'checked' : ''} /> Compact</label>
-        <label>Opacity <input type="range" data-action="change-opacity" min="0.2" max="1" step="0.1" value="${state.opacity ?? 1}" /></label>
-      </div>
-    </div>`;
+  const ac = TOOL_COLOR['line-draw'];
+  return [
+    '<div class="hud-fields-section">',
+    fieldRow([
+      { id:'axis', label:'Axis', type:'seg', opts:['X','Y','Z'], val: draft.axis || 'X', flex:1 },
+      { id:'sign', label:'Dir',  type:'seg', opts:['+','−'],    val: (draft.sign >= 0 ? '+' : '−'), flex:1 },
+    ]),
+    fieldRow([
+      { id:'lengthMm', label:'Length mm', type:'number', val: String(draft.lengthMm || ''), flex:2 },
+      { id:'routeId',  label:'Pipeline',  type:'text',   val: draft.routeId || 'new', flex:3 },
+    ]),
+    '</div>',
+    infoStrip([
+      'Anchor',  formatPt(draft.anchorPoint),
+      'Preview', formatPt(draft.previewPoint),
+      'Last',    formatMm(state.lastLengthMm),
+    ]),
+    actionsBar([
+      { label:'↵ Commit', action:'commit-line', primary:true },
+      { label:'↑ Rise',   action:'rise' },
+      { label:'↓ Drop',   action:'drop' },
+      { label:'Esc',      action:'cancel', danger:true },
+    ], ac),
+  ].join('');
 }
 
 function insertDraftHtml(state) {
-  const ctx = state.insertContext || {};
-  const warnings = (ctx.warnings || []).length
-    ? `<div class="hud-row hud-meta"><span class="hud-chip hud-warning">${esc((ctx.warnings || []).join(', '))}</span></div>`
+  const ctx  = state.insertContext || {};
+  const ac   = TOOL_COLOR['insert-component'];
+  const comp = ctx.component || 'VALVE';
+
+  let rows = '';
+  if (comp === 'VALVE') {
+    rows = [
+      fieldRow([
+        { id:'subtype', label:'Type',   type:'select', opts:['Gate','Ball','Check','Butterfly','Globe'], val: ctx.subtype || 'Gate', flex:2 },
+        { id:'rating',  label:'Rating', type:'text',   val: ctx.rating || 'PN16', flex:1 },
+      ]),
+      fieldRow([
+        { id:'size',   label:'OD',     type:'text', val: ctx.size   || '', flex:1 },
+        { id:'facing', label:'Facing', type:'select', opts:['FW','RTJ','RF'], val: ctx.facing || 'FW', flex:1 },
+      ]),
+    ].join('');
+  } else if (comp === 'FLANGE') {
+    rows = [
+      fieldRow([
+        { id:'subtype', label:'Type',   type:'select', opts:['Weld Neck','Slip-on','Blind','SW'], val: ctx.subtype || 'Weld Neck', flex:2 },
+        { id:'rating',  label:'Rating', type:'text',   val: ctx.rating || 'PN16', flex:1 },
+      ]),
+      fieldRow([
+        { id:'size',    label:'OD',  type:'text', val: ctx.size    || '', flex:1 },
+        { id:'endType', label:'Std', type:'text', val: ctx.endType || 'B16.5', flex:1 },
+      ]),
+    ].join('');
+  } else if (comp === 'TEE') {
+    rows = [
+      fieldRow([
+        { id:'size',    label:'Header OD', type:'text', val: ctx.size    || '', flex:1 },
+        { id:'subtype', label:'Branch OD', type:'text', val: ctx.subtype || '', flex:1 },
+      ]),
+      fieldRow([
+        { id:'rating', label:'Rating', type:'text', val: ctx.rating || 'PN16', flex:1 },
+        { id:'facing', label:'Branch', type:'seg', opts:['Z+','Z−','Y+','Y−'], val: ctx.facing || 'Z+', flex:2 },
+      ]),
+    ].join('');
+  } else if (comp === 'ELBOW') {
+    rows = [
+      fieldRow([
+        { id:'subtype', label:'Angle',  type:'select', opts:['90°','45°','22.5°'], val: ctx.subtype || '90°', flex:1 },
+        { id:'facing',  label:'Radius', type:'select', opts:['LR','SR'],           val: ctx.facing  || 'LR',  flex:1 },
+      ]),
+      fieldRow([
+        { id:'size', label:'OD', type:'text', val: ctx.size || '', flex:1 },
+      ]),
+    ].join('');
+  } else if (comp === 'SUPPORT') {
+    rows = fieldRow([
+      { id:'subtype', label:'Type', type:'select', opts:['U-bolt','Shoe','Dummy Leg','Trunnion'], val: ctx.subtype || 'U-bolt', flex:2 },
+      { id:'size',    label:'OD',   type:'text',   val: ctx.size || '', flex:1 },
+    ]);
+  } else if (comp === 'REDUCER') {
+    rows = [
+      fieldRow([
+        { id:'size',    label:'From OD', type:'text', val: ctx.size    || '', flex:1 },
+        { id:'subtype', label:'To OD',   type:'text', val: ctx.subtype || '', flex:1 },
+      ]),
+      fieldRow([
+        { id:'facing', label:'Type', type:'select', opts:['Concentric','Eccentric'], val: ctx.facing || 'Concentric', flex:1 },
+      ]),
+    ].join('');
+  } else {
+    rows = fieldRow([
+      { id:'size',   label:'OD',     type:'text', val: ctx.size   || '', flex:1 },
+      { id:'rating', label:'Rating', type:'text', val: ctx.rating || '', flex:1 },
+    ]);
+  }
+
+  const warnHtml = (ctx.warnings || []).length
+    ? `<div class="hud-warn-row">${esc((ctx.warnings || []).join(', '))}</div>`
     : '';
-  const alternatives = (ctx.alternatives || []).length
-    ? `<div class="hud-row hud-meta"><span class="hud-chip">Alt: ${esc((ctx.alternatives || []).map((row) => [row.subtype || row.component, row.size || '', row.rating || ''].filter(Boolean).join(' ')).join(' | '))}</span></div>`
-    : '';
-  return `
-    <div class="hud-body">
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">At: ${esc(formatPt(ctx.point))}</span>
-        <span class="hud-chip hud-provenance">${esc(formatProvenanceLabel(ctx.provenance))}</span>
-      </div>
-      <div class="hud-row hud-fields-row">
-        <label>Type
-          <select data-field="component">
-            ${['VALVE','FLANGE','ELBOW','TEE','REDUCER','SUPPORT'].map((name) =>
-              `<option value="${name}" ${ctx.component === name ? 'selected' : ''}>${name}</option>`
-            ).join('')}
-          </select>
-        </label>
-        <label>Subtype <input data-field="subtype" type="text" value="${esc(ctx.subtype || '')}" /></label>
-      </div>
-      <div class="hud-row hud-fields-row">
-        <label>Size   <input data-field="size"    type="text" value="${esc(ctx.size || '')}" /></label>
-        <label>Rating <input data-field="rating"  type="text" value="${esc(ctx.rating || '')}" /></label>
-      </div>
-      <div class="hud-row hud-fields-row">
-        <label>Facing  <input data-field="facing"  type="text" value="${esc(ctx.facing || '')}" /></label>
-        <label>EndType <input data-field="endType" type="text" value="${esc(ctx.endType || '')}" /></label>
-      </div>
-      <div class="hud-row hud-fields-row">
-        <label>Length <input data-field="length" type="text" value="${esc(ctx.length || '')}" /></label>
-        <label>Weight <input data-field="weight" type="text" value="${esc(ctx.weight || '')}" /></label>
-      </div>
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">Pipeline: ${esc(ctx.pipelineRef || 'â€”')}</span>
-        <span class="hud-chip">Match: ${esc(ctx.resolvedMatchKey || 'â€”')}</span>
-      </div>
-      ${warnings}${alternatives}
-      <div class="hud-row hud-actions-row">
-        <button data-action="commit-insert" class="hud-primary">â†µ Insert</button>
-        <button data-action="cancel" class="hud-mini">Esc</button>
-      </div>
-      <div class="hud-settings-row">
-        <label><input type="checkbox" data-action="toggle-compact" ${state.isCompact ? 'checked' : ''} /> Compact</label>
-        <label>Opacity <input type="range" data-action="change-opacity" min="0.2" max="1" step="0.1" value="${state.opacity ?? 1}" /></label>
-      </div>
-    </div>`;
+
+  return [
+    `<div class="hud-fields-section">${rows}</div>`,
+    infoStrip([
+      'At',    formatPt(ctx.point),
+      'Match', ctx.resolvedMatchKey || '—',
+      'Prov.', formatProvenanceLabel(ctx.provenance),
+    ]),
+    warnHtml,
+    actionsBar([
+      { label:'↵ Insert', action:'commit-insert', primary:true },
+      { label:'Esc',      action:'cancel', danger:true },
+    ], ac),
+  ].join('');
 }
 
 function polylineDraftHtml(state) {
   const pts = state.draftPoints || [];
-  const preview = state.currentPreviewPoint;
-  return `
-    <div class="hud-body hud-compact">
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">Points: ${pts.length}</span>
-        ${preview ? `<span class="hud-chip">Cursor: ${esc(formatPt(preview))}</span>` : ''}
-      </div>
-      <div class="hud-row hud-meta" style="font-size:11px;color:#94a3b8;">
-        Click to add points Â· Double-click to finish
-      </div>
-      <div class="hud-row hud-actions-row">
-        <button data-action="cancel" class="hud-mini">Esc / Cancel</button>
-      </div>
-    </div>`;
+  const ac  = TOOL_COLOR['polyline-draw'];
+  return [
+    '<div class="hud-fields-section">',
+    fieldRow([
+      { id:'pipeline', label:'Pipeline', type:'text', val: state.draft?.routeId || 'new', flex:1 },
+      { id:'pts',      label:'Pts',      type:'badge', val: String(pts.length), flex:1 },
+    ]),
+    '</div>',
+    infoStrip(['Mode','Click to add points','End','Dbl-click']),
+    actionsBar([
+      { label:'↵ Finish', action:'cancel', primary:true },
+      { label:'Esc',      action:'cancel', danger:true },
+    ], ac),
+  ].join('');
 }
 
 function splineDraftHtml(state) {
   const pts = state.draftPoints || [];
-  const preview = state.currentPreviewPoint;
-  return `
-    <div class="hud-body hud-compact">
-      <div class="hud-row hud-meta">
-        <span class="hud-chip">Control pts: ${pts.length}</span>
-        ${preview ? `<span class="hud-chip">Cursor: ${esc(formatPt(preview))}</span>` : ''}
-      </div>
-      <div class="hud-row hud-meta" style="font-size:11px;color:#94a3b8;">
-        Click to add control points Â· Double-click to finish spline
-      </div>
-      <div class="hud-row hud-actions-row">
-        <button data-action="cancel" class="hud-mini">Esc / Cancel</button>
-      </div>
-    </div>`;
+  const ac  = TOOL_COLOR['spline-draw'];
+  return [
+    '<div class="hud-fields-section">',
+    fieldRow([
+      { id:'pts', label:'Points', type:'badge', val: String(pts.length), flex:1 },
+    ]),
+    '</div>',
+    infoStrip(['Mode','Click to add','End','Dbl-click']),
+    actionsBar([
+      { label:'↵ Finish', action:'cancel', primary:true },
+      { label:'Esc',      action:'cancel', danger:true },
+    ], ac),
+  ].join('');
 }
 
 const MODIFY_HINTS = {
-  MOVE:    'Click node to pick â†’ click target to move',
-  STRETCH: 'Click node to pick â†’ click target to stretch',
-  ROTATE:  'Click pivot point â†’ click to set rotation angle',
-  BREAK:   'Click a pipe segment to insert a break point',
-  DELETE:  'Click component or segment to delete',
+  MOVE:    ['Click','base node','Then','target'],
+  STRETCH: ['Click','end node','Drag','new pos.'],
+  ROTATE:  ['Click','pivot'],
+  BREAK:   ['Click','segment midpoint'],
+  DELETE:  ['Click','to select'],
 };
 
 function modifyToolHtml(state) {
-  const tool = state.activeTool || '';
+  const tool  = state.activeTool || '';
   const draft = state.modifyDraft;
-  const hint = MODIFY_HINTS[tool] || 'Click a component';
-  return `
-    <div class="hud-body hud-compact">
-      <div class="hud-row hud-meta">
-        <span class="hud-chip hud-active-tool">${esc(tool)}</span>
-        ${draft ? '<span class="hud-chip hud-warning">Base picked â€” click target</span>' : ''}
-      </div>
-      <div class="hud-row hud-meta" style="font-size:11px;color:#94a3b8;">${esc(hint)}</div>
-      <div class="hud-row hud-actions-row">
-        <button data-action="cancel" class="hud-mini">Esc / Cancel</button>
-      </div>
-    </div>`;
+  const ac    = TOOL_COLOR['modify-tool'];
+  const hints = MODIFY_HINTS[tool] || [];
+  const infoPairs = [...hints];
+  if (draft) infoPairs.push('Status', 'Base picked — click target');
+
+  let extraFields = '';
+  if (tool === 'ROTATE') {
+    extraFields = `<div class="hud-fields-section">${fieldRow([
+      { id:'angle',  label:'Angle', type:'text', val:'90°', flex:1 },
+      { id:'around', label:'Axis',  type:'seg', opts:['X','Y','Z'], val:'Z', flex:1 },
+    ])}</div>`;
+  } else if (tool === 'MOVE' || tool === 'STRETCH') {
+    extraFields = `<div class="hud-fields-section">${fieldRow([
+      { id:'snap', label:'Snap', type:'text', val:'250 mm', flex:1 },
+    ])}</div>`;
+  }
+
+  const actions = (tool === 'ROTATE')
+    ? [{ label:'↵ Apply', action:'modify-apply', primary:true }, { label:'Esc', action:'cancel', danger:true }]
+    : (tool === 'DELETE')
+    ? [{ label:'↵ Confirm', action:'modify-apply', primary:true, danger:false }, { label:'Esc', action:'cancel' }]
+    : [{ label:'Esc', action:'cancel', danger:true }];
+
+  return [
+    extraFields,
+    infoStrip(infoPairs),
+    actionsBar(actions, ac),
+  ].join('');
 }
 
+/* ═══════════════ Public factory ═══════════════ */
 export function createHudOverlay(container, handlers = {}) {
   const root = document.createElement('section');
   root.className = 'hud-overlay';
-  root.innerHTML = '';
   root.style.left = '72px';
-  root.style.top = '70px';
-  root.style.right = 'auto';
+  root.style.top  = '70px';
+  root.style.right  = 'auto';
   root.style.bottom = 'auto';
   container.appendChild(root);
 
+  /* ── drag ── */
   let drag = null;
-  const onPointerMove = (ev) => {
+  const onPointerMove = ev => {
     if (!drag) return;
-    const x = ev.clientX - drag.offsetX;
-    const y = ev.clientY - drag.offsetY;
-    root.style.left = `${Math.max(8, x)}px`;
-    root.style.top = `${Math.max(8, y)}px`;
-    root.style.right = 'auto';
+    root.style.left   = `${Math.max(8, ev.clientX - drag.offsetX)}px`;
+    root.style.top    = `${Math.max(8, ev.clientY - drag.offsetY)}px`;
+    root.style.right  = 'auto';
     root.style.bottom = 'auto';
   };
   const onPointerUp = () => { drag = null; };
   document.addEventListener('pointermove', onPointerMove);
-  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointerup',   onPointerUp);
 
-  root.addEventListener('pointerdown', (ev) => {
-    const handle = ev.target?.closest?.('.hud-drag-handle');
-    if (!handle) return;
-    const rect = root.getBoundingClientRect();
-    drag = { offsetX: ev.clientX - rect.left, offsetY: ev.clientY - rect.top };
+  root.addEventListener('pointerdown', ev => {
+    if (!ev.target.closest('[data-drag]')) return;
+    const r = root.getBoundingClientRect();
+    drag = { offsetX: ev.clientX - r.left, offsetY: ev.clientY - r.top };
   });
 
-  root.addEventListener('click', (ev) => {
-    const actionEl = ev.target.closest('[data-action]');
-    if (!actionEl) return;
-    const action = actionEl.dataset.action;
+  /* ── click dispatch ── */
+  root.addEventListener('click', ev => {
+    const el     = ev.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
 
-    // Mode switches
-    if (action === 'open')           return handlers.open?.();
-    if (action === 'line')           return handlers.activateLine?.();
-    if (action === 'polyline')       return handlers.activatePolyline?.();
-    if (action === 'spline')         return handlers.activateSpline?.();
-    if (action === 'insert-valve')   return handlers.activateInsert?.('VALVE');
-    if (action === 'insert-flange')  return handlers.activateInsert?.('FLANGE');
-    if (action === 'insert-elbow')   return handlers.activateInsert?.('ELBOW');
-    if (action === 'insert-tee')     return handlers.activateInsert?.('TEE');
-    if (action === 'insert-support') return handlers.activateInsert?.('SUPPORT');
-    if (action === 'modify-move')    return handlers.activateModifyTool?.('MOVE');
-    if (action === 'modify-stretch') return handlers.activateModifyTool?.('STRETCH');
-    if (action === 'modify-rotate')  return handlers.activateModifyTool?.('ROTATE');
-    if (action === 'modify-break')   return handlers.activateModifyTool?.('BREAK');
-    if (action === 'modify-delete')  return handlers.activateModifyTool?.('DELETE');
+    if (action === 'hide')          return handlers.hide?.();
+    if (action === 'open')          return handlers.open?.();
+    if (action === 'cancel')        return handlers.cancel?.();
+    if (action === 'commit-line')   return handlers.commitLine?.();
+    if (action === 'commit-insert') return handlers.commitInsert?.();
+    if (action === 'rise')          return handlers.commitRise?.();
+    if (action === 'drop')          return handlers.commitDrop?.();
+    if (action === 'modify-apply')  return handlers.commitModify?.();
 
-    // Workflow actions
-    if (action === 'auto-bend')      return handlers.commitAutoBend?.();
-    if (action === 'auto-tee')       return handlers.commitAutoTee?.();
-    if (action === 'cancel')         return handlers.cancel?.();
-    if (action === 'hide')           return handlers.hide?.();
-    if (action === 'axis')           return handlers.setAxis?.(actionEl.dataset.axis);
-    if (action === 'sign')           return handlers.setSign?.(Number(actionEl.dataset.sign || 1));
-    if (action === 'commit-line')    return handlers.commitLine?.();
-    if (action === 'commit-insert')  return handlers.commitInsert?.();
-    if (action === 'rise')           return handlers.commitRise?.();
-    if (action === 'drop')           return handlers.commitDrop?.();
-    if (action === 'toggle-compact') return handlers.toggleCompact?.(ev.target.checked);
+    /* seg buttons */
+    if (action?.startsWith('seg-')) {
+      const field = action.slice(4);
+      const val   = el.dataset.val;
+      if      (field === 'axis') handlers.setAxis?.(val);
+      else if (field === 'sign') handlers.setSign?.(val === '+' ? 1 : -1);
+      else                       handlers.updateField?.(field, val);
+    }
   });
 
-  root.addEventListener('change', (ev) => {
-    if (ev.target.closest('[data-action="change-opacity"]')) handlers.changeOpacity?.(ev.target.value);
-    if (ev.target.closest('[data-action="toggle-compact"]')) handlers.toggleCompact?.(ev.target.checked);
-  });
-
-  root.addEventListener('input', (ev) => {
+  root.addEventListener('input', ev => {
     const field = ev.target?.dataset?.field;
     if (field) handlers.updateField?.(field, ev.target.value);
   });
 
+  /* ── render ── */
   function render(state) {
-    const mode = state.mode || 'idle';
+    const mode    = state.mode || 'idle';
     const visible = state.visible !== false;
     root.classList.toggle('is-hidden', !visible);
     root.classList.toggle('is-active', visible && mode !== 'idle');
-    root.classList.toggle('hud-compact', Boolean(state.isCompact));
 
     if (!visible) {
-      root.innerHTML = `<button class="hud-open-btn" data-action="open">HUD</button>`;
+      const ac = TOOL_COLOR[mode] || '#64748b';
+      root.innerHTML = `<button class="hud-open-btn" data-action="open"
+        style="border-color:${ac}55;color:${ac}">HUD</button>`;
       root.style.width = '';
       return;
     }
 
-    // Smart width based on active mode
-    root.style.width = MODE_META[mode]?.width || '216px';
-    // Opacity
+    root.style.width   = '216px';
     root.style.opacity = String(state.opacity ?? 1);
 
     const errors = (state.errors || []).length
-      ? `<div class="hud-errors">${(state.errors || []).map((msg) => `<div>${esc(msg)}</div>`).join('')}</div>`
+      ? `<div class="hud-errors">${state.errors.map(m => `<div>${esc(m)}</div>`).join('')}</div>`
       : '';
 
-    let body = topbarHtml(state);
+    let body = headerHtml(state);
 
-    // Compact mode hides the hints bar
-    if (!state.isCompact) {
-      body += '<div class="hud-hints">L line · PL polyline · SP spline · V/F/E/T/S insert · Shift+B bend · Shift+T tee · Enter commit · Esc cancel</div>';
-    }
-
-    if (mode === 'line-draw')         body += lineDraftHtml(state);
-    else if (mode === 'insert-component') body += insertDraftHtml(state);
-    else if (mode === 'polyline-draw') body += polylineDraftHtml(state);
-    else if (mode === 'spline-draw')   body += splineDraftHtml(state);
-    else if (mode === 'modify-tool')   body += modifyToolHtml(state);
-    else body += `<div class="hud-body hud-idle">Select a tool above or use keyboard shortcuts.</div>`;
+    if      (mode === 'line-draw')         body += lineDraftHtml(state);
+    else if (mode === 'insert-component')  body += insertDraftHtml(state);
+    else if (mode === 'polyline-draw')     body += polylineDraftHtml(state);
+    else if (mode === 'spline-draw')       body += splineDraftHtml(state);
+    else if (mode === 'modify-tool')       body += modifyToolHtml(state);
+    else body += `<div class="hud-idle-msg">Select a tool to begin.</div>`;
 
     body += errors;
     root.innerHTML = body;
@@ -321,9 +409,8 @@ export function createHudOverlay(container, handlers = {}) {
     render,
     destroy() {
       document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointerup',   onPointerUp);
       root.remove();
     },
   };
 }
-
