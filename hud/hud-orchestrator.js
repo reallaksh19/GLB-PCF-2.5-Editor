@@ -62,57 +62,76 @@ export function createHudOrchestrator({ container, shellApi }) {
   if (!shellApi) throw new Error('HUD requires shellApi');
 
   const store = createHudStore({ ...clone(initialHudState), visible: false, mode: 'idle', errors: [], lastLengthMm: null });
+
+  /* ── Named action functions (called from overlay, keyboard, and public API) ── */
+
+  function activateLine() {
+    const nextDraft = buildInitialLineDraft(shellApi, store.getState().draft || {});
+    store.patch({ visible: true, mode: 'line-draw', draft: nextDraft, errors: [] });
+    emitHudTrace('LINE_MODE_OPEN', { axis: nextDraft.axis, routeId: nextDraft.routeId || null });
+  }
+
+  function activatePolyline() {
+    store.patch({ visible: true, mode: 'polyline-draw', draftPoints: [], errors: [] });
+    emitHudTrace('POLYLINE_MODE_OPEN');
+  }
+
+  function activateSpline() {
+    store.patch({ visible: true, mode: 'spline-draw', draftPoints: [], errors: [] });
+    emitHudTrace('SPLINE_MODE_OPEN');
+  }
+
+  function activateInsert(component) {
+    const ctx = resolveInsertDefaults(component, shellApi);
+    store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
+    emitHudTrace('INSERT_MODE_OPEN', { component: ctx.component, point: ctx.point, provenance: ctx.provenance || 'default', matchKey: ctx.resolvedMatchKey || null }, true);
+  }
+
+  function activateModifyTool(tool) {
+    store.patch({ visible: true, mode: 'modify-tool', activeTool: tool, modifyDraft: null, errors: [] });
+    emitHudTrace('MODIFY_TOOL_OPEN', { tool });
+  }
+
+  function cancelHud() {
+    const state = store.getState();
+    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
+      store.patch({ draftPoints: [], errors: [], mode: 'idle' });
+      emitHudTrace('DRAFT_CANCELLED');
+    } else if (state.mode === 'modify-tool') {
+      store.patch({ modifyDraft: null, activeTool: null, mode: 'idle', errors: [] });
+      emitHudTrace('MODIFY_CANCELLED');
+    }
+    store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible });
+    emitHudTrace('HUD_CANCEL', {}, true);
+  }
+
+  function setAxisFn(axis) {
+    const state = store.getState();
+    if (state.mode !== 'line-draw') return;
+    const draft = { ...(state.draft || {}), axis: String(axis || 'X').toUpperCase() };
+    draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
+    store.patch({ draft, axisLock: draft.axis });
+  }
+
+  function setSignFn(sign) {
+    const state = store.getState();
+    if (state.mode !== 'line-draw') return;
+    const draft = { ...(state.draft || {}), sign: sign < 0 ? -1 : 1 };
+    draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
+    store.patch({ draft });
+  }
+
   const overlay = createHudOverlay(container, {
-    open: () => store.patch({ visible: true, errors: [] }),
-    hide: () => store.patch({ visible: false, errors: [], mode: 'idle' }),
-    activatePolyline: () => {
-      store.patch({ visible: true, mode: 'polyline-draw', draftPoints: [], errors: [] });
-      emitHudTrace('POLYLINE_MODE_OPEN');
-    },
-    activateSpline: () => {
-      store.patch({ visible: true, mode: 'spline-draw', draftPoints: [], errors: [] });
-      emitHudTrace('SPLINE_MODE_OPEN');
-    },
-    activateModifyTool: (tool) => {
-      store.patch({ visible: true, mode: 'modify-tool', activeTool: tool, modifyDraft: null, errors: [] });
-      emitHudTrace('MODIFY_TOOL_OPEN', { tool });
-    },
-    activateLine: () => {
-      const nextDraft = buildInitialLineDraft(shellApi, store.getState().draft || {});
-      store.patch({ visible: true, mode: 'line-draw', draft: nextDraft, errors: [] });
-      emitHudTrace('LINE_MODE_OPEN', { axis: nextDraft.axis, routeId: nextDraft.routeId || null });
-    },
-    activateInsert: (component) => {
-      const ctx = resolveInsertDefaults(component, shellApi);
-      store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
-      emitHudTrace('INSERT_MODE_OPEN', { component: ctx.component, point: ctx.point, provenance: ctx.provenance || 'default', matchKey: ctx.resolvedMatchKey || null }, true);
-    },
-    cancel: () => {
-      const state = store.getState();
-      if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
-         store.patch({ draftPoints: [], errors: [], mode: 'idle' });
-         emitHudTrace('DRAFT_CANCELLED');
-      } else if (state.mode === 'modify-tool') {
-         store.patch({ modifyDraft: null, activeTool: null, mode: 'idle', errors: [] });
-         emitHudTrace('MODIFY_CANCELLED');
-      }
-      store.patch({ mode: 'idle', draft: null, insertContext: null, errors: [], visible: state.visible });
-      emitHudTrace('HUD_CANCEL', {}, true);
-    },
-    setAxis: (axis) => {
-      const state = store.getState();
-      if (state.mode !== 'line-draw') return;
-      const draft = { ...(state.draft || {}), axis: String(axis || 'X').toUpperCase() };
-      draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-      store.patch({ draft, axisLock: draft.axis });
-    },
-    setSign: (sign) => {
-      const state = store.getState();
-      if (state.mode !== 'line-draw') return;
-      const draft = { ...(state.draft || {}), sign: sign < 0 ? -1 : 1 };
-      draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-      store.patch({ draft });
-    },
+    open:               () => store.patch({ visible: true, errors: [] }),
+    hide:               () => store.patch({ visible: false, errors: [], mode: 'idle' }),
+    activateLine,
+    activatePolyline,
+    activateSpline,
+    activateInsert,
+    activateModifyTool,
+    cancel:             cancelHud,
+    setAxis:            setAxisFn,
+    setSign:            setSignFn,
     updateField: (field, value) => {
       const state = store.getState();
       if (state.mode === 'line-draw') {
@@ -225,29 +244,36 @@ export function createHudOrchestrator({ container, shellApi }) {
   overlay.render(store.getState());
 
   const offKeyboard = installHudKeyboard(overlay.root, {
-    line: () => overlay.root.querySelector('[data-action="line"]')?.click(),
-    insert: (component) => {
-      if (component === 'VALVE') overlay.root.querySelector('[data-action="insert-valve"]')?.click();
-      if (component === 'FLANGE') overlay.root.querySelector('[data-action="insert-flange"]')?.click();
-      if (component === 'ELBOW') overlay.root.querySelector('[data-action="insert-elbow"]')?.click();
-      if (component === 'TEE') overlay.root.querySelector('[data-action="insert-tee"]')?.click();
-      if (component === 'SUPPORT') overlay.root.querySelector('[data-action="insert-support"]')?.click();
-      if (component === 'REDUCER') {
-        overlay.root.querySelector('[data-action="insert-support"]')?.click();
-        const state = store.getState();
-        if (state.mode === 'insert-component') store.patch({ insertContext: resolveInsertDefaults('REDUCER', shellApi) });
-      }
-    },
-    axis: (axis) => overlay.root.querySelector(`[data-action="axis"][data-axis="${axis}"]`)?.click(),
-    sign: (sign) => overlay.root.querySelector(`[data-action="sign"][data-sign="${sign}"]`)?.click(),
+    line:   () => activateLine(),
+    insert: (component) => activateInsert(component),
+    axis:   (axis) => setAxisFn(axis),
+    sign:   (sign) => setSignFn(sign),
     commit: () => {
       const state = store.getState();
-      if (state.mode === 'line-draw') overlay.root.querySelector('[data-action="commit-line"]')?.click();
+      if (state.mode === 'line-draw')        overlay.root.querySelector('[data-action="commit-line"]')?.click();
       else if (state.mode === 'insert-component') overlay.root.querySelector('[data-action="commit-insert"]')?.click();
     },
-    autoBend: () => overlay.root.querySelector('[data-action="auto-bend"]')?.click(),
-    autoTee: () => overlay.root.querySelector('[data-action="auto-tee"]')?.click(),
-    cancel: () => overlay.root.querySelector('[data-action="cancel"]')?.click(),
+    autoBend: () => {
+      try {
+        const inserted = shellApi.autoBendRoute?.({ source: 'hud-kb-auto-bend' });
+        if (inserted) setTimeout(() => { try { shellApi.selectComponent?.(inserted, null, 'hud-kb-auto-bend'); } catch (_) {} }, 0);
+        store.patch({ errors: [] });
+        emitHudTrace('AUTO_BEND_COMMIT', { insertedId: inserted?.id || null }, true);
+      } catch (err) {
+        store.patch({ errors: [String(err?.message || err)] });
+      }
+    },
+    autoTee: () => {
+      try {
+        const inserted = shellApi.autoTeeRoute?.({ source: 'hud-kb-auto-tee' });
+        if (inserted) setTimeout(() => { try { shellApi.selectComponent?.(inserted, null, 'hud-kb-auto-tee'); } catch (_) {} }, 0);
+        store.patch({ errors: [] });
+        emitHudTrace('AUTO_TEE_COMMIT', { insertedId: inserted?.id || null }, true);
+      } catch (err) {
+        store.patch({ errors: [String(err?.message || err)] });
+      }
+    },
+    cancel: () => cancelHud(),
   });
 
   const onPointerClick = (ev) => {
@@ -413,29 +439,12 @@ export function createHudOrchestrator({ container, shellApi }) {
   }) || (() => {});
 
   const api = {
-    getState() {
-      return store.getState();
-    },
-    showLineMode() {
-      overlay.root.querySelector('[data-action="line"]')?.click();
-    },
-    showPolylineMode() {
-      store.patch({ visible: true, mode: 'polyline-draw', draftPoints: [], errors: [] });
-      emitHudTrace('POLYLINE_MODE_OPEN');
-    },
-    showSplineMode() {
-      store.patch({ visible: true, mode: 'spline-draw', draftPoints: [], errors: [] });
-      emitHudTrace('SPLINE_MODE_OPEN');
-    },
-    activateModifyTool(tool) {
-      store.patch({ visible: true, mode: 'modify-tool', activeTool: tool, errors: [] });
-      emitHudTrace('MODIFY_TOOL_OPEN', { tool });
-    },
-    showInsertMode(component = 'VALVE') {
-      const btn = overlay.root.querySelector(`[data-action="insert-${String(component).toLowerCase()}"]`);
-      if (btn) btn.click();
-      else store.patch({ visible: true, mode: 'insert-component', insertContext: resolveInsertDefaults(component, shellApi) });
-    },
+    getState()                    { return store.getState(); },
+    showLineMode()                { activateLine(); },
+    showPolylineMode()            { activatePolyline(); },
+    showSplineMode()              { activateSpline(); },
+    activateModifyTool(tool)      { activateModifyTool(tool); },
+    showInsertMode(component = 'VALVE') { activateInsert(component); },
     destroy() {
       try { offKeyboard?.(); } catch (_) {}
       try { offRoute?.(); } catch (_) {}
