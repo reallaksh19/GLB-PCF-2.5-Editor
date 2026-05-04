@@ -117,8 +117,20 @@ function actionsBar(actions, ac) {
 /* ═══════════════ Mode bodies ═══════════════ */
 
 function lineDraftHtml(state) {
-  const draft = state.draft || {};
-  const ac = TOOL_COLOR['line-draw'];
+  const draft   = state.draft || {};
+  const ac      = TOOL_COLOR['line-draw'];
+  const waiting = state.awaitingAnchorClick || !draft.anchorPoint;
+
+  /* While waiting for a canvas click, show a prompt instead of full fields */
+  if (waiting) {
+    return [
+      infoStrip(['Start', 'Click canvas to set start point']),
+      actionsBar([
+        { label:'Esc', action:'cancel', danger:true },
+      ], ac),
+    ].join('');
+  }
+
   return [
     '<div class="hud-fields-section">',
     fieldRow([
@@ -148,6 +160,14 @@ function insertDraftHtml(state) {
   const ctx  = state.insertContext || {};
   const ac   = TOOL_COLOR['insert-component'];
   const comp = ctx.component || 'VALVE';
+
+  /* If no insertion point set yet, prompt user to click canvas */
+  if (!ctx.point) {
+    return [
+      infoStrip(['At', 'Click canvas to place ' + comp]),
+      actionsBar([{ label:'Esc', action:'cancel', danger:true }], ac),
+    ].join('');
+  }
 
   let rows = '';
   if (comp === 'VALVE') {

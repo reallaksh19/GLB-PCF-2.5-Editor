@@ -15,21 +15,32 @@ function emitHudTrace(event, details = {}, ok = true) {
   emit('debug:trace', createHudTrace(event, details, ok));
 }
 
+function hasRealRouteAnchor(shellApi) {
+  const route    = shellApi?.getRouteEngine?.()?.getActiveRoute?.();
+  const selected = shellApi?.getSelectedComponent?.();
+  return (route?.nodes?.length > 0)
+    || Boolean(selected?.geometry?.origin || selected?.geometry?.ep2 || selected?.geometry?.ep1);
+}
+
 function buildInitialLineDraft(shellApi, prev = {}) {
-  const axis = String(prev.axis || 'X').toUpperCase();
-  const sign = prev.sign < 0 ? -1 : 1;
-  const anchorPoint = getActiveRouteAnchor(shellApi);
-  const routeId = shellApi?.getRouteEngine?.()?.getActiveRoute?.()?.id || null;
-  const lengthMm = Number(prev.lengthMm) > 0 ? Number(prev.lengthMm) : 1000;
+  const axis      = String(prev.axis || 'X').toUpperCase();
+  const sign      = prev.sign < 0 ? -1 : 1;
+  const routeId   = shellApi?.getRouteEngine?.()?.getActiveRoute?.()?.id || null;
+  const lengthMm  = Number(prev.lengthMm) > 0 ? Number(prev.lengthMm) : 1000;
+
+  // Only auto-set anchor if there is a real continuation point (existing route or
+  // selected object). Otherwise leave it null so the user clicks the canvas.
+  const anchorPoint = hasRealRouteAnchor(shellApi) ? getActiveRouteAnchor(shellApi) : null;
+
   return {
     axis,
     sign,
     lengthMm,
     routeId,
     anchorPoint,
-    previewPoint: computePreviewPoint(anchorPoint, axis, lengthMm, sign),
-    size: prev.size || '',
-    rating: prev.rating || '',
+    previewPoint: anchorPoint ? computePreviewPoint(anchorPoint, axis, lengthMm, sign) : null,
+    size:        prev.size        || '',
+    rating:      prev.rating      || '',
     pipelineRef: prev.pipelineRef || '',
   };
 }
@@ -66,9 +77,10 @@ export function createHudOrchestrator({ container, shellApi }) {
   /* ── Named action functions (called from overlay, keyboard, and public API) ── */
 
   function activateLine() {
-    const nextDraft = buildInitialLineDraft(shellApi, store.getState().draft || {});
-    store.patch({ visible: true, mode: 'line-draw', draft: nextDraft, errors: [] });
-    emitHudTrace('LINE_MODE_OPEN', { axis: nextDraft.axis, routeId: nextDraft.routeId || null });
+    const nextDraft           = buildInitialLineDraft(shellApi, store.getState().draft || {});
+    const awaitingAnchorClick = !nextDraft.anchorPoint;
+    store.patch({ visible: true, mode: 'line-draw', draft: nextDraft, awaitingAnchorClick, errors: [] });
+    emitHudTrace('LINE_MODE_OPEN', { axis: nextDraft.axis, routeId: nextDraft.routeId || null, awaitingAnchorClick });
   }
 
   function activatePolyline() {
@@ -276,10 +288,48 @@ export function createHudOrchestrator({ container, shellApi }) {
     cancel: () => cancelHud(),
   });
 
+  function ndcFromEvent(ev) {
+    const rect = container.getBoundingClientRect();
+    return {
+      x: ((ev.clientX - rect.left) / rect.width)  * 2 - 1,
+      y: -((ev.clientY - rect.top)  / rect.height) * 2 + 1,
+    };
+  }
+
   const onPointerClick = (ev) => {
+      // Ignore clicks that land on the HUD card itself
+      if (ev.target?.closest?.('.hud-overlay')) return;
+
       const state = store.getState();
       if (!state.visible) return;
 
+      /* ── LINE DRAW: set anchor from canvas click ── */
+      if (state.mode === 'line-draw') {
+          if (state.awaitingAnchorClick || !state.draft?.anchorPoint) {
+              const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
+              const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+              if (worldPt) {
+                  const draft = { ...(state.draft || {}), anchorPoint: worldPt };
+                  draft.previewPoint = computePreviewPoint(worldPt, draft.axis, draft.lengthMm, draft.sign);
+                  store.patch({ draft, awaitingAnchorClick: false });
+                  emitHudTrace('LINE_ANCHOR_SET', { point: worldPt });
+              }
+          }
+          return; // never fall through to scene selection while in line-draw
+      }
+
+      /* ── INSERT: set insertion point from canvas click ── */
+      if (state.mode === 'insert-component') {
+          const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
+          const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+          if (worldPt) {
+              store.patch({ insertContext: { ...(state.insertContext || {}), point: worldPt } });
+              emitHudTrace('INSERT_POINT_SET', { point: worldPt });
+          }
+          return;
+      }
+
+      /* ── POLYLINE / SPLINE: collect points ── */
       if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
           if (state.currentPreviewPoint) {
               const pts = [...(state.draftPoints || []), state.currentPreviewPoint];

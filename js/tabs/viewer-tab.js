@@ -194,6 +194,11 @@ function handleScenePick(ev) {
   if (!_sceneRenderer) return;
   if (ev.target?.closest?.('.hud-overlay')) return;
 
+  // Don't steal clicks when HUD is in an active draw/insert/modify mode —
+  // the HUD orchestrator handles those clicks itself.
+  const hudMode = _hudApi?.getState?.()?.mode;
+  if (hudMode && hudMode !== 'idle') return;
+
   const container = byId(VIEWER_UI_IDS.canvas);
   if (!container) return;
 
