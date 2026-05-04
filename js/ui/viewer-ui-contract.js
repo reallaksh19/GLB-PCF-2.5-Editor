@@ -67,6 +67,7 @@ export const VIEWER_UI_IDS = Object.freeze({
 
   macroToggle: 'hifi-btn-macro-toggle',
   macroTray: 'hifi-macro-tray',
+  incrementalSync: 'hifi-btn-incremental-sync',
 });
 
 export const DEBUG_UI_IDS = Object.freeze({

@@ -233,7 +233,7 @@ export function createHudOrchestrator({ container, shellApi }) {
         store.patch({ errors: [] });
         emitHudTrace('AUTO_BEND_COMMIT', { insertedId: inserted?.id || null }, true);
       } catch (err) {
-        store.patch({ errors: [String(err?.message || err)] });
+        store.patch({ visible: true, errors: [String(err?.message || err)] });
         emitHudTrace('AUTO_BEND_COMMIT_FAIL', { message: String(err?.message || err) }, false);
       }
     },
@@ -246,7 +246,7 @@ export function createHudOrchestrator({ container, shellApi }) {
         store.patch({ errors: [] });
         emitHudTrace('AUTO_TEE_COMMIT', { insertedId: inserted?.id || null }, true);
       } catch (err) {
-        store.patch({ errors: [String(err?.message || err)] });
+        store.patch({ visible: true, errors: [String(err?.message || err)] });
         emitHudTrace('AUTO_TEE_COMMIT_FAIL', { message: String(err?.message || err) }, false);
       }
     },
@@ -331,9 +331,11 @@ export function createHudOrchestrator({ container, shellApi }) {
 
       /* ── POLYLINE / SPLINE: collect points ── */
       if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
-          if (state.currentPreviewPoint) {
-              const pts = [...(state.draftPoints || []), state.currentPreviewPoint];
-              store.patch({ draftPoints: pts });
+          const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
+          const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+          if (worldPt) {
+              const pts = [...(state.draftPoints || []), worldPt];
+              store.patch({ draftPoints: pts, currentPreviewPoint: worldPt });
               if (state.mode === 'polyline-draw') {
                   emitHudTrace('POLYLINE_POINT_ADDED', { points: pts.length });
               } else {

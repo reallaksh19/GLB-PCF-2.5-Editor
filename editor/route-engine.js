@@ -1045,7 +1045,7 @@ function createEditorStore(seedState) {
   };
 }
 
-export function routeModelToComponents(routes = [], inlineComponents = []) {
+export function routeModelToComponents(routes = [], inlineComponents = [], guides = []) {
   const components = [];
   for (const route of routes || []) {
     const nodeIndex = routeNodeIndex(route);
@@ -1061,6 +1061,17 @@ export function routeModelToComponents(routes = [], inlineComponents = []) {
         components.push(routeCornerToElbow(route, prevSeg, nextSeg, nodeIndex));
       }
     }
+  }
+  // Flatten guides into renderable components (type 'GUIDE')
+  for (const g of guides || []) {
+    components.push({
+      id: g.id,
+      type: 'GUIDE',
+      label: `${g.type || 'LINE'} GUIDE`,
+      geometry: { points: g.points, origin: g.points?.[0] || { x: 0, y: 0, z: 0 } },
+      attributes: g.attributes || {},
+      metadata: { source: { guideId: g.id }, squareText: null, squarePos: null, circleText: null, circleCoord: null, warnings: [] },
+    });
   }
   return [...components, ...(inlineComponents || [])];
 }
@@ -1272,7 +1283,11 @@ export function createRouteEngine(options = {}) {
   }
 
   function getDerivedComponents() {
-    return routeModelToComponents(getRoutes(), getInlineComponents());
+    return routeModelToComponents(
+      getRoutes(),
+      getInlineComponents(),
+      store.getState().model?.guides || []
+    );
   }
 
   function getMetrics() {

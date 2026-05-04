@@ -125,9 +125,25 @@ function decorateAsDraft2d(mesh, comp, theme) {
   return root;
 }
 
+function buildGuideMesh(comp, theme) {
+  const pts = comp.geometry?.points || [];
+  if (pts.length < 2) return null;
+  const toV = (p) => toThree(p);
+  const vecs = pts.map(toV);
+  const guideType = comp.label?.includes('SPLINE') ? 'SPLINE' : 'LINE';
+  const color = 0x3b82f6; // blue
+  if (guideType === 'SPLINE') {
+    const curve = new THREE.CatmullRomCurve3(vecs);
+    const curvePts = curve.getPoints(Math.max(60, vecs.length * 12));
+    return _lineSeg(curvePts, color, comp);
+  }
+  return _lineSeg(vecs, color, comp);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MESH_DISPATCH = {
+  'GUIDE':               buildGuideMesh,
   'PIPE':                buildPipeDraft,
   'ELBOW':               buildBendDraft,
   'BEND':                buildBendDraft,

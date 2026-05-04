@@ -43,6 +43,8 @@ let _masterDbResolver = null;
 let _masterDbPopup = null;
 let _macroTerminalApi = null;
 let _cegGraph = null;   // Canonical Edit Graph — set when a DXF is imported
+let _knownRouteCompIds = new Set(); // tracks IDs already rendered incrementally
+let _autoFitEnabled = false; // Controls if scene should zoom/fit when new geometry is added
 
 function _exposeSceneRenderer(renderer) {
   if (typeof window !== 'undefined') window._sceneRenderer = renderer;
@@ -141,7 +143,9 @@ function refreshScene(reason = 'refresh-scene', meta = {}) {
   const domain = getDomain();
   if (!_sceneRenderer || !domain) return;
 
-  _sceneRenderer.loadComponents(getSceneComponents(), domain);
+  _sceneRenderer.loadComponents(getSceneComponents(), domain, _autoFitEnabled);
+  // After a full reload, rebuild the known-ID set so incremental sync stays consistent
+  _knownRouteCompIds = new Set((_routeEngine?.getDerivedComponents?.() || []).map(c => c.id));
   _lastLoadMeta = buildLoadMeta(reason, meta);
   emit('model-loaded', _lastLoadMeta);
 }
@@ -447,6 +451,8 @@ function destroyViewerTab() {
   _sceneRenderer = null;
 
   _cegGraph = null;
+  _autoFitEnabled = false;
+  _knownRouteCompIds = new Set();
   if (typeof window !== 'undefined') {
     window._sceneRenderer = null;
     window.__viewerShell  = null;
@@ -546,7 +552,24 @@ export function initViewerTab() {
     emit('debug:trace', { scope: 'masterdb', event: 'STATE_CHANGE', ok: true, timestamp: Date.now(), details: { rowCount: (state.rows || []).length, open: Boolean(state.open), dirty: Boolean(state.dirty), lastResolution: state.lastResolution || null } });
   });
   _routeEngine.subscribe(() => {
-    refreshScene('route-engine-sync', { sourceName: 'route-engine', sourceType: 'route' });
+    // Incremental sync: add only newly derived components without clearing the scene.
+    // This avoids the flash/clear cycle on every commit.
+    const domain = getDomain();
+    if (!_sceneRenderer || !domain) return;
+    const allDerived = _routeEngine?.getDerivedComponents?.() || [];
+    const newComps = allDerived.filter(c => !_knownRouteCompIds.has(c.id));
+    let added = false;
+    for (const comp of newComps) {
+      _sceneRenderer.addComponent(comp, domain, false); // pass false, we'll fitAll once at the end if needed
+      _knownRouteCompIds.add(comp.id);
+      added = true;
+    }
+    if (added && _autoFitEnabled) {
+      _sceneRenderer.fitAll();
+    }
+    // Update load meta for debug tab
+    _lastLoadMeta = buildLoadMeta('route-engine-incremental', { sourceName: 'route-engine', sourceType: 'route' });
+    emit('model-loaded', _lastLoadMeta);
   });
   _exposeSceneRenderer(_sceneRenderer);
   if (sidePanel) clearPanel(sidePanel);
@@ -624,4 +647,23 @@ export function initViewerTab() {
     _viewerUiStore?.dispatch({ type: VIEWER_UI_ACTIONS.setTheme, theme: themeSelect.value });
   }
   setViewerMode(VIEWER_UI_MODES.draft2d);
+
+  // ⟳ button: toggle auto-fit behavior
+  const syncBtn = byId(VIEWER_UI_IDS.incrementalSync);
+  if (syncBtn) {
+    syncBtn.title = _autoFitEnabled
+        ? 'Auto-Fit ON: View will automatically zoom to fit when geometry updates'
+        : 'Auto-Fit OFF: View will not zoom when geometry updates';
+    syncBtn.addEventListener('click', () => {
+      _autoFitEnabled = !_autoFitEnabled;
+      syncBtn.classList.toggle('active', _autoFitEnabled);
+      syncBtn.title = _autoFitEnabled
+        ? 'Auto-Fit ON: View will automatically zoom to fit when geometry updates'
+        : 'Auto-Fit OFF: View will not zoom when geometry updates';
+      setViewerStatus(
+        _autoFitEnabled ? 'Auto-Fit enabled' : 'Auto-Fit disabled',
+        _autoFitEnabled ? 'ok' : 'idle'
+      );
+    });
+  }
 }

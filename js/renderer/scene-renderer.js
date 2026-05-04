@@ -77,6 +77,11 @@ export class SceneRenderer {
     this._symbolGroup = new THREE.Group();
     this._scene.add(this._symbolGroup);
 
+    // HUD live-draft preview layer (rebuilt every frame, never persisted)
+    this._previewGroup = new THREE.Group();
+    this._previewGroup.renderOrder = 999;
+    this._scene.add(this._previewGroup);
+
     this._compIndex = new Map();
     this._meshIndex = new Map();
     this._highlighted = null;
@@ -117,17 +122,17 @@ export class SceneRenderer {
     }
   }
 
-  addComponent(comp, domain) {
+  addComponent(comp, domain, autoFit = true) {
     if (!comp || !domain) return;
     try {
       this._addComponentToScene(comp, domain);
-      this.fitAll();
+      if (autoFit) this.fitAll();
     } catch (err) {
       appLogger.error('SCENE_RENDER_FAIL', { compId: comp.id, message: err.message });
     }
   }
 
-  addComponents(components, domain) {
+  addComponents(components, domain, autoFit = true) {
     for (const comp of components || []) {
       if (!comp) continue;
       try {
@@ -136,14 +141,14 @@ export class SceneRenderer {
         appLogger.error('SCENE_RENDER_FAIL', { compId: comp.id, message: err.message });
       }
     }
-    this.fitAll();
+    if (autoFit) this.fitAll();
   }
 
-  loadComponents(components, domain) {
+  loadComponents(components, domain, autoFit = true) {
     this._lastComponents = components;
     this._lastDomain = domain;
     this.clear();
-    this.addComponents(components, domain);
+    this.addComponents(components, domain, autoFit);
   }
 
   _setActiveCamera(camera) {
@@ -236,7 +241,7 @@ export class SceneRenderer {
   }
 
   clear() {
-    [this._meshGroup, this._labelGroup, this._symbolGroup].forEach(group => {
+    [this._meshGroup, this._labelGroup, this._symbolGroup, this._previewGroup].forEach(group => {
       while (group.children.length > 0) {
         const child = group.children[0];
         group.remove(child);
@@ -508,9 +513,67 @@ export class SceneRenderer {
     this.clear();
   }
 
+  /**
+   * Rebuild the live-draft preview from the current HUD state.
+   * Called every animation frame so the yellow ghost follows the cursor.
+   * Points are in model-mm; we apply the same axis-remap as toThree():
+   *   threeX = model.y * SCALE,  threeY = model.z * SCALE,  threeZ = model.x * SCALE
+   */
+  updateHudPreview(hudState) {
+    // Clear old preview geometry
+    while (this._previewGroup.children.length > 0) {
+      const child = this._previewGroup.children[0];
+      this._previewGroup.remove(child);
+      child.geometry?.dispose?.();
+      if (Array.isArray(child.material)) child.material.forEach(m => m.dispose?.());
+      else child.material?.dispose?.();
+    }
+
+    if (!hudState?.visible || !hudState?.mode || hudState.mode === 'idle') return;
+
+    // Collect model-mm points based on mode
+    const rawPts = [];
+    if (hudState.mode === 'line-draw') {
+      const a = hudState.draft?.anchorPoint;
+      const b = hudState.draft?.previewPoint;
+      if (a && b) { rawPts.push(a, b); }
+    } else if (hudState.mode === 'polyline-draw' || hudState.mode === 'spline-draw') {
+      for (const p of hudState.draftPoints || []) rawPts.push(p);
+      if (hudState.currentPreviewPoint) rawPts.push(hudState.currentPreviewPoint);
+    }
+
+    if (rawPts.length < 2) return;
+
+    // Convert model-mm → THREE scene coords (same axis remap as toThree())
+    const S = SCENE_SCALE;
+    const toV = (p) => new THREE.Vector3(p.y * S, p.z * S, p.x * S);
+    const vecs = rawPts.map(toV);
+
+    const mat = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false });
+
+    if (hudState.mode === 'spline-draw' && vecs.length >= 2) {
+      const curve = new THREE.CatmullRomCurve3(vecs);
+      const geo = new THREE.BufferGeometry().setFromPoints(
+        curve.getPoints(Math.max(60, vecs.length * 12))
+      );
+      const line = new THREE.Line(geo, mat);
+      line.renderOrder = 999;
+      this._previewGroup.add(line);
+    } else {
+      const geo = new THREE.BufferGeometry().setFromPoints(vecs);
+      const line = new THREE.Line(geo, mat);
+      line.renderOrder = 999;
+      this._previewGroup.add(line);
+    }
+  }
+
   _animate() {
     this._animId = requestAnimationFrame(() => this._animate());
     this._controls.update();
+    // Drive live-draft preview from HUD state every frame
+    if (typeof window !== 'undefined' && window.__hudApi) {
+      this.updateHudPreview(window.__hudApi.getState());
+    }
     this._renderer.render(this._scene, this._camera);
     this._css2dRenderer.render(this._scene, this._camera);
   }
