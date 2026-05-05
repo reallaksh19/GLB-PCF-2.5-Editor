@@ -17,6 +17,50 @@ let compCounter   = 0;
 function nextAnchorId(prefix = 'a') { return `${prefix}${++anchorCounter}`; }
 function nextCompId(prefix = 'comp') { return `${prefix}${++compCounter}`; }
 
+function addLineComponent(graph, input) {
+  const id  = input.id || `DXF_LINE_${input.handle || nextCompId('line')}`;
+  const a1Id = nextAnchorId(`${input.handle || id}_ep1_`);
+  const a2Id = nextAnchorId(`${input.handle || id}_ep2_`);
+  graph.anchors[a1Id] = createAnchor({ id: a1Id, role: 'EP1', point: { x: input.x1 ?? 0, y: input.y1 ?? 0, z: input.z1 ?? 0 } });
+  graph.anchors[a2Id] = createAnchor({ id: a2Id, role: 'EP2', point: { x: input.x2 ?? 0, y: input.y2 ?? 0, z: input.z2 ?? 0 } });
+  graph.components[id] = createComponent({
+    id, type: 'LINE', layerId: input.layer || 'default',
+    anchorIds: [a1Id, a2Id], geometryRole: 'LINEAR',
+    attributes: {}, rawAttributes: {}, derived: {},
+    capabilities: defaultCapabilities('LINE'),
+    sourceRef: {
+      format: 'DXF',
+      handle: input.handle,
+      entityType: input.entityType || 'LINE',
+      layer: input.layer || null,
+      segmentIndex: input.segmentIndex ?? null,
+      downgradedFrom: input.downgradedFrom || null,
+    }
+  });
+  return id;
+}
+
+function isZeroLength(a, b) {
+  if (!a || !b) return true;
+  const dx = (b.x ?? 0) - (a.x ?? 0);
+  const dy = (b.y ?? 0) - (a.y ?? 0);
+  const dz = (b.z ?? 0) - (a.z ?? 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
+}
+
+function expandPolylineVertices(pl) {
+  const vertices = Array.isArray(pl.vertices) ? [...pl.vertices] : [];
+  if ((pl.closed || pl.shape || pl.isClosed) && vertices.length > 2) vertices.push(vertices[0]);
+  const segments = [];
+  for (let i = 0; i < vertices.length - 1; i += 1) {
+    const ep1 = vertices[i];
+    const ep2 = vertices[i + 1];
+    if (isZeroLength(ep1, ep2)) continue;
+    segments.push({ ep1, ep2, segmentIndex: i });
+  }
+  return segments;
+}
+
 /**
  * Convert a RawDXFModel into a Canonical Edit Graph.
  *
@@ -25,33 +69,23 @@ function nextCompId(prefix = 'comp') { return `${prefix}${++compCounter}`; }
  * @returns {Object} A new CEG instance.
  */
 export function dxfToCeg(rawModel, options = {}) {
+  anchorCounter = 0;
+  compCounter = 0;
+
   const graph     = createCanonicalEditGraph({ sourceFormat: 'DXF' });
   graph.layers    = buildLayerMap(rawModel);
 
   // ── LINE entities ──────────────────────────────────────────────────────
   for (const line of rawModel.lines) {
-    const id  = `DXF_LINE_${line.handle || nextCompId('line')}`;
-    const a1Id = nextAnchorId(`${line.handle || id}_ep1_`);
-    const a2Id = nextAnchorId(`${line.handle || id}_ep2_`);
-    graph.anchors[a1Id] = createAnchor({ id: a1Id, role: 'EP1', point: { x: line.x1 ?? 0, y: line.y1 ?? 0, z: line.z1 ?? 0 } });
-    graph.anchors[a2Id] = createAnchor({ id: a2Id, role: 'EP2', point: { x: line.x2 ?? 0, y: line.y2 ?? 0, z: line.z2 ?? 0 } });
-    graph.components[id] = createComponent({
-      id, type: 'LINE', layerId: line.layer || 'default',
-      anchorIds: [a1Id, a2Id], geometryRole: 'LINEAR',
-      attributes: {}, rawAttributes: {}, derived: {},
-      capabilities: defaultCapabilities('LINE'),
-      sourceRef: { format: 'DXF', handle: line.handle, entityType: 'LINE', layer: line.layer || null }
-    });
+    addLineComponent(graph, line);
   }
 
   // ── ARC entities ───────────────────────────────────────────────────────
   for (const arc of rawModel.arcs) {
     const id   = `DXF_ARC_${arc.handle || nextCompId('arc')}`;
     const { cx = 0, cy = 0, cz = 0, radius = 0 } = arc;
-    // dxf-parser returns angles in radians; convert to Cartesian endpoints
-    const rad  = (a) => a; // already in radians
-    const ep1  = { x: cx + radius * Math.cos(rad(arc.startAngle ?? 0)), y: cy + radius * Math.sin(rad(arc.startAngle ?? 0)), z: cz };
-    const ep2  = { x: cx + radius * Math.cos(rad(arc.endAngle   ?? 0)), y: cy + radius * Math.sin(rad(arc.endAngle   ?? 0)), z: cz };
+    const ep1  = { x: cx + radius * Math.cos(arc.startAngle ?? 0), y: cy + radius * Math.sin(arc.startAngle ?? 0), z: cz };
+    const ep2  = { x: cx + radius * Math.cos(arc.endAngle   ?? 0), y: cy + radius * Math.sin(arc.endAngle   ?? 0), z: cz };
     const cp   = { x: cx, y: cy, z: cz };
     const cpId = nextAnchorId(`${arc.handle || id}_cp_`);
     const a1Id = nextAnchorId(`${arc.handle || id}_ep1_`);
@@ -115,20 +149,50 @@ export function dxfToCeg(rawModel, options = {}) {
     });
   }
 
-  // ── POLYLINE entities (proxy) ──────────────────────────────────────────
+  // ── POLYLINE entities ──────────────────────────────────────────────────
+  // Structural fix: preserve real-world POLYLINE/LWPOLYLINE geometry by
+  // downgrading each segment to an editable LINE instead of creating only a
+  // non-renderable proxy at origin.
   for (const pl of rawModel.polylines) {
-    const id  = `DXF_POLYLINE_${pl.handle || nextCompId('pline')}`;
-    const aId = nextAnchorId(`${pl.handle || id}_origin_`);
-    graph.anchors[aId] = createAnchor({ id: aId, role: 'ORIGIN', point: { x: 0, y: 0, z: 0 } });
-    graph.components[id] = createComponent({
-      id, type: 'PROXY_DXF_ENTITY', layerId: pl.layer || 'default',
-      anchorIds: [aId], geometryRole: 'UNKNOWN',
-      attributes: {}, rawAttributes: {}, derived: {},
-      capabilities: defaultCapabilities('PROXY_DXF_ENTITY'),
-      sourceRef: { format: 'DXF', handle: pl.handle, entityType: pl.type || 'POLYLINE', layer: pl.layer || null }
+    const segments = expandPolylineVertices(pl);
+    if (!segments.length) {
+      const id  = `DXF_POLYLINE_${pl.handle || nextCompId('pline')}`;
+      const aId = nextAnchorId(`${pl.handle || id}_origin_`);
+      graph.anchors[aId] = createAnchor({ id: aId, role: 'ORIGIN', point: { x: 0, y: 0, z: 0 } });
+      graph.components[id] = createComponent({
+        id, type: 'PROXY_DXF_ENTITY', layerId: pl.layer || 'default',
+        anchorIds: [aId], geometryRole: 'UNKNOWN',
+        attributes: {}, rawAttributes: {}, derived: {},
+        capabilities: defaultCapabilities('PROXY_DXF_ENTITY'),
+        sourceRef: { format: 'DXF', handle: pl.handle, entityType: pl.type || 'POLYLINE', layer: pl.layer || null }
+      });
+      graph.lossContract.unsupportedEntities.push({ type: pl.type || 'POLYLINE', handle: pl.handle || null, reason: 'NO_VALID_SEGMENTS' });
+      graph.lossContract.proxyEntities.push({ id, type: pl.type || 'POLYLINE', handle: pl.handle || null });
+      continue;
+    }
+
+    for (const seg of segments) {
+      addLineComponent(graph, {
+        id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_SEG_${seg.segmentIndex}`,
+        handle: pl.handle,
+        layer: pl.layer || 'default',
+        entityType: 'LINE',
+        downgradedFrom: pl.type || 'POLYLINE',
+        segmentIndex: seg.segmentIndex,
+        x1: seg.ep1.x,
+        y1: seg.ep1.y,
+        z1: seg.ep1.z,
+        x2: seg.ep2.x,
+        y2: seg.ep2.y,
+        z2: seg.ep2.z,
+      });
+    }
+    graph.lossContract.downgradedEntities.push({
+      type: pl.type || 'POLYLINE',
+      handle: pl.handle || null,
+      to: 'LINE_SEGMENTS',
+      segmentCount: segments.length,
     });
-    graph.lossContract.unsupportedEntities.push({ type: pl.type || 'POLYLINE', handle: pl.handle || null });
-    graph.lossContract.proxyEntities.push({ id, type: pl.type || 'POLYLINE', handle: pl.handle || null });
   }
 
   // ── Unsupported entities (proxy) ───────────────────────────────────────
@@ -141,9 +205,9 @@ export function dxfToCeg(rawModel, options = {}) {
       anchorIds: [aId], geometryRole: 'UNKNOWN',
       attributes: {}, rawAttributes: {}, derived: {},
       capabilities: defaultCapabilities('PROXY_DXF_ENTITY'),
-      sourceRef: { format: 'DXF', handle: unk.handle, entityType: unk.type || 'UNKNOWN', layer: unk.layer || null }
+      sourceRef: { format: 'DXF', handle: unk.handle, entityType: unk.type || 'UNKNOWN', layer: unk.layer || null, reason: unk.reason || null }
     });
-    graph.lossContract.unsupportedEntities.push({ type: unk.type || 'UNKNOWN', handle: unk.handle || null });
+    graph.lossContract.unsupportedEntities.push({ type: unk.type || 'UNKNOWN', handle: unk.handle || null, reason: unk.reason || null });
     graph.lossContract.proxyEntities.push({ id, type: unk.type || 'UNKNOWN', handle: unk.handle || null });
   }
 
