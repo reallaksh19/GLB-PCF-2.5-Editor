@@ -3,17 +3,16 @@
  *
  * Parses a DXF text string into a RawDXFModel using the 'dxf-parser'
  * CDN library (already declared in the import-map in index.html).
- * This adapter replaces the Node.js version from the update package
- * which used 'fs'.  The output shape is identical so dxf-to-ceg.js
- * consumes it unchanged.
+ * The adapter normalizes parser-specific entity shapes before producing the
+ * RawDXFModel consumed by dxf-to-ceg.js.
  *
- * Field mapping from dxf-parser → RawDXFModel entity:
+ * Field mapping from normalized DXF entity → RawDXFModel entity:
  *   LINE    → { x1,y1,z1, x2,y2,z2, layer, handle }
  *   ARC     → { cx,cy,cz, radius, startAngle,endAngle, layer, handle }
  *   CIRCLE  → { cx,cy,cz, radius, layer, handle }
  *   TEXT    → { x,y,z, text, layer, handle }
  *   INSERT  → { x,y,z, blockName, layer, handle }
- *   LWPOLYLINE/POLYLINE → polylines list (proxy only)
+ *   LWPOLYLINE/POLYLINE → polylines list with vertices preserved
  *   anything else → unsupported list
  */
 
@@ -22,6 +21,11 @@ import {
   createRawDxfModel,
   addLine, addArc, addText, addInsert, addPolyline, addCircle, addUnsupported
 } from './dxf-raw-model.js';
+import {
+  dxfEntitySource,
+  getDxfEntityIssue,
+  normalizeDxfEntity,
+} from './dxf-entity-normalizer.js';
 
 /**
  * Parse a DXF string into a RawDXFModel.
@@ -45,63 +49,80 @@ export function parseDxfToRawModel(dxfText) {
   const model    = createRawDxfModel();
   const entities = dxf?.entities || [];
 
-  for (const ent of entities) {
-    const handle = ent.handle  || null;
-    const layer  = ent.layer   || 'default';
+  for (let index = 0; index < entities.length; index += 1) {
+    const ent = normalizeDxfEntity(entities[index], index);
+    const handle = ent.handle;
+    const layer = ent.layer || 'default';
+    const issue = getDxfEntityIssue(ent);
+
+    if (issue) {
+      addUnsupported(model, {
+        ...dxfEntitySource(ent),
+        type: ent.type,
+        handle,
+        layer,
+        reason: issue,
+      });
+      continue;
+    }
 
     switch (ent.type) {
       case 'LINE': {
-        // dxf-parser exposes vertices[0] and vertices[1]
-        const v = ent.vertices || [];
         addLine(model, {
           type: 'LINE', handle, layer,
-          x1: v[0]?.x ?? 0, y1: v[0]?.y ?? 0, z1: v[0]?.z ?? 0,
-          x2: v[1]?.x ?? 0, y2: v[1]?.y ?? 0, z2: v[1]?.z ?? 0,
+          x1: ent.ep1.x, y1: ent.ep1.y, z1: ent.ep1.z,
+          x2: ent.ep2.x, y2: ent.ep2.y, z2: ent.ep2.z,
         });
         break;
       }
       case 'ARC':
         addArc(model, {
           type: 'ARC', handle, layer,
-          cx: ent.center?.x ?? 0,
-          cy: ent.center?.y ?? 0,
-          cz: ent.center?.z ?? 0,
-          radius:     ent.radius     ?? 0,
-          startAngle: ent.startAngle ?? 0,  // dxf-parser gives radians
-          endAngle:   ent.endAngle   ?? 0,
+          cx: ent.center.x,
+          cy: ent.center.y,
+          cz: ent.center.z,
+          radius: ent.radius,
+          startAngle: ent.startAngle,
+          endAngle: ent.endAngle,
         });
         break;
       case 'CIRCLE':
         addCircle(model, {
           type: 'CIRCLE', handle, layer,
-          cx: ent.center?.x ?? 0,
-          cy: ent.center?.y ?? 0,
-          cz: ent.center?.z ?? 0,
-          radius: ent.radius ?? 0,
+          cx: ent.center.x,
+          cy: ent.center.y,
+          cz: ent.center.z,
+          radius: ent.radius,
         });
         break;
       case 'TEXT':
       case 'MTEXT':
         addText(model, {
           type: ent.type, handle, layer,
-          x: ent.startPoint?.x ?? ent.position?.x ?? 0,
-          y: ent.startPoint?.y ?? ent.position?.y ?? 0,
-          z: ent.startPoint?.z ?? ent.position?.z ?? 0,
+          x: ent.textAnchor.x,
+          y: ent.textAnchor.y,
+          z: ent.textAnchor.z,
           text: ent.text || '',
         });
         break;
       case 'INSERT':
         addInsert(model, {
           type: 'INSERT', handle, layer,
-          x: ent.position?.x ?? 0,
-          y: ent.position?.y ?? 0,
-          z: ent.position?.z ?? 0,
-          blockName: ent.name || null,
+          x: ent.position.x,
+          y: ent.position.y,
+          z: ent.position.z,
+          blockName: ent.blockName || null,
         });
         break;
       case 'LWPOLYLINE':
       case 'POLYLINE':
-        addPolyline(model, { type: ent.type, handle, layer });
+        addPolyline(model, {
+          type: ent.type,
+          handle,
+          layer,
+          vertices: ent.vertices,
+          closed: Boolean(ent.raw?.closed || ent.raw?.shape || ent.raw?.isClosed),
+        });
         break;
       default:
         addUnsupported(model, { type: ent.type, handle, layer });
