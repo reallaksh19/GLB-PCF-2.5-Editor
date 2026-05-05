@@ -2,72 +2,51 @@
 
 ## Purpose
 
-This document freezes the first shared contract for the geometry-platform and precision drafting upgrade.
+This contract freezes the shared geometry/drafting platform before professional Line, Polyline, Spline, Macro, parser, topology, and future scaling work proceeds.
 
-M0 does **not** replace the active renderer/parser pipeline. It defines reusable primitives so future Line, Polyline, Spline, Macro, PCF, DXF, GLB, and scaling work use one consistent geometry platform.
+## Governing rule
 
-## Governing Principle
-
-`ep1`, `ep2`, `cp`, `bp`, and `origin` are compatibility/render fields. They are not the final source of truth for professional editing.
+`ep1`, `ep2`, `cp`, `bp`, and `origin` are compatibility/render fields. They are not the long-term source of truth for editable geometry.
 
 The authoritative model is:
 
 ```text
 Canonical Edit Graph
-  components reference anchors by ID
-  anchors own engineering coordinates
-  topology links describe real connectivity
+  components
+  anchors
+  topologyLinks
+  sourceRefs
+  diagnostics
+  lossContract
 ```
 
-The compatibility view is:
+## Architecture
 
 ```text
-GenericComponent.geometry.ep1 / ep2 / cp / bp / origin
+PCF / DXF / HUD / Macro / Command Palette
+        ↓
+Shared Precision Draft Parser
+        ↓
+CEG Anchors + Components + Topology
+        ↓
+Derived GenericComponent geometry view
+        ↓
+Renderer / DXF Export / GLB Export / Inspector / Debug
 ```
 
-This compatibility view is derived from anchors for renderer/export/legacy code.
+## Contract rules
 
-## Coordinate Contract
+1. New drafting commands must resolve through the shared draft parser.
+2. HUD and Macro must not implement separate token parsers for the same drafting syntax.
+3. New editable geometry should be created as anchors + components first.
+4. Render fields are derived through `geometry-view.js`.
+5. Parser adapters must preserve raw source metadata.
+6. No unsupported source entity should create a runtime popup failure when a loss-contract diagnostic is possible.
+7. Coordinate model space is engineering millimetres with `{ x, y, z }`.
+8. Renderer axis remapping remains outside the canonical model.
+9. Scaling policy must be explicit before any physical 3D scale operation is exposed.
 
-All model-space coordinates are engineering millimetres:
-
-```js
-{ x: number, y: number, z: number }
-```
-
-Renderer-space conversion remains outside the parser/drafting contract and is handled by `geometry/pipe-geometry.js::toThree()`.
-
-## Anchor Roles
-
-Required canonical roles:
-
-- `EP1` — linear component start endpoint
-- `EP2` — linear component end endpoint
-- `CP` — bend/arc centre point
-- `ORIGIN` — component origin/insertion point
-- `RUN_IN` — run inlet port for multi-port fittings
-- `RUN_OUT` — run outlet port for multi-port fittings
-- `BRANCH_OUT` — branch outlet port for tee/olet/cross-like components
-- `SUPPORT_ORIGIN` — support placement point
-- `ANNOTATION_ORIGIN` — text/label insertion point
-- `GUIDE_POINT` — non-pipe guide/control point
-
-## Geometry View Contract
-
-`core/geometry/geometry-view.js` owns translation from CEG to renderer-compatible geometry.
-
-Rules:
-
-1. Parser/HUD/Macro modules may create anchors and components.
-2. Renderer-facing `ep1/ep2/cp/bp/origin` should be generated from anchors where graph data is available.
-3. Existing direct `GenericComponent.geometry` remains valid during migration.
-4. No new drafting feature should create a private geometry grammar.
-
-## Draft Command Parser Contract
-
-`editor/draft-command-parser.js` is the shared parser for precision drafting tokens.
-
-Supported tokens in M0:
+## Supported M0 draft tokens
 
 ```text
 1000
@@ -76,6 +55,7 @@ X-1000
 Y750
 Y-750
 Z500
+Z-500
 R500
 D500
 @1000,0,0
@@ -83,47 +63,64 @@ D500
 @1000<90
 ```
 
-Common result shape:
+## Draft parser output
 
 ```js
 {
   ok: true,
   mode: 'length' | 'axis' | 'relative' | 'absolute' | 'bearing',
-  commandText,
   fromPoint,
   toPoint,
   delta,
   lengthMm,
   axisLock,
   angleDeg,
+  commandText,
   diagnostics: []
 }
 ```
 
-## Shared Consumers
+## Anchor role policy
 
-The same parser must be used by:
+Core roles:
 
-- Line HUD
-- Polyline HUD
-- Spline HUD / guide conversion
-- Macro terminal
-- future command palette
-- future script recorder
+```text
+EP1
+EP2
+CP
+ORIGIN
+RUN_IN
+RUN_OUT
+BRANCH_OUT
+SUPPORT_ORIGIN
+ANNOTATION_ORIGIN
+CONTROL_POINT
+FIT_POINT
+```
 
-## M0 Guardrails
+## Scaling policy placeholders
 
-- No UI-specific geometry parser.
-- No macro-specific geometry parser.
-- No direct parser-to-render-only path for new precision drafting.
-- `R500` means Z+500 everywhere.
-- `D500` means Z-500 everywhere.
-- `@1000<90` means bearing/angle token everywhere.
+```text
+COORDINATE_ONLY
+SYMBOL_ONLY
+PHYSICAL_SIZE
+SPEC_RECALCULATE
+LOCKED
+```
 
-## M0 Acceptance
+Default piping policy:
 
-- Geometry point helpers normalize numeric coordinates deterministically.
+```text
+Route coordinates may scale when explicitly requested.
+Bore/OD stays locked by default.
+Standard fittings are spec/Master DB driven.
+Annotations/support symbols use display scale.
+```
+
+## M0 acceptance
+
+- Shared parser exists.
+- Geometry-view generator exists.
 - Anchor roles are centralized.
-- Geometry view can derive `ep1/ep2/cp/bp/origin` from CEG anchors.
-- Draft token parser passes exact endpoint tests for length, axis, relative, absolute, bearing, rise, and drop.
-- M0 introduces no breaking runtime rewrite.
+- Static guardrail script exists.
+- Runtime drafting behavior is not changed in M0.

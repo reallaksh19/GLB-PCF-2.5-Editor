@@ -1,11 +1,4 @@
-/*
- * core/geometry/anchor-roles.js
- *
- * Central role vocabulary for CEG anchors and derived geometry views.
- * Keep this file dependency-light so parsers, HUD, macro and tests can share it.
- */
-
-export const ANCHOR_ROLE_VERSION = '1.0.0-m0';
+export const ANCHOR_ROLE_CONTRACT_VERSION = 'M0-ANCHOR-ROLES-1.0.0';
 
 export const AnchorRoles = Object.freeze({
   EP1: 'EP1',
@@ -17,22 +10,22 @@ export const AnchorRoles = Object.freeze({
   BRANCH_OUT: 'BRANCH_OUT',
   SUPPORT_ORIGIN: 'SUPPORT_ORIGIN',
   ANNOTATION_ORIGIN: 'ANNOTATION_ORIGIN',
-  GUIDE_POINT: 'GUIDE_POINT',
+  CONTROL_POINT: 'CONTROL_POINT',
+  FIT_POINT: 'FIT_POINT',
 });
 
-const ROLE_SET = new Set(Object.values(AnchorRoles));
+export const TopologyEligibleAnchorRoles = Object.freeze([
+  AnchorRoles.EP1,
+  AnchorRoles.EP2,
+  AnchorRoles.RUN_IN,
+  AnchorRoles.RUN_OUT,
+  AnchorRoles.BRANCH_OUT,
+]);
 
-export function normalizeAnchorRole(role, fallback = AnchorRoles.ORIGIN) {
-  const value = String(role || '').trim().toUpperCase();
-  return ROLE_SET.has(value) ? value : fallback;
+export function isKnownAnchorRole(role) {
+  return Object.values(AnchorRoles).includes(String(role || ''));
 }
 
-export function isEndpointRole(role) {
-  const r = normalizeAnchorRole(role, '');
-  return r === AnchorRoles.EP1 || r === AnchorRoles.EP2 || r === AnchorRoles.RUN_IN || r === AnchorRoles.RUN_OUT || r === AnchorRoles.BRANCH_OUT;
-}
-
-export function isTopologyEligibleRole(role) {
-  const r = normalizeAnchorRole(role, '');
-  return isEndpointRole(r) || r === AnchorRoles.CP;
+export function isTopologyEligibleAnchorRole(role) {
+  return TopologyEligibleAnchorRoles.includes(String(role || ''));
 }
