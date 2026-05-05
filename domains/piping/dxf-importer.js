@@ -1,8 +1,11 @@
 import DxfParser from 'dxf-parser';
 import { parseDxfToRawModel } from '../../formats/dxf/dxf-parser-adapter.js';
 import { dxfToCeg }           from '../../formats/dxf/dxf-to-ceg.js';
-
-let nextId = 1;
+import {
+  dxfEntitySource,
+  getDxfEntityIssue,
+  normalizeDxfEntity,
+} from '../../formats/dxf/dxf-entity-normalizer.js';
 
 function AciToMaterial(aci) {
   switch (aci) {
@@ -11,6 +14,61 @@ function AciToMaterial(aci) {
     case 5: return 'CU';
     default: return 'UNKNOWN';
   }
+}
+
+function makeAttributes(ent) {
+  return {
+    'PIPELINE-REFERENCE': ent.layer || '0',
+    'MATERIAL': AciToMaterial(ent.colorIndex || 256),
+    'DXF-TYPE': ent.type,
+    'DXF-HANDLE': ent.handle || '',
+    'DXF-LAYER': ent.layer || '0',
+  };
+}
+
+function makeComponent(localId, type, geometry, attributes, metadata = {}) {
+  return {
+    id: `DXF-${localId}`,
+    type,
+    attributes,
+    geometry,
+    metadata: {
+      source: metadata.source || null,
+      downgradedFrom: metadata.downgradedFrom || null,
+      segmentIndex: metadata.segmentIndex ?? null,
+      ...metadata,
+    },
+  };
+}
+
+function isZeroLength(a, b) {
+  if (!a || !b) return true;
+  const dx = (b.x ?? 0) - (a.x ?? 0);
+  const dy = (b.y ?? 0) - (a.y ?? 0);
+  const dz = (b.z ?? 0) - (a.z ?? 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
+}
+
+function polylineSegments(ent) {
+  const vertices = [...(ent.vertices || [])];
+  const closed = Boolean(ent.raw?.closed || ent.raw?.shape || ent.raw?.isClosed);
+  if (closed && vertices.length > 2) vertices.push(vertices[0]);
+
+  const segments = [];
+  for (let i = 0; i < vertices.length - 1; i += 1) {
+    const ep1 = vertices[i];
+    const ep2 = vertices[i + 1];
+    if (isZeroLength(ep1, ep2)) continue;
+    segments.push({ ep1, ep2, segmentIndex: i });
+  }
+  return segments;
+}
+
+function logEntityWarn(log, code, ent, extra = {}) {
+  log.warn(code, {
+    ...dxfEntitySource(ent),
+    ...extra,
+  });
 }
 
 export function parseDxf(text, log) {
@@ -32,78 +90,132 @@ export function parseDxf(text, log) {
   log.info('DXF_PARSE_START', { entityCount: entities.length });
 
   const components = [];
+  const byType = {};
+  let localId = 1;
   let warnCount = 0;
+  let skippedCount = 0;
+  let downgradedCount = 0;
 
-  for (const ent of entities) {
-    const layer = ent.layer || '0';
-    const material = AciToMaterial(ent.colorIndex || 256);
-    const attributes = {
-      'PIPELINE-REFERENCE': layer,
-      'MATERIAL': material
-    };
+  for (let index = 0; index < entities.length; index += 1) {
+    const ent = normalizeDxfEntity(entities[index], index);
+    byType[ent.type] = (byType[ent.type] || 0) + 1;
 
-    let comp = null;
-    const g = {};
+    const attributes = makeAttributes(ent);
+    const source = dxfEntitySource(ent);
+    const issue = getDxfEntityIssue(ent);
 
-    if (ent.type === 'LINE') {
-      comp = { type: 'PIPE' };
-      g.ep1 = { x: ent.vertices[0].x, y: ent.vertices[0].y, z: ent.vertices[0].z };
-      g.ep2 = { x: ent.vertices[1].x, y: ent.vertices[1].y, z: ent.vertices[1].z };
-    } else if (ent.type === 'LWPOLYLINE') {
-      comp = { type: 'PIPE' };
-      const v = ent.vertices;
-      g.ep1 = { x: v[0].x, y: v[0].y, z: v[0].z || 0 };
-      const last = v[v.length - 1];
-      g.ep2 = { x: last.x, y: last.y, z: last.z || 0 };
-    } else if (ent.type === 'ARC') {
-      comp = { type: 'ELBOW' };
-      g.cp = { x: ent.center.x, y: ent.center.y, z: ent.center.z };
-      // start and end angles are in radians
-      const r = ent.radius;
-      g.ep1 = {
-        x: g.cp.x + r * Math.cos(ent.startAngle),
-        y: g.cp.y + r * Math.sin(ent.startAngle),
-        z: g.cp.z
-      };
-      g.ep2 = {
-        x: g.cp.x + r * Math.cos(ent.endAngle),
-        y: g.cp.y + r * Math.sin(ent.endAngle),
-        z: g.cp.z
-      };
-    } else if (ent.type === 'CIRCLE') {
-      comp = { type: 'FLANGE' };
-      g.origin = { x: ent.center.x, y: ent.center.y, z: ent.center.z };
-      g.bore = ent.radius * 2;
-    } else if (ent.type === 'INSERT') {
-      const bn = (ent.name || '').toUpperCase();
-      if (bn.includes('VALVE')) comp = { type: 'VALVE' };
-      else if (bn.includes('SUPPORT')) comp = { type: 'SUPPORT' };
-      else if (bn.includes('TEE')) comp = { type: 'TEE' };
-      else comp = { type: 'FITTING' };
-      g.origin = { x: ent.position.x, y: ent.position.y, z: ent.position.z };
-    } else if (ent.type === 'TEXT' || ent.type === 'MTEXT') {
-      comp = { type: 'MESSAGE-SQUARE' };
-      comp.metadata = {
-        squareText: ent.text,
-        squarePos: { x: ent.startPoint?.x ?? 0, y: ent.startPoint?.y ?? 0, z: ent.startPoint?.z ?? 0 }
-      };
-    } else if (ent.type === 'POINT') {
-      comp = { type: 'FITTING' };
-      g.origin = { x: ent.position.x, y: ent.position.y, z: ent.position.z };
-    } else {
-      log.warn('DXF_ENTITY_SKIP', { type: ent.type, reason: 'Unsupported' });
-      warnCount++;
+    if (issue) {
+      logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: issue });
+      warnCount += 1;
+      skippedCount += 1;
       continue;
     }
 
-    comp.id = `DXF-${nextId++}`;
-    comp.attributes = attributes;
-    comp.geometry = g;
-    if (!comp.metadata) comp.metadata = {};
-    components.push(comp);
+    try {
+      if (ent.type === 'LINE') {
+        components.push(makeComponent(localId++, 'PIPE', {
+          ep1: ent.ep1,
+          ep2: ent.ep2,
+        }, attributes, { source }));
+        continue;
+      }
+
+      if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE') {
+        const segments = polylineSegments(ent);
+        if (!segments.length) {
+          logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: 'POLYLINE_HAS_NO_NON_ZERO_SEGMENTS' });
+          warnCount += 1;
+          skippedCount += 1;
+          continue;
+        }
+
+        for (const seg of segments) {
+          components.push(makeComponent(localId++, 'PIPE', {
+            ep1: seg.ep1,
+            ep2: seg.ep2,
+          }, attributes, {
+            source,
+            downgradedFrom: ent.type,
+            segmentIndex: seg.segmentIndex,
+          }));
+        }
+        downgradedCount += 1;
+        continue;
+      }
+
+      if (ent.type === 'ARC') {
+        const r = ent.radius;
+        components.push(makeComponent(localId++, 'ELBOW', {
+          cp: ent.center,
+          ep1: {
+            x: ent.center.x + r * Math.cos(ent.startAngle),
+            y: ent.center.y + r * Math.sin(ent.startAngle),
+            z: ent.center.z,
+          },
+          ep2: {
+            x: ent.center.x + r * Math.cos(ent.endAngle),
+            y: ent.center.y + r * Math.sin(ent.endAngle),
+            z: ent.center.z,
+          },
+        }, attributes, { source }));
+        continue;
+      }
+
+      if (ent.type === 'CIRCLE') {
+        components.push(makeComponent(localId++, 'FLANGE', {
+          origin: ent.center,
+          bore: ent.radius * 2,
+        }, attributes, { source }));
+        continue;
+      }
+
+      if (ent.type === 'INSERT') {
+        const bn = String(ent.blockName || '').toUpperCase();
+        let type = 'FITTING';
+        if (bn.includes('VALVE')) type = 'VALVE';
+        else if (bn.includes('SUPPORT')) type = 'SUPPORT';
+        else if (bn.includes('TEE')) type = 'TEE';
+
+        components.push(makeComponent(localId++, type, {
+          origin: ent.position,
+        }, attributes, { source, blockName: ent.blockName || null }));
+        continue;
+      }
+
+      if (ent.type === 'TEXT' || ent.type === 'MTEXT') {
+        components.push(makeComponent(localId++, 'MESSAGE-SQUARE', {}, attributes, {
+          source,
+          squareText: ent.text,
+          squarePos: ent.textAnchor,
+        }));
+        continue;
+      }
+
+      if (ent.type === 'POINT') {
+        components.push(makeComponent(localId++, 'FITTING', {
+          origin: ent.position || ent.textAnchor || { x: 0, y: 0, z: 0 },
+        }, attributes, { source }));
+        continue;
+      }
+
+      logEntityWarn(log, 'DXF_ENTITY_SKIP', ent, { reason: 'Unsupported' });
+      warnCount += 1;
+      skippedCount += 1;
+    } catch (err) {
+      logEntityWarn(log, 'DXF_ENTITY_IMPORT_FAIL', ent, { message: String(err?.message || err) });
+      warnCount += 1;
+      skippedCount += 1;
+    }
   }
 
-  log.info('DXF_PARSE_DONE', { componentCount: components.length, warnCount });
+  log.info('DXF_PARSE_DONE', {
+    componentCount: components.length,
+    entityCount: entities.length,
+    warnCount,
+    skippedCount,
+    downgradedCount,
+    entityTypes: byType,
+  });
 
   if (components.length > 0) {
     import('../../js/capabilities/capability-registry.js').then(({ capabilities }) => {
