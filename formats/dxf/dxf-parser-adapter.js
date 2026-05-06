@@ -12,7 +12,7 @@
  *   CIRCLE  → { cx,cy,cz, radius, layer, handle }
  *   TEXT    → { x,y,z, text, layer, handle }
  *   INSERT  → { x,y,z, blockName, layer, handle }
- *   LWPOLYLINE/POLYLINE → polylines list with vertices preserved
+ *   LWPOLYLINE/POLYLINE/SPLINE → polylines list with vertices + bulges preserved
  *   anything else → unsupported list
  */
 
@@ -112,6 +112,8 @@ export function parseDxfToRawModel(dxfText) {
           y: ent.position.y,
           z: ent.position.z,
           blockName: ent.blockName || null,
+          rotation: ent.rotation,
+          scale: ent.scale,
         });
         break;
       case 'LWPOLYLINE':
