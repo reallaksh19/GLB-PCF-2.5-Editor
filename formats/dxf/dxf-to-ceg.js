@@ -18,6 +18,19 @@ let compCounter   = 0;
 function nextAnchorId(prefix = 'a') { return `${prefix}${++anchorCounter}`; }
 function nextCompId(prefix = 'comp') { return `${prefix}${++compCounter}`; }
 
+function sourceRef(input, defaults = {}) {
+  return {
+    format: 'DXF',
+    ...defaults,
+    ...(input.sourceRef || {}),
+    handle: input.handle ?? input.sourceRef?.handle ?? defaults.handle ?? null,
+    entityType: input.entityType ?? input.sourceRef?.entityType ?? defaults.entityType ?? null,
+    layer: input.layer ?? input.sourceRef?.layer ?? defaults.layer ?? null,
+    segmentIndex: input.segmentIndex ?? input.sourceRef?.segmentIndex ?? defaults.segmentIndex ?? null,
+    downgradedFrom: input.downgradedFrom ?? input.sourceRef?.downgradedFrom ?? defaults.downgradedFrom ?? null,
+  };
+}
+
 function addLineComponent(graph, input) {
   const id  = input.id || `DXF_LINE_${input.handle || nextCompId('line')}`;
   const a1Id = nextAnchorId(`${input.handle || id}_ep1_`);
@@ -29,14 +42,7 @@ function addLineComponent(graph, input) {
     anchorIds: [a1Id, a2Id], geometryRole: 'LINEAR',
     attributes: {}, rawAttributes: {}, derived: {},
     capabilities: defaultCapabilities('LINE'),
-    sourceRef: {
-      format: 'DXF',
-      handle: input.handle,
-      entityType: input.entityType || 'LINE',
-      layer: input.layer || null,
-      segmentIndex: input.segmentIndex ?? null,
-      downgradedFrom: input.downgradedFrom || null,
-    }
+    sourceRef: sourceRef(input, { entityType: 'LINE' })
   });
   return id;
 }
@@ -66,14 +72,7 @@ function addArcComponent(graph, input) {
       closed: Boolean(input.closed),
     },
     capabilities: defaultCapabilities('ARC'),
-    sourceRef: {
-      format: 'DXF',
-      handle: input.handle,
-      entityType: input.entityType || 'ARC',
-      layer: input.layer || null,
-      segmentIndex: input.segmentIndex ?? null,
-      downgradedFrom: input.downgradedFrom || null,
-    }
+    sourceRef: sourceRef(input, { entityType: 'ARC' })
   });
   return id;
 }
@@ -98,15 +97,29 @@ function addGuideComponent(graph, input) {
     rawAttributes: {},
     derived: { pointCount: points.length },
     capabilities: { canMove: true, canDelete: true, canStretch: true, canExtend: false, canExportDXF: true, canExportGLB: false },
-    sourceRef: { format: 'DXF', handle: input.handle, entityType: input.type || 'SPLINE', layer: input.layer || null }
+    sourceRef: sourceRef(input, { entityType: input.type || 'SPLINE' })
   });
   graph.lossContract.downgradedEntities.push({
     type: input.type || 'SPLINE',
     handle: input.handle || null,
     to: 'GUIDE_CURVE',
     pointCount: points.length,
+    expandedFromInsert: input.sourceRef?.expandedFromInsert || null,
+    blockName: input.sourceRef?.blockName || null,
   });
   return id;
+}
+
+function addRawDiagnostics(graph, rawModel) {
+  for (const diag of rawModel?.diagnostics || []) {
+    graph.diagnostics.push({ source: 'DXF', ...diag });
+    if (String(diag.severity || '').toUpperCase() === 'ERROR') {
+      graph.lossContract.exportWarnings.push({ code: diag.code || 'DXF_DIAGNOSTIC', message: diag.message || '', detail: diag });
+    }
+  }
+  for (const expansion of rawModel?.blockExpansions || []) {
+    graph.diagnostics.push({ source: 'DXF', severity: 'INFO', code: 'DXF_BLOCK_EXPANDED', ...expansion });
+  }
 }
 
 /**
@@ -122,6 +135,7 @@ export function dxfToCeg(rawModel, options = {}) {
 
   const graph     = createCanonicalEditGraph({ sourceFormat: 'DXF' });
   graph.layers    = buildLayerMap(rawModel);
+  addRawDiagnostics(graph, rawModel);
 
   // ── LINE entities ──────────────────────────────────────────────────────
   for (const line of rawModel.lines) {
@@ -136,6 +150,7 @@ export function dxfToCeg(rawModel, options = {}) {
       handle: arc.handle,
       layer: arc.layer || 'default',
       entityType: 'ARC',
+      sourceRef: arc.sourceRef,
       cp: { x: cx, y: cy, z: cz },
       ep1: { x: cx + radius * Math.cos(arc.startAngle ?? 0), y: cy + radius * Math.sin(arc.startAngle ?? 0), z: cz },
       ep2: { x: cx + radius * Math.cos(arc.endAngle ?? 0), y: cy + radius * Math.sin(arc.endAngle ?? 0), z: cz },
@@ -155,7 +170,7 @@ export function dxfToCeg(rawModel, options = {}) {
       anchorIds: [aId], geometryRole: 'POINT',
       attributes: { text: txt.text || '' }, rawAttributes: {}, derived: {},
       capabilities: { canMove: true, canDelete: true, canStretch: false, canExtend: false, canExportDXF: true, canExportGLB: true },
-      sourceRef: { format: 'DXF', handle: txt.handle, entityType: txt.type || 'TEXT', layer: txt.layer || null }
+      sourceRef: sourceRef(txt, { entityType: txt.type || 'TEXT' })
     });
   }
 
@@ -168,6 +183,7 @@ export function dxfToCeg(rawModel, options = {}) {
       handle: circ.handle,
       layer: circ.layer || 'default',
       entityType: 'CIRCLE',
+      sourceRef: circ.sourceRef,
       cp: { x: cx, y: cy, z: cz },
       ep1: { x: cx + radius, y: cy, z: cz },
       ep2: { x: cx + radius, y: cy, z: cz },
@@ -188,7 +204,7 @@ export function dxfToCeg(rawModel, options = {}) {
       anchorIds: [aId], geometryRole: 'POINT',
       attributes: { blockName: ins.blockName || null }, rawAttributes: {}, derived: {},
       capabilities: defaultCapabilities('BLOCK_COMPONENT'),
-      sourceRef: { format: 'DXF', handle: ins.handle, entityType: 'INSERT', layer: ins.layer || null, blockName: ins.blockName || null }
+      sourceRef: sourceRef(ins, { entityType: 'INSERT', blockName: ins.blockName || null })
     });
   }
 
@@ -212,7 +228,7 @@ export function dxfToCeg(rawModel, options = {}) {
         anchorIds: [aId], geometryRole: 'UNKNOWN',
         attributes: {}, rawAttributes: {}, derived: {},
         capabilities: defaultCapabilities('PROXY_DXF_ENTITY'),
-        sourceRef: { format: 'DXF', handle: pl.handle, entityType: pl.type || 'POLYLINE', layer: pl.layer || null }
+        sourceRef: sourceRef(pl, { entityType: pl.type || 'POLYLINE' })
       });
       graph.lossContract.unsupportedEntities.push({ type: pl.type || 'POLYLINE', handle: pl.handle || null, reason: 'NO_VALID_SEGMENTS' });
       graph.lossContract.proxyEntities.push({ id, type: pl.type || 'POLYLINE', handle: pl.handle || null });
@@ -229,6 +245,7 @@ export function dxfToCeg(rawModel, options = {}) {
           handle: pl.handle,
           layer: pl.layer || 'default',
           entityType: 'ARC',
+          sourceRef: pl.sourceRef,
           downgradedFrom: pl.type || 'POLYLINE',
           segmentIndex: seg.segmentIndex,
           ep1: seg.ep1,
@@ -247,6 +264,7 @@ export function dxfToCeg(rawModel, options = {}) {
           handle: pl.handle,
           layer: pl.layer || 'default',
           entityType: 'LINE',
+          sourceRef: pl.sourceRef,
           downgradedFrom: pl.type || 'POLYLINE',
           segmentIndex: seg.segmentIndex,
           x1: seg.ep1.x,
@@ -265,6 +283,8 @@ export function dxfToCeg(rawModel, options = {}) {
       segmentCount: segments.length,
       lineCount,
       arcCount,
+      expandedFromInsert: pl.sourceRef?.expandedFromInsert || null,
+      blockName: pl.sourceRef?.blockName || null,
     });
   }
 
@@ -278,7 +298,7 @@ export function dxfToCeg(rawModel, options = {}) {
       anchorIds: [aId], geometryRole: 'UNKNOWN',
       attributes: {}, rawAttributes: {}, derived: {},
       capabilities: defaultCapabilities('PROXY_DXF_ENTITY'),
-      sourceRef: { format: 'DXF', handle: unk.handle, entityType: unk.type || 'UNKNOWN', layer: unk.layer || null, reason: unk.reason || null }
+      sourceRef: sourceRef(unk, { entityType: unk.type || 'UNKNOWN', reason: unk.reason || null })
     });
     graph.lossContract.unsupportedEntities.push({ type: unk.type || 'UNKNOWN', handle: unk.handle || null, reason: unk.reason || null });
     graph.lossContract.proxyEntities.push({ id, type: unk.type || 'UNKNOWN', handle: unk.handle || null });
