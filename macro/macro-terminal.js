@@ -150,7 +150,8 @@ export function initMacroTerminal(options) {
 
   function printHelp() {
     const lines = [
-      'Commands: PIPE, ELBOW, TEE, FLANGE, VALVE, REDUCER, SUPPORT, LABEL',
+      'Commands: PIPE, ELBOW, TEE, FLANGE, VALVE, REDUCER, SUPPORT, LABEL, CIRCLE',
+      '  CIRCLE cx,cy,cz RADIUS=500  |  CIRCLE cx,cy,cz rx,ry,rz (radius point)',
       'Construction: ORIGIN, ALIGN, ARRAY LAST n dx,dy,dz, MIRROR LAST PLANE=XY/XZ/YZ',
       'Route mode: ROUTE ... / START / RUN / ELBOW 90 DIR / TEE BRANCH-OD=.. BRANCH=.. / END',
       'Queries: LIST [TYPE], DIST p1 p2, INSPECT id, VALIDATE',

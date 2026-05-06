@@ -125,6 +125,9 @@ export function getDxfEntityIssue(normalized) {
   if ((type === 'LWPOLYLINE' || type === 'POLYLINE') && normalized.vertices.length < 2) {
     return 'POLYLINE_NEEDS_AT_LEAST_TWO_VERTICES';
   }
+  if (type === 'SPLINE' && normalized.vertices.length < 2) {
+    return 'SPLINE_NEEDS_AT_LEAST_TWO_CONTROL_POINTS';
+  }
   if ((type === 'ARC' || type === 'CIRCLE') && !normalized.center) {
     return `${type}_MISSING_CENTER`;
   }

@@ -34,6 +34,41 @@ function _lineSeg(points, color, comp) {
   return line;
 }
 
+/**
+ * Generate arc/circle points in MODEL space then convert each with toThree().
+ * Draws from aStart to aEnd (radians, CCW in model XY plane).
+ * @param {object}  centerMm  - model-space center {x,y,z}
+ * @param {number}  radiusMm  - radius in mm
+ * @param {number}  aStart    - start angle (radians)
+ * @param {number}  aEnd      - end angle (radians)
+ * @param {number}  segments  - polyline segment count
+ */
+function _arcPoints(centerMm, radiusMm, aStart, aEnd, segments = 64) {
+  let span = aEnd - aStart;
+  if (Math.abs(span) < 1e-6) span = Math.PI * 2; // treat as full circle
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = aStart + (i / segments) * span;
+    // arc in model XY plane
+    pts.push(toThree({
+      x: centerMm.x + Math.cos(a) * radiusMm,
+      y: centerMm.y + Math.sin(a) * radiusMm,
+      z: centerMm.z,
+    }));
+  }
+  return pts;
+}
+
+/** Build a flat circle ring using model-space generation. */
+function _circleRing(centerPt, radiusMm, color, comp, segments = 64) {
+  const pts = _arcPoints(centerPt, radiusMm, 0, Math.PI * 2, segments);
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color });
+  const ring = new THREE.Line(geo, mat);
+  if (comp) setUserData(ring, comp);
+  return ring;
+}
+
 function _crossLines(center, halfSize, color, comp) {
   const pts = [
     center.clone().add(new THREE.Vector3(-halfSize, 0, 0)),
@@ -54,7 +89,7 @@ function buildLineDiagramMesh(comp, theme) {
   const fittingColor = ldColor(theme, 'fitting');
   const g = comp.geometry || {};
 
-  if (comp.type === 'PIPE' && g.ep1 && g.ep2) {
+  if ((comp.type === 'PIPE' || comp.type === 'LINE') && g.ep1 && g.ep2) {
     return _lineSeg([toV(g.ep1), toV(g.ep2)], pipeColor, comp);
   }
 
@@ -78,6 +113,26 @@ function buildLineDiagramMesh(comp, theme) {
     }
     setUserData(group, comp);
     return group;
+  }
+
+  // Suppress DXF proxy / annotation / block types — no meaningful stick geometry
+  const NO_STICK = new Set(['PROXY_DXF_ENTITY', 'ANNOTATION', 'BLOCK_COMPONENT', 'MESSAGE-CIRCLE', 'MESSAGE-SQUARE', 'SUPPORT']);
+  if (NO_STICK.has(comp.type)) return null;
+
+  // Circles / arcs in stick mode
+  if ((comp.type === 'CIRCLE_SHAPE' || comp.type === 'ARC_SHAPE') && g.origin) {
+    const r = g.radius || (g.bore ? g.bore / 2 : 0);
+    if (r > 1) return _circleRing(g.origin, r, pipeColor, comp);
+  }
+  if (comp.type === 'ARC' && g.cp) {
+    const ep1 = g.ep1;
+    const r = ep1 ? Math.hypot(ep1.x - g.cp.x, ep1.y - g.cp.y, ep1.z - g.cp.z) : 0;
+    if (r > 1) {
+      const ep2 = g.ep2;
+      const aStart = ep1 ? Math.atan2(ep1.y - g.cp.y, ep1.x - g.cp.x) : 0;
+      const aEnd   = ep2 ? Math.atan2(ep2.y - g.cp.y, ep2.x - g.cp.x) : Math.PI * 2;
+      return _lineSeg(_arcPoints(g.cp, r, aStart, aEnd), pipeColor, comp);
+    }
   }
 
   // Fittings (flange, valve, support, generic) — small cross at origin
@@ -142,8 +197,89 @@ function buildGuideMesh(comp, theme) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Render a DXF LINE component (or any LINEAR geometry-role component) as a
+ * plain line segment between ep1 and ep2.  Falls back to a dot if geometry
+ * is missing so the fallback cross/generic draft is never used for lines.
+ */
+function buildLineMesh(comp, theme) {
+  const g = comp.geometry || {};
+  if (g.ep1 && g.ep2) {
+    const color = ldColor(theme, 'pipe');
+    const toV = pt => toThree(pt);
+    return _lineSeg([toV(g.ep1), toV(g.ep2)], color, comp);
+  }
+  // Degenerate — no endpoints: render a small dot at origin
+  const origin = g.origin || g.ep1 || { x: 0, y: 0, z: 0 };
+  const o = toThree(origin);
+  const halfSize = 5 * SCALE;
+  return _crossLines(o, halfSize, ldColor(theme, 'fitting'), comp);
+}
+
+/** Render a CIRCLE_SHAPE (drawn with Circle tool) as a flat ring. */
+function buildCircleMesh(comp, theme) {
+  const g = comp.geometry || {};
+  const center = g.origin || { x: 0, y: 0, z: 0 };
+  const radius = g.radius || (g.bore ? g.bore / 2 : 0);
+  if (!radius || radius < 1) return null;
+  const color = ldColor(theme, 'pipe');
+  return _circleRing(center, radius, color, comp);
+}
+
+/** Render an ARC_SHAPE (drawn with Arc tool: center + startPt + endPt). */
+function buildArcShapeMesh(comp, theme) {
+  const g = comp.geometry || {};
+  const center = g.origin || g.cp;
+  const ep1 = g.ep1;
+  const ep2 = g.ep2;
+  if (!center || !ep1) return null;
+  const dx = ep1.x - center.x;
+  const dy = ep1.y - center.y;
+  const dz = ep1.z - center.z;
+  const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (radius < 1) return null;
+  const color = ldColor(theme, 'pipe');
+  const aStart = Math.atan2(dy, dx);
+  const aEnd   = ep2 ? Math.atan2(ep2.y - center.y, ep2.x - center.x) : aStart + Math.PI * 2;
+  const pts = _arcPoints(center, radius, aStart, aEnd);
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color });
+  const arc = new THREE.Line(geo, mat);
+  setUserData(arc, comp);
+  return arc;
+}
+
+/** Render a DXF ARC / CIRCLE entity using model-space arc generation. */
+function buildArcMesh(comp, theme) {
+  const g = comp.geometry || {};
+  const cp = g.cp || g.origin;
+  if (!cp) return null;
+  const ep1 = g.ep1;
+  const ep2 = g.ep2;
+  const color = ldColor(theme, 'pipe');
+  if (!ep1) return null;
+  const dx = ep1.x - cp.x;
+  const dy = ep1.y - cp.y;
+  const dz = ep1.z - cp.z;
+  const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (radius < 1) return null;
+  // Compute angles in model XY plane
+  const aStart = Math.atan2(dy, dx);
+  const aEnd   = ep2 ? Math.atan2(ep2.y - cp.y, ep2.x - cp.x) : aStart; // aStart === aEnd → full circle
+  const pts = _arcPoints(cp, radius, aStart, aEnd);
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color });
+  const arc = new THREE.Line(geo, mat);
+  setUserData(arc, comp);
+  return arc;
+}
+
 const MESH_DISPATCH = {
   'GUIDE':               buildGuideMesh,
+  'LINE':                buildLineMesh,
+  'CIRCLE_SHAPE':        buildCircleMesh,
+  'ARC_SHAPE':           buildArcShapeMesh,
+  'ARC':                 buildArcMesh,
   'PIPE':                buildPipeDraft,
   'ELBOW':               buildBendDraft,
   'BEND':                buildBendDraft,
@@ -174,6 +310,9 @@ const MESH_DISPATCH = {
   'SUPPORT':             null,           // handled by buildSymbol
   'MESSAGE-CIRCLE':      null,           // label-only
   'MESSAGE-SQUARE':      null,           // label-only
+  'PROXY_DXF_ENTITY':   null,           // unsupported DXF entity — no geometry to show
+  'ANNOTATION':          null,           // DXF TEXT/MTEXT — label only, no mesh
+  'BLOCK_COMPONENT':     null,           // DXF INSERT — no standalone geometry
 };
 
 export function buildMesh(comp, theme, options = {}) {

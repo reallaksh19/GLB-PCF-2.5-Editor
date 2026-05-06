@@ -94,6 +94,18 @@ export function createHudOrchestrator({ container, shellApi }) {
     emitHudTrace('SPLINE_MODE_OPEN');
   }
 
+  function activateCircle() {
+    // circle-draw: click 1 = center, click 2 = radius point → commits full circle
+    store.patch({ visible: true, mode: 'circle-draw', draftPoints: [], errors: [] });
+    emitHudTrace('CIRCLE_MODE_OPEN');
+  }
+
+  function activateArc() {
+    // arc-draw: click 1 = center, click 2 = ep1 (sets radius), click 3 = ep2 → commits arc
+    store.patch({ visible: true, mode: 'arc-draw', draftPoints: [], errors: [] });
+    emitHudTrace('ARC_MODE_OPEN');
+  }
+
   function activateInsert(component) {
     const ctx = resolveInsertDefaults(component, shellApi);
     store.patch({ visible: true, mode: 'insert-component', insertContext: ctx, provenance: ctx.provenance || 'default', errors: [] });
@@ -107,7 +119,7 @@ export function createHudOrchestrator({ container, shellApi }) {
 
   function cancelHud() {
     const state = store.getState();
-    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw') {
+    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw' || state.mode === 'circle-draw' || state.mode === 'arc-draw') {
       store.patch({ draftPoints: [], errors: [], mode: 'idle' });
       emitHudTrace('DRAFT_CANCELLED');
     } else if (state.mode === 'modify-tool') {
@@ -140,6 +152,8 @@ export function createHudOrchestrator({ container, shellApi }) {
     activateLine,
     activatePolyline,
     activateSpline,
+    activateCircle,
+    activateArc,
     activateInsert,
     activateModifyTool,
     cancel:             cancelHud,
@@ -343,6 +357,94 @@ export function createHudOrchestrator({ container, shellApi }) {
                   emitHudTrace('SPLINE_POINT_ADDED', { points: pts.length });
               }
           }
+      /* ── CIRCLE: click 1 = center, click 2 = commit ── */
+      } else if (state.mode === 'circle-draw') {
+          const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
+          const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+          if (!worldPt) return;
+          const pts = [...(state.draftPoints || []), worldPt];
+          if (pts.length === 1) {
+              // First click: set center
+              store.patch({ draftPoints: pts, currentPreviewPoint: worldPt });
+              emitHudTrace('CIRCLE_CENTER_SET', { center: worldPt });
+          } else if (pts.length >= 2) {
+              // Second click: compute radius and commit
+              const center = pts[0];
+              const radiusPt = worldPt;
+              const dx = radiusPt.x - center.x;
+              const dy = radiusPt.y - center.y;
+              const dz = radiusPt.z - center.z;
+              const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (radius > 1) {
+                  try {
+                      const compId = `CIRCLE-${Date.now()}`;
+                      const comp = {
+                          id: compId,
+                          type: 'CIRCLE_SHAPE',
+                          label: `Circle r=${Math.round(radius)}mm`,
+                          geometry: {
+                              origin: center,
+                              ep1: { x: center.x + radius, y: center.y, z: center.z },
+                              ep2: { x: center.x - radius, y: center.y, z: center.z },
+                              bore: radius * 2,
+                              radius,
+                          },
+                          attributes: { RADIUS: radius, TYPE: 'CIRCLE_SHAPE' },
+                          metadata: { source: 'hud-circle', squareText: null, squarePos: null, circleText: null, circleCoord: null, warnings: [] },
+                      };
+                      shellApi.appendComponent(comp);
+                      shellApi.renderer?.addComponent?.(comp, shellApi.getDomain?.(), false);
+                      emitHudTrace('CIRCLE_COMMIT', { center, radius }, true);
+                  } catch (e) {
+                      store.patch({ errors: [String(e.message)] });
+                  }
+              }
+              // Reset for next circle
+              store.patch({ draftPoints: [], currentPreviewPoint: null });
+          }
+      /* ── ARC: click 1 = center, click 2 = ep1 (radius), click 3 = ep2 → commit ── */
+      } else if (state.mode === 'arc-draw') {
+          const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
+          const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+          if (!worldPt) return;
+          const pts = [...(state.draftPoints || []), worldPt];
+          if (pts.length === 1) {
+              store.patch({ draftPoints: pts, currentPreviewPoint: worldPt });
+              emitHudTrace('ARC_CENTER_SET', { center: worldPt });
+          } else if (pts.length === 2) {
+              store.patch({ draftPoints: pts, currentPreviewPoint: worldPt });
+              emitHudTrace('ARC_EP1_SET', { ep1: worldPt });
+          } else if (pts.length >= 3) {
+              const [center, ep1] = pts;
+              const ep2 = worldPt;
+              const dx = ep1.x - center.x;
+              const dy = ep1.y - center.y;
+              const dz = ep1.z - center.z;
+              const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (radius > 1) {
+                  try {
+                      const compId = `ARC-${Date.now()}`;
+                      const comp = {
+                          id: compId,
+                          type: 'ARC_SHAPE',
+                          label: `Arc r=${Math.round(radius)}mm`,
+                          geometry: {
+                              origin: center, cp: center,
+                              ep1, ep2,
+                              bore: radius * 2, radius,
+                          },
+                          attributes: { RADIUS: radius, TYPE: 'ARC_SHAPE' },
+                          metadata: { source: 'hud-arc', squareText: null, squarePos: null, circleText: null, circleCoord: null, warnings: [] },
+                      };
+                      shellApi.appendComponent(comp);
+                      shellApi.renderer?.addComponent?.(comp, shellApi.getDomain?.(), false);
+                      emitHudTrace('ARC_COMMIT', { center, ep1, ep2, radius }, true);
+                  } catch (e) {
+                      store.patch({ errors: [String(e.message)] });
+                  }
+              }
+              store.patch({ draftPoints: [], currentPreviewPoint: null });
+          }
       } else if (state.mode === 'modify-tool' && state.activeTool) {
           const rect = container.getBoundingClientRect();
           const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
@@ -454,7 +556,7 @@ export function createHudOrchestrator({ container, shellApi }) {
     
     const rect = container.getBoundingClientRect();
     
-    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw' || (state.mode === 'modify-tool' && state.modifyDraft)) {
+    if (state.mode === 'polyline-draw' || state.mode === 'spline-draw' || state.mode === 'circle-draw' || state.mode === 'arc-draw' || (state.mode === 'modify-tool' && state.modifyDraft)) {
         const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
         const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
         const hit = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0); // Assuming basic XY plane interaction for now
@@ -496,6 +598,8 @@ export function createHudOrchestrator({ container, shellApi }) {
     showLineMode()                { activateLine(); },
     showPolylineMode()            { activatePolyline(); },
     showSplineMode()              { activateSpline(); },
+    showCircleMode()              { activateCircle(); },
+    showArcMode()                 { activateArc(); },
     activateModifyTool(tool)      { activateModifyTool(tool); },
     showInsertMode(component = 'VALVE') { activateInsert(component); },
     destroy() {

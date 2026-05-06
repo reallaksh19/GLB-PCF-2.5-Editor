@@ -314,6 +314,8 @@ function buildViewerUiBindingsConfig() {
     onShowHudLineMode: () => _hudApi?.showLineMode?.(),
     onShowHudPolylineMode: () => _hudApi?.showPolylineMode?.(),
     onShowHudSplineMode: () => _hudApi?.showSplineMode?.(),
+    onShowHudCircleMode: () => _hudApi?.showCircleMode?.(),
+    onShowHudArcMode: () => _hudApi?.showArcMode?.(),
     onShowHudInsertMode: (component) => _hudApi?.showInsertMode?.(component),
     onActivateModifyTool: (tool) => _hudApi?.activateModifyTool?.(tool),
     onAutoBend: () => autoBendRoute({ source: 'toolbar-auto-bend' }),

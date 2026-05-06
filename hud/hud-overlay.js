@@ -13,6 +13,8 @@ const TOOL_COLOR = {
   'line-draw':        '#3b82f6',
   'polyline-draw':    '#3b82f6',
   'spline-draw':      '#3b82f6',
+  'circle-draw':      '#10b981',
+  'arc-draw':         '#f97316',
   'insert-component': '#a78bfa',
   'modify-tool':      '#f59e0b',
   'idle':             '#64748b',
@@ -22,6 +24,8 @@ const TOOL_TITLE = {
   'line-draw':        'LINE DRAW',
   'polyline-draw':    'POLYLINE',
   'spline-draw':      'SPLINE GUIDE',
+  'circle-draw':      'CIRCLE',
+  'arc-draw':         'ARC DRAW',
   'insert-component': 'INSERT',
   'modify-tool':      'MODIFY',
   'idle':             'HUD',
@@ -35,6 +39,8 @@ const TOOL_ICON = {
   'line-draw':        '╱',
   'polyline-draw':    '⌇',
   'spline-draw':      '∿',
+  'circle-draw':      '○',
+  'arc-draw':         '⌒',
   'insert-component': '⊕',
   'modify-tool':      '⟐',
   'idle':             '◈',
@@ -292,6 +298,52 @@ function splineDraftHtml(state) {
   ].join('');
 }
 
+function circleDraftHtml(state) {
+  const pts = state.draftPoints || [];
+  const ac  = TOOL_COLOR['circle-draw'];
+  const step = pts.length === 0 ? 'Click canvas to set center' : 'Click to set radius point';
+  const stepNum = pts.length === 0 ? '1 / 2' : '2 / 2';
+  return [
+    '<div class="hud-fields-section">',
+    fieldRow([
+      { id:'step', label:'Step', type:'badge', val: stepNum, flex:1 },
+    ]),
+    '</div>',
+    infoStrip(['Action', step, 'Center', pts[0] ? `${Math.round(pts[0].x)}, ${Math.round(pts[0].y)}` : '—']),
+    actionsBar([
+      { label:'Esc', action:'cancel', danger:true },
+    ], ac),
+  ].join('');
+}
+
+function arcDraftHtml(state) {
+  const pts = state.draftPoints || [];
+  const ac  = TOOL_COLOR['arc-draw'];
+  let step, info;
+  if (pts.length === 0) {
+    step = '1 / 3'; info = ['Action', 'Click to set arc center'];
+  } else if (pts.length === 1) {
+    step = '2 / 3'; info = ['Action', 'Click to set start point (radius)', 'Center', `${Math.round(pts[0].x)}, ${Math.round(pts[0].y)}`];
+  } else {
+    const dx = pts[1].x - pts[0].x;
+    const dy = pts[1].y - pts[0].y;
+    const dz = pts[1].z - pts[0].z;
+    const r  = Math.round(Math.sqrt(dx*dx + dy*dy + dz*dz));
+    step = '3 / 3'; info = ['Action', 'Click to set end point', 'Radius', `${r} mm`];
+  }
+  return [
+    '<div class="hud-fields-section">',
+    fieldRow([
+      { id:'step', label:'Step', type:'badge', val: step, flex:1 },
+    ]),
+    '</div>',
+    infoStrip(info),
+    actionsBar([
+      { label:'Esc', action:'cancel', danger:true },
+    ], ac),
+  ].join('');
+}
+
 const MODIFY_HINTS = {
   MOVE:    ['Click','base node','Then','target'],
   STRETCH: ['Click','end node','Drag','new pos.'],
@@ -420,6 +472,8 @@ export function createHudOverlay(container, handlers = {}) {
     else if (mode === 'insert-component')  body += insertDraftHtml(state);
     else if (mode === 'polyline-draw')     body += polylineDraftHtml(state);
     else if (mode === 'spline-draw')       body += splineDraftHtml(state);
+    else if (mode === 'circle-draw')       body += circleDraftHtml(state);
+    else if (mode === 'arc-draw')          body += arcDraftHtml(state);
     else if (mode === 'modify-tool')       body += modifyToolHtml(state);
     else body += `<div class="hud-idle-msg">Select a tool to begin.</div>`;
 

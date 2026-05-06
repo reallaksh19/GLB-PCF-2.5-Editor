@@ -121,10 +121,10 @@ export function parseDxf(text, log) {
         continue;
       }
 
-      if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE') {
+      if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE' || ent.type === 'SPLINE') {
         const segments = polylineSegments(ent);
         if (!segments.length) {
-          logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: 'POLYLINE_HAS_NO_NON_ZERO_SEGMENTS' });
+          logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: `${ent.type}_HAS_NO_NON_ZERO_SEGMENTS` });
           warnCount += 1;
           skippedCount += 1;
           continue;

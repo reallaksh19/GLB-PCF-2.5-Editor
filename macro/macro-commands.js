@@ -1,5 +1,5 @@
 import { beginRoute, consumePendingElbow, requireActiveRoute, routeEnd, routeQueueElbow, routeRunDelta, routeStart } from './macro-route.js';
-import { parseDraftCommandOrThrow } from '../editor/draft-command-parser.js';
+import { parseDraftCommand, parseDraftCommandOrThrow, parseDraftTokens } from '../editor/draft-command-parser.js';
 import { validateMatrixInput } from './validate-matrix-input.js';
 
 const _commands = new Map();
@@ -170,27 +170,34 @@ export function registerBuiltinCommands() {
   if (_commands.size) return;
 
   register('POLYLINE', (args, ctx) => {
-    // POLYLINE x1,y1,z1 x2,y2,z2 ... OR POLYLINE followed by matrix
+    // Accepts:
+    //   POLYLINE x1,y1,z1 x2,y2,z2 ...              (old absolute-point list)
+    //   POLYLINE START=x,y,z X1000 Y750 R500 ...    (draft-token sequence)
     const opts = parseKV(args);
     const valueTokens = args.filter((token) => !String(token).includes('='));
+
     let points = [];
     if (opts.START) {
-      const startPoint = parseXYZ(opts.START, ctx);
-      points = [startPoint];
-      let cursor = startPoint;
-      for (const token of valueTokens) {
-        const parsed = parseDraftCommandOrThrow(token, cursor, { axisLock: 'X' });
-        cursor = parsed.toPoint;
-        points.push(cursor);
-      }
-    } else if (valueTokens.length > 0) {
+      // Draft-token mode: START= defines origin, remaining tokens are draft segments
+      const startPt = parseXYZ(opts.START, ctx);
+      const result = parseDraftTokens(valueTokens, startPt);
+      if (!result.ok) throw new Error(`POLYLINE token error: ${result.diagnostics.join('; ')}`);
+      points = result.points;
+    } else if (valueTokens.length > 0 && !/^[XYZRD@]/.test(String(valueTokens[0]).trim().toUpperCase())) {
+      // Old absolute-coordinate list syntax
       points = valueTokens.map(arg => parseXYZ(arg, ctx));
+    } else if (valueTokens.length > 0) {
+      // Draft-token sequence without explicit START — use workingOrigin
+      const startPt = ctx.lastPoint || ctx.workingOrigin || { x: 0, y: 0, z: 0 };
+      const result = parseDraftTokens(valueTokens, startPt);
+      if (!result.ok) throw new Error(`POLYLINE token error: ${result.diagnostics.join('; ')}`);
+      points = result.points;
     } else if (ctx.matrix) {
       const v = validateMatrixInput(ctx.matrix);
       if (!v.ok) throw new Error('Invalid matrix input for POLYLINE: ' + JSON.stringify(v.errors));
       points = v.points;
     } else {
-      throw new Error('POLYLINE requires point arguments or matrix input');
+      throw new Error('POLYLINE requires point arguments, START= + draft-tokens, or matrix input');
     }
 
     if (points.length < 2) throw new Error('POLYLINE requires at least two valid points');
@@ -209,26 +216,32 @@ export function registerBuiltinCommands() {
   });
 
   register('SPLINE_GUIDE', (args, ctx) => {
+    // Accepts:
+    //   SPLINE_GUIDE x,y,z x,y,z ...              (old absolute list)
+    //   SPLINE_GUIDE START=x,y,z X500 Y300 ...    (draft-token sequence)
+    //   SPLINE_GUIDE MODE=FIT TOL=25 x,y,z ...    (fit-mode passthrough)
     const opts = parseKV(args);
     const valueTokens = args.filter((token) => !String(token).includes('='));
+
     let points = [];
     if (opts.START) {
-      const startPoint = parseXYZ(opts.START, ctx);
-      points = [startPoint];
-      let cursor = startPoint;
-      for (const token of valueTokens) {
-        const parsed = parseDraftCommandOrThrow(token, cursor, { axisLock: 'X' });
-        cursor = parsed.toPoint;
-        points.push(cursor);
-      }
-    } else if (valueTokens.length > 0) {
+      const startPt = parseXYZ(opts.START, ctx);
+      const result = parseDraftTokens(valueTokens, startPt);
+      if (!result.ok) throw new Error(`SPLINE_GUIDE token error: ${result.diagnostics.join('; ')}`);
+      points = result.points;
+    } else if (valueTokens.length > 0 && !/^[XYZRD@]/.test(String(valueTokens[0]).trim().toUpperCase())) {
       points = valueTokens.map(arg => parseXYZ(arg, ctx));
+    } else if (valueTokens.length > 0) {
+      const startPt = ctx.lastPoint || ctx.workingOrigin || { x: 0, y: 0, z: 0 };
+      const result = parseDraftTokens(valueTokens, startPt);
+      if (!result.ok) throw new Error(`SPLINE_GUIDE token error: ${result.diagnostics.join('; ')}`);
+      points = result.points;
     } else if (ctx.matrix) {
       const v = validateMatrixInput(ctx.matrix);
       if (!v.ok) throw new Error('Invalid matrix input for SPLINE_GUIDE: ' + JSON.stringify(v.errors));
       points = v.points;
     } else {
-      throw new Error('SPLINE_GUIDE requires point arguments or matrix input');
+      throw new Error('SPLINE_GUIDE requires point arguments or START= + draft-tokens');
     }
 
     if (points.length < 2) throw new Error('SPLINE_GUIDE requires at least two valid points');
@@ -237,7 +250,7 @@ export function registerBuiltinCommands() {
     if (!routeEngine) throw new Error('ROUTE engine not initialized');
 
     const id = routeEngine.createGuide(points, 'SPLINE', { source: 'macro-spline-guide' });
-    return { message: `SPLINE_GUIDE created: ${id}` };
+    return { message: `SPLINE_GUIDE created: ${id} (${points.length} control points)` };
   });
 
   register('STRETCH', (args, ctx) => {
@@ -466,6 +479,58 @@ export function registerBuiltinCommands() {
     comp.metadata.squareText = text;
     comp.metadata.squarePos = origin;
     return registerCompResult(comp, ctx, `LABEL created: ${comp.id}`);
+  });
+
+  register('CIRCLE', (args, ctx) => {
+    requireArgs(args, 1, 'CIRCLE cx,cy,cz RADIUS=n  — or —  CIRCLE cx,cy,cz rp,rq,rr (radius point)');
+    const center = parseXYZ(args[0], ctx);
+    const opts = parseKV(args.slice(1));
+    let radius = Number(opts.RADIUS || opts.R || 0);
+    if (!radius && args[1] && !args[1].includes('=')) {
+      const rPt = parseXYZ(args[1], ctx);
+      const dx = rPt.x - center.x;
+      const dy = rPt.y - center.y;
+      const dz = rPt.z - center.z;
+      radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    if (!radius || radius < 1) throw new Error('CIRCLE requires a positive RADIUS= value or a radius point');
+    const comp = componentBase('CIRCLE_SHAPE', ctx, `CIRCLE r=${Math.round(radius)}mm`);
+    comp.geometry = {
+      origin: center,
+      ep1: { x: center.x + radius, y: center.y, z: center.z },
+      ep2: { x: center.x - radius, y: center.y, z: center.z },
+      bore: radius * 2,
+      radius,
+      cp: null, bp: null, size: null,
+    };
+    comp.attributes = { RADIUS: String(radius), TYPE: 'CIRCLE_SHAPE' };
+    return registerCompResult(comp, ctx, `CIRCLE created: ${comp.id} (center=${center.x},${center.y},${center.z} r=${Math.round(radius)}mm)`);
+  });
+
+  register('ARC', (args, ctx) => {
+    // ARC cx,cy,cz  ep1x,ep1y,ep1z  ep2x,ep2y,ep2z
+    // Center + start-point + end-point defines the arc in the XY plane.
+    requireArgs(args, 3, 'ARC cx,cy,cz  startx,starty,startz  endx,endy,endz');
+    const center = parseXYZ(args[0], ctx);
+    const ep1    = parseXYZ(args[1], ctx);
+    const ep2    = parseXYZ(args[2], ctx);
+    const dx = ep1.x - center.x;
+    const dy = ep1.y - center.y;
+    const dz = ep1.z - center.z;
+    const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (radius < 1) throw new Error('ARC: start point too close to center (radius < 1 mm)');
+    const comp = componentBase('ARC_SHAPE', ctx, `ARC r=${Math.round(radius)}mm`);
+    comp.geometry = {
+      origin: center,
+      cp: center,
+      ep1,
+      ep2,
+      bore: radius * 2,
+      radius,
+      bp: null, size: null,
+    };
+    comp.attributes = { RADIUS: String(radius), TYPE: 'ARC_SHAPE' };
+    return registerCompResult(comp, ctx, `ARC created: ${comp.id} (r=${Math.round(radius)}mm)`);
   });
 
   register('ORIGIN', (args, ctx) => {

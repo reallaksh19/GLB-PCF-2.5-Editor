@@ -178,3 +178,57 @@ export function parseDraftCommandOrThrow(commandText, fromPoint, options) {
   }
   return parsed;
 }
+
+/**
+ * Canonical single-token entry point — alias for parseDraftCommand.
+ * Use this in all new consumers (HUD, macro, recorder).
+ *
+ * @param {string} token    - single drafting token, e.g. "X1000", "@1000<45"
+ * @param {object} context  - { fromPoint, axisLock? }
+ */
+export function parseDraftToken(token, context) {
+  const ctx = context && typeof context === 'object' ? context : {};
+  return parseDraftCommand(String(token || ''), ctx.fromPoint || { x: 0, y: 0, z: 0 }, ctx);
+}
+
+/**
+ * Parse a sequence of draft tokens from a shared startPoint.
+ * Each token is resolved relative to the toPoint of the previous token.
+ *
+ * @param {string[]} tokens     - array of drafting tokens
+ * @param {object}   fromPoint  - start point { x, y, z }
+ * @param {object}   [options]  - passed to parseDraftCommand for each token
+ * @returns {{ ok: boolean, segments: object[], points: object[], diagnostics: string[] }}
+ */
+export function parseDraftTokens(tokens, fromPoint, options) {
+  const segments = [];
+  const points   = [{ ...(fromPoint || { x: 0, y: 0, z: 0 }) }];
+  const diagnostics = [];
+  let cursor = { ...(fromPoint || { x: 0, y: 0, z: 0 }) };
+  let ok = true;
+
+  for (const token of (tokens || [])) {
+    const result = parseDraftCommand(String(token || ''), cursor, options);
+    if (!result.ok) {
+      ok = false;
+      diagnostics.push(`Token "${token}": ${(result.diagnostics || []).join(', ')}`);
+      break;
+    }
+    segments.push(result);
+    cursor = result.toPoint;
+    points.push({ ...cursor });
+  }
+
+  return { ok, segments, points, diagnostics };
+}
+
+/**
+ * Like parseDraftTokens but throws on first invalid token.
+ */
+export function parseDraftTokensOrThrow(tokens, fromPoint, options) {
+  const result = parseDraftTokens(tokens, fromPoint, options);
+  if (!result.ok) {
+    throw new Error(`Draft token sequence failed: ${result.diagnostics.join('; ')}`);
+  }
+  return result;
+}

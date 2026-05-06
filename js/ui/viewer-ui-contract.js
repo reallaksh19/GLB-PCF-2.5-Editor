@@ -53,6 +53,8 @@ export const VIEWER_UI_IDS = Object.freeze({
   toolLine: 'hifi-tool-line',
   toolPolyline: 'hifi-tool-polyline',
   toolSpline: 'hifi-tool-spline',
+  toolCircle: 'hifi-tool-circle',
+  toolArc: 'hifi-tool-arc',
   toolValve: 'hifi-tool-valve',
   toolFlange: 'hifi-tool-flange',
   toolTee: 'hifi-tool-tee',

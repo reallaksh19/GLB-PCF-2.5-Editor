@@ -116,6 +116,7 @@ export function parseDxfToRawModel(dxfText) {
         break;
       case 'LWPOLYLINE':
       case 'POLYLINE':
+      case 'SPLINE':
         addPolyline(model, {
           type: ent.type,
           handle,
