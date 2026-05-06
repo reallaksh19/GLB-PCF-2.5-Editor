@@ -63,6 +63,7 @@ function addArcComponent(graph, input) {
       clockwise: input.clockwise ?? null,
       startAngle: input.startAngle ?? null,
       endAngle: input.endAngle ?? null,
+      closed: Boolean(input.closed),
     },
     capabilities: defaultCapabilities('ARC'),
     sourceRef: {
@@ -73,6 +74,37 @@ function addArcComponent(graph, input) {
       segmentIndex: input.segmentIndex ?? null,
       downgradedFrom: input.downgradedFrom || null,
     }
+  });
+  return id;
+}
+
+function addGuideComponent(graph, input) {
+  const id = input.id || `DXF_GUIDE_${input.handle || nextCompId('guide')}`;
+  const points = Array.isArray(input.points) ? input.points.filter(Boolean) : [];
+  const anchorIds = points.map((point, index) => {
+    const role = input.sourcePointType === 'FIT' ? 'FIT_POINT' : 'CONTROL_POINT';
+    const anchorId = nextAnchorId(`${input.handle || id}_pt${index}_`);
+    graph.anchors[anchorId] = createAnchor({ id: anchorId, role, point });
+    return anchorId;
+  });
+  graph.components[id] = createComponent({
+    id,
+    type: 'GUIDE',
+    label: input.label || `${input.type || 'GUIDE'} ${input.handle || ''}`.trim(),
+    layerId: input.layer || 'default',
+    anchorIds,
+    geometryRole: 'GUIDE_CURVE',
+    attributes: { guideType: input.type || 'SPLINE', sourcePointType: input.sourcePointType || 'CONTROL' },
+    rawAttributes: {},
+    derived: { pointCount: points.length },
+    capabilities: { canMove: true, canDelete: true, canStretch: true, canExtend: false, canExportDXF: true, canExportGLB: false },
+    sourceRef: { format: 'DXF', handle: input.handle, entityType: input.type || 'SPLINE', layer: input.layer || null }
+  });
+  graph.lossContract.downgradedEntities.push({
+    type: input.type || 'SPLINE',
+    handle: input.handle || null,
+    to: 'GUIDE_CURVE',
+    pointCount: points.length,
   });
   return id;
 }
@@ -127,22 +159,22 @@ export function dxfToCeg(rawModel, options = {}) {
     });
   }
 
-  // ── CIRCLE entities (mapped to closed ARC) ─────────────────────────────
+  // ── CIRCLE entities ────────────────────────────────────────────────────
   for (const circ of rawModel.circles) {
     const id   = `DXF_CIRCLE_${circ.handle || nextCompId('circle')}`;
     const { cx = 0, cy = 0, cz = 0, radius = 0 } = circ;
-    const cpId = nextAnchorId(`${circ.handle || id}_cp_`);
-    const a1Id = nextAnchorId(`${circ.handle || id}_ep1_`);
-    const a2Id = nextAnchorId(`${circ.handle || id}_ep2_`);
-    graph.anchors[cpId] = createAnchor({ id: cpId, role: 'CP',  point: { x: cx, y: cy, z: cz } });
-    graph.anchors[a1Id] = createAnchor({ id: a1Id, role: 'EP1', point: { x: cx + radius, y: cy, z: cz } });
-    graph.anchors[a2Id] = createAnchor({ id: a2Id, role: 'EP2', point: { x: cx - radius, y: cy, z: cz } });
-    graph.components[id] = createComponent({
-      id, type: 'ARC', layerId: circ.layer || 'default',
-      anchorIds: [a1Id, cpId, a2Id], geometryRole: 'CURVE',
-      attributes: {}, rawAttributes: {}, derived: { radius, closed: true },
-      capabilities: defaultCapabilities('ARC'),
-      sourceRef: { format: 'DXF', handle: circ.handle, entityType: 'CIRCLE', layer: circ.layer || null }
+    addArcComponent(graph, {
+      id,
+      handle: circ.handle,
+      layer: circ.layer || 'default',
+      entityType: 'CIRCLE',
+      cp: { x: cx, y: cy, z: cz },
+      ep1: { x: cx + radius, y: cy, z: cz },
+      ep2: { x: cx + radius, y: cy, z: cz },
+      radius,
+      startAngle: 0,
+      endAngle: Math.PI * 2,
+      closed: true,
     });
   }
 
@@ -158,6 +190,11 @@ export function dxfToCeg(rawModel, options = {}) {
       capabilities: defaultCapabilities('BLOCK_COMPONENT'),
       sourceRef: { format: 'DXF', handle: ins.handle, entityType: 'INSERT', layer: ins.layer || null, blockName: ins.blockName || null }
     });
+  }
+
+  // ── SPLINE / guide entities ────────────────────────────────────────────
+  for (const guide of rawModel.guides || []) {
+    addGuideComponent(graph, guide);
   }
 
   // ── POLYLINE entities ──────────────────────────────────────────────────
