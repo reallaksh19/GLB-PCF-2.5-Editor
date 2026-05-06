@@ -21,7 +21,8 @@
     "test:m0-guard": "node integration/geometry-drafting-guard.js",
     "test:draft-parser": "node tests/draft-command-parser.smoke.mjs",
     "test:geometry-view": "node tests/geometry-view.smoke.mjs",
-    "test:dxf-bulge": "node tests/dxf-bulge-utils.smoke.mjs && node tests/dxf-ceg-curve-guide.smoke.mjs",
+    "test:dxf-fidelity": "node tests/dxf-bulge-utils.smoke.mjs && node tests/dxf-ceg-curve-guide.smoke.mjs && node tests/dxf-block-expander.smoke.mjs",
+    "test:dxf-bulge": "npm run test:dxf-fidelity",
     "dxf:fid01": "node tools/dxf-fidelity-inventory.mjs \"Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf\" --json reports/dxf-fid-01.inventory.json"
   },
   "devDependencies": {
@@ -121,7 +122,7 @@
     "update-check": "^1.5.4",
     "vary": "^1.1.2",
     "which": "^2.0.2",
-    "widest-line": "^4.0.1",
+    "widest-line": "^4.1.0",
     "wrap-ansi": "^8.1.0"
   }
 }
