@@ -13,6 +13,7 @@ export function createRawDxfModel() {
     inserts:     [],
     polylines:   [],
     circles:     [],
+    guides:      [],
     unsupported: []
   };
 }
@@ -23,4 +24,5 @@ export function addText(model, entity)        { model.texts.push(entity); }
 export function addInsert(model, entity)      { model.inserts.push(entity); }
 export function addPolyline(model, entity)    { model.polylines.push(entity); }
 export function addCircle(model, entity)      { model.circles.push(entity); }
+export function addGuide(model, entity)       { model.guides.push(entity); }
 export function addUnsupported(model, entity) { model.unsupported.push(entity); }
