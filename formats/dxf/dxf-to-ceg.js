@@ -11,6 +11,7 @@ import { createComponent }          from '../../core/ceg/canonical-component.js'
 import { createAnchor }             from '../../core/ceg/canonical-anchor.js';
 import { defaultCapabilities }      from '../../core/ceg/capabilities.js';
 import { buildLayerMap }            from './dxf-layer-resolver.js';
+import { expandPolylineSegments }   from './dxf-bulge-utils.js';
 
 let anchorCounter = 0;
 let compCounter   = 0;
@@ -40,25 +41,40 @@ function addLineComponent(graph, input) {
   return id;
 }
 
-function isZeroLength(a, b) {
-  if (!a || !b) return true;
-  const dx = (b.x ?? 0) - (a.x ?? 0);
-  const dy = (b.y ?? 0) - (a.y ?? 0);
-  const dz = (b.z ?? 0) - (a.z ?? 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
-}
-
-function expandPolylineVertices(pl) {
-  const vertices = Array.isArray(pl.vertices) ? [...pl.vertices] : [];
-  if ((pl.closed || pl.shape || pl.isClosed) && vertices.length > 2) vertices.push(vertices[0]);
-  const segments = [];
-  for (let i = 0; i < vertices.length - 1; i += 1) {
-    const ep1 = vertices[i];
-    const ep2 = vertices[i + 1];
-    if (isZeroLength(ep1, ep2)) continue;
-    segments.push({ ep1, ep2, segmentIndex: i });
-  }
-  return segments;
+function addArcComponent(graph, input) {
+  const id = input.id || `DXF_ARC_${input.handle || nextCompId('arc')}`;
+  const cpId = nextAnchorId(`${input.handle || id}_cp_`);
+  const a1Id = nextAnchorId(`${input.handle || id}_ep1_`);
+  const a2Id = nextAnchorId(`${input.handle || id}_ep2_`);
+  graph.anchors[cpId] = createAnchor({ id: cpId, role: 'CP', point: input.cp });
+  graph.anchors[a1Id] = createAnchor({ id: a1Id, role: 'EP1', point: input.ep1 });
+  graph.anchors[a2Id] = createAnchor({ id: a2Id, role: 'EP2', point: input.ep2 });
+  graph.components[id] = createComponent({
+    id,
+    type: 'ARC',
+    layerId: input.layer || 'default',
+    anchorIds: [a1Id, cpId, a2Id],
+    geometryRole: 'CURVE',
+    attributes: {},
+    rawAttributes: {},
+    derived: {
+      radius: input.radius ?? null,
+      bulge: input.bulge ?? null,
+      clockwise: input.clockwise ?? null,
+      startAngle: input.startAngle ?? null,
+      endAngle: input.endAngle ?? null,
+    },
+    capabilities: defaultCapabilities('ARC'),
+    sourceRef: {
+      format: 'DXF',
+      handle: input.handle,
+      entityType: input.entityType || 'ARC',
+      layer: input.layer || null,
+      segmentIndex: input.segmentIndex ?? null,
+      downgradedFrom: input.downgradedFrom || null,
+    }
+  });
+  return id;
 }
 
 /**
@@ -82,23 +98,18 @@ export function dxfToCeg(rawModel, options = {}) {
 
   // ── ARC entities ───────────────────────────────────────────────────────
   for (const arc of rawModel.arcs) {
-    const id   = `DXF_ARC_${arc.handle || nextCompId('arc')}`;
     const { cx = 0, cy = 0, cz = 0, radius = 0 } = arc;
-    const ep1  = { x: cx + radius * Math.cos(arc.startAngle ?? 0), y: cy + radius * Math.sin(arc.startAngle ?? 0), z: cz };
-    const ep2  = { x: cx + radius * Math.cos(arc.endAngle   ?? 0), y: cy + radius * Math.sin(arc.endAngle   ?? 0), z: cz };
-    const cp   = { x: cx, y: cy, z: cz };
-    const cpId = nextAnchorId(`${arc.handle || id}_cp_`);
-    const a1Id = nextAnchorId(`${arc.handle || id}_ep1_`);
-    const a2Id = nextAnchorId(`${arc.handle || id}_ep2_`);
-    graph.anchors[cpId] = createAnchor({ id: cpId, role: 'CP',  point: cp  });
-    graph.anchors[a1Id] = createAnchor({ id: a1Id, role: 'EP1', point: ep1 });
-    graph.anchors[a2Id] = createAnchor({ id: a2Id, role: 'EP2', point: ep2 });
-    graph.components[id] = createComponent({
-      id, type: 'ARC', layerId: arc.layer || 'default',
-      anchorIds: [a1Id, cpId, a2Id], geometryRole: 'CURVE',
-      attributes: {}, rawAttributes: {}, derived: { radius },
-      capabilities: defaultCapabilities('ARC'),
-      sourceRef: { format: 'DXF', handle: arc.handle, entityType: 'ARC', layer: arc.layer || null }
+    addArcComponent(graph, {
+      id: `DXF_ARC_${arc.handle || nextCompId('arc')}`,
+      handle: arc.handle,
+      layer: arc.layer || 'default',
+      entityType: 'ARC',
+      cp: { x: cx, y: cy, z: cz },
+      ep1: { x: cx + radius * Math.cos(arc.startAngle ?? 0), y: cy + radius * Math.sin(arc.startAngle ?? 0), z: cz },
+      ep2: { x: cx + radius * Math.cos(arc.endAngle ?? 0), y: cy + radius * Math.sin(arc.endAngle ?? 0), z: cz },
+      radius,
+      startAngle: arc.startAngle ?? 0,
+      endAngle: arc.endAngle ?? 0,
     });
   }
 
@@ -129,7 +140,7 @@ export function dxfToCeg(rawModel, options = {}) {
     graph.components[id] = createComponent({
       id, type: 'ARC', layerId: circ.layer || 'default',
       anchorIds: [a1Id, cpId, a2Id], geometryRole: 'CURVE',
-      attributes: {}, rawAttributes: {}, derived: { radius },
+      attributes: {}, rawAttributes: {}, derived: { radius, closed: true },
       capabilities: defaultCapabilities('ARC'),
       sourceRef: { format: 'DXF', handle: circ.handle, entityType: 'CIRCLE', layer: circ.layer || null }
     });
@@ -150,11 +161,11 @@ export function dxfToCeg(rawModel, options = {}) {
   }
 
   // ── POLYLINE entities ──────────────────────────────────────────────────
-  // Structural fix: preserve real-world POLYLINE/LWPOLYLINE geometry by
-  // downgrading each segment to an editable LINE instead of creating only a
-  // non-renderable proxy at origin.
+  // Fidelity fix: preserve DXF bulge arcs instead of forcing every polyline
+  // span into a straight segment. Straight spans become LINE components; bulged
+  // spans become ARC components with source metadata.
   for (const pl of rawModel.polylines) {
-    const segments = expandPolylineVertices(pl);
+    const segments = expandPolylineSegments(pl);
     if (!segments.length) {
       const id  = `DXF_POLYLINE_${pl.handle || nextCompId('pline')}`;
       const aId = nextAnchorId(`${pl.handle || id}_origin_`);
@@ -171,27 +182,52 @@ export function dxfToCeg(rawModel, options = {}) {
       continue;
     }
 
+    let lineCount = 0;
+    let arcCount = 0;
     for (const seg of segments) {
-      addLineComponent(graph, {
-        id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_SEG_${seg.segmentIndex}`,
-        handle: pl.handle,
-        layer: pl.layer || 'default',
-        entityType: 'LINE',
-        downgradedFrom: pl.type || 'POLYLINE',
-        segmentIndex: seg.segmentIndex,
-        x1: seg.ep1.x,
-        y1: seg.ep1.y,
-        z1: seg.ep1.z,
-        x2: seg.ep2.x,
-        y2: seg.ep2.y,
-        z2: seg.ep2.z,
-      });
+      if (seg.kind === 'ARC') {
+        arcCount += 1;
+        addArcComponent(graph, {
+          id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_ARC_${seg.segmentIndex}`,
+          handle: pl.handle,
+          layer: pl.layer || 'default',
+          entityType: 'ARC',
+          downgradedFrom: pl.type || 'POLYLINE',
+          segmentIndex: seg.segmentIndex,
+          ep1: seg.ep1,
+          ep2: seg.ep2,
+          cp: seg.cp,
+          radius: seg.radius,
+          bulge: seg.bulge,
+          clockwise: seg.clockwise,
+          startAngle: seg.startAngle,
+          endAngle: seg.endAngle,
+        });
+      } else {
+        lineCount += 1;
+        addLineComponent(graph, {
+          id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_SEG_${seg.segmentIndex}`,
+          handle: pl.handle,
+          layer: pl.layer || 'default',
+          entityType: 'LINE',
+          downgradedFrom: pl.type || 'POLYLINE',
+          segmentIndex: seg.segmentIndex,
+          x1: seg.ep1.x,
+          y1: seg.ep1.y,
+          z1: seg.ep1.z,
+          x2: seg.ep2.x,
+          y2: seg.ep2.y,
+          z2: seg.ep2.z,
+        });
+      }
     }
     graph.lossContract.downgradedEntities.push({
       type: pl.type || 'POLYLINE',
       handle: pl.handle || null,
-      to: 'LINE_SEGMENTS',
+      to: arcCount ? 'LINE_AND_ARC_SEGMENTS' : 'LINE_SEGMENTS',
       segmentCount: segments.length,
+      lineCount,
+      arcCount,
     });
   }
 
