@@ -2,6 +2,7 @@ import DxfParser from 'dxf-parser';
 import { parseDxfToRawModel } from '../../formats/dxf/dxf-parser-adapter.js';
 import { dxfToCeg }           from '../../formats/dxf/dxf-to-ceg.js';
 import { graphToGenericComponents } from '../../core/geometry/geometry-view.js';
+import { expandCurveEntityToSegments, hasPolylineBulges } from '../../formats/dxf/dxf-curve-utils.js';
 import {
   dxfEntitySource,
   getDxfEntityIssue,
@@ -42,34 +43,35 @@ function makeComponent(localId, type, geometry, attributes, metadata = {}) {
   };
 }
 
-function isZeroLength(a, b) {
-  if (!a || !b) return true;
-  const dx = (b.x ?? 0) - (a.x ?? 0);
-  const dy = (b.y ?? 0) - (a.y ?? 0);
-  const dz = (b.z ?? 0) - (a.z ?? 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
-}
-
-function polylineSegments(ent) {
-  const vertices = [...(ent.vertices || [])];
-  const closed = Boolean(ent.raw?.closed || ent.raw?.shape || ent.raw?.isClosed);
-  if (closed && vertices.length > 2) vertices.push(vertices[0]);
-
-  const segments = [];
-  for (let i = 0; i < vertices.length - 1; i += 1) {
-    const ep1 = vertices[i];
-    const ep2 = vertices[i + 1];
-    if (isZeroLength(ep1, ep2)) continue;
-    segments.push({ ep1, ep2, segmentIndex: i });
-  }
-  return segments;
-}
-
 function logEntityWarn(log, code, ent, extra = {}) {
   log.warn(code, {
     ...dxfEntitySource(ent),
     ...extra,
   });
+}
+
+function updateBounds(bounds, pt) {
+  if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y) || !Number.isFinite(pt.z)) return;
+  bounds.min.x = Math.min(bounds.min.x, pt.x);
+  bounds.min.y = Math.min(bounds.min.y, pt.y);
+  bounds.min.z = Math.min(bounds.min.z, pt.z);
+  bounds.max.x = Math.max(bounds.max.x, pt.x);
+  bounds.max.y = Math.max(bounds.max.y, pt.y);
+  bounds.max.z = Math.max(bounds.max.z, pt.z);
+  bounds.count += 1;
+}
+
+function boundsSummary(bounds) {
+  if (!bounds.count) return null;
+  return {
+    min: bounds.min,
+    max: bounds.max,
+    size: {
+      x: bounds.max.x - bounds.min.x,
+      y: bounds.max.y - bounds.min.y,
+      z: bounds.max.z - bounds.min.z,
+    },
+  };
 }
 
 export function parseDxf(text, log) {
@@ -92,6 +94,17 @@ export function parseDxf(text, log) {
 
   const components = [];
   const byType = {};
+  const fidelity = {
+    bulgePolylineCount: 0,
+    splineApproximationCount: 0,
+    insertBlockCount: 0,
+    curveChordCount: 0,
+  };
+  const bounds = {
+    min: { x: Infinity, y: Infinity, z: Infinity },
+    max: { x: -Infinity, y: -Infinity, z: -Infinity },
+    count: 0,
+  };
   let localId = 1;
   let warnCount = 0;
   let skippedCount = 0;
@@ -114,6 +127,8 @@ export function parseDxf(text, log) {
 
     try {
       if (ent.type === 'LINE') {
+        updateBounds(bounds, ent.ep1);
+        updateBounds(bounds, ent.ep2);
         components.push(makeComponent(localId++, 'PIPE', {
           ep1: ent.ep1,
           ep2: ent.ep2,
@@ -122,7 +137,12 @@ export function parseDxf(text, log) {
       }
 
       if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE' || ent.type === 'SPLINE') {
-        const segments = polylineSegments(ent);
+        if (hasPolylineBulges(ent.vertices)) fidelity.bulgePolylineCount += 1;
+        if (ent.type === 'SPLINE') fidelity.splineApproximationCount += 1;
+        const segments = expandCurveEntityToSegments(ent, {
+          toleranceMm: 25,
+          maxSegmentLengthMm: 500,
+        });
         if (!segments.length) {
           logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: `${ent.type}_HAS_NO_NON_ZERO_SEGMENTS` });
           warnCount += 1;
@@ -131,6 +151,9 @@ export function parseDxf(text, log) {
         }
 
         for (const seg of segments) {
+          updateBounds(bounds, seg.ep1);
+          updateBounds(bounds, seg.ep2);
+          if (seg.approximatedFrom) fidelity.curveChordCount += 1;
           components.push(makeComponent(localId++, 'PIPE', {
             ep1: seg.ep1,
             ep2: seg.ep2,
@@ -138,6 +161,9 @@ export function parseDxf(text, log) {
             source,
             downgradedFrom: ent.type,
             segmentIndex: seg.segmentIndex,
+            chordIndex: seg.chordIndex ?? null,
+            approximatedFrom: seg.approximatedFrom || null,
+            bulge: seg.bulge ?? null,
           }));
         }
         downgradedCount += 1;
@@ -146,23 +172,30 @@ export function parseDxf(text, log) {
 
       if (ent.type === 'ARC') {
         const r = ent.radius;
+        const ep1 = {
+          x: ent.center.x + r * Math.cos(ent.startAngle),
+          y: ent.center.y + r * Math.sin(ent.startAngle),
+          z: ent.center.z,
+        };
+        const ep2 = {
+          x: ent.center.x + r * Math.cos(ent.endAngle),
+          y: ent.center.y + r * Math.sin(ent.endAngle),
+          z: ent.center.z,
+        };
+        updateBounds(bounds, ep1);
+        updateBounds(bounds, ep2);
+        updateBounds(bounds, ent.center);
         components.push(makeComponent(localId++, 'ELBOW', {
           cp: ent.center,
-          ep1: {
-            x: ent.center.x + r * Math.cos(ent.startAngle),
-            y: ent.center.y + r * Math.sin(ent.startAngle),
-            z: ent.center.z,
-          },
-          ep2: {
-            x: ent.center.x + r * Math.cos(ent.endAngle),
-            y: ent.center.y + r * Math.sin(ent.endAngle),
-            z: ent.center.z,
-          },
+          ep1,
+          ep2,
         }, attributes, { source }));
         continue;
       }
 
       if (ent.type === 'CIRCLE') {
+        updateBounds(bounds, { x: ent.center.x - ent.radius, y: ent.center.y - ent.radius, z: ent.center.z });
+        updateBounds(bounds, { x: ent.center.x + ent.radius, y: ent.center.y + ent.radius, z: ent.center.z });
         components.push(makeComponent(localId++, 'FLANGE', {
           origin: ent.center,
           bore: ent.radius * 2,
@@ -171,20 +204,37 @@ export function parseDxf(text, log) {
       }
 
       if (ent.type === 'INSERT') {
+        fidelity.insertBlockCount += 1;
         const bn = String(ent.blockName || '').toUpperCase();
         let type = 'FITTING';
         if (bn.includes('VALVE')) type = 'VALVE';
         else if (bn.includes('SUPPORT')) type = 'SUPPORT';
         else if (bn.includes('TEE')) type = 'TEE';
 
+        updateBounds(bounds, ent.position);
         components.push(makeComponent(localId++, type, {
           origin: ent.position,
-        }, attributes, { source, blockName: ent.blockName || null }));
+          size: { w: 100, h: 100, d: 100 },
+        }, attributes, {
+          source,
+          blockName: ent.blockName || null,
+          rotation: ent.rotation,
+          scale: ent.scale,
+          warning: 'BLOCK_NOT_EXPANDED_PLACEHOLDER_RENDERED',
+        }));
+        logEntityWarn(log, 'DXF_INSERT_PLACEHOLDER', ent, {
+          blockName: ent.blockName || null,
+          reason: 'Block definition expansion pending; placeholder keeps insertion visible',
+        });
+        warnCount += 1;
         continue;
       }
 
       if (ent.type === 'TEXT' || ent.type === 'MTEXT') {
-        components.push(makeComponent(localId++, 'MESSAGE-SQUARE', {}, attributes, {
+        updateBounds(bounds, ent.textAnchor);
+        components.push(makeComponent(localId++, 'MESSAGE-SQUARE', {
+          origin: ent.textAnchor,
+        }, attributes, {
           source,
           squareText: ent.text,
           squarePos: ent.textAnchor,
@@ -193,8 +243,10 @@ export function parseDxf(text, log) {
       }
 
       if (ent.type === 'POINT') {
+        const origin = ent.position || ent.textAnchor || { x: 0, y: 0, z: 0 };
+        updateBounds(bounds, origin);
         components.push(makeComponent(localId++, 'FITTING', {
-          origin: ent.position || ent.textAnchor || { x: 0, y: 0, z: 0 },
+          origin,
         }, attributes, { source }));
         continue;
       }
@@ -216,7 +268,13 @@ export function parseDxf(text, log) {
     skippedCount,
     downgradedCount,
     entityTypes: byType,
+    fidelity,
+    extents: boundsSummary(bounds),
   });
+
+  if (fidelity.bulgePolylineCount || fidelity.splineApproximationCount || fidelity.insertBlockCount) {
+    log.warn('DXF_VISUAL_FIDELITY_APPROXIMATION', fidelity);
+  }
 
   if (components.length > 0) {
     import('../../js/capabilities/capability-registry.js').then(({ capabilities }) => {
