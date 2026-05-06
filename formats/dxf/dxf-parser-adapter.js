@@ -14,19 +14,46 @@
  *   INSERT  → { x,y,z, blockName, layer, handle }
  *   LWPOLYLINE/POLYLINE → polylines list with vertices preserved
  *   SPLINE  → guides list with control/fit points preserved
+ *   BLOCK definitions → model.blocks, then expanded from INSERTs
  *   anything else → unsupported list
  */
 
 import DxfParser from 'dxf-parser';
 import {
   createRawDxfModel,
-  addLine, addArc, addText, addInsert, addPolyline, addCircle, addGuide, addUnsupported
+  addLine, addArc, addText, addInsert, addPolyline, addCircle, addGuide, addUnsupported,
+  addBlockDefinition,
 } from './dxf-raw-model.js';
+import { expandAllInserts } from './dxf-block-expander.js';
 import {
   dxfEntitySource,
   getDxfEntityIssue,
   normalizeDxfEntity,
 } from './dxf-entity-normalizer.js';
+
+function blockBasePoint(block = {}) {
+  return block.basePoint
+    || block.position
+    || block.origin
+    || block.insertionPoint
+    || { x: block.x || 0, y: block.y || 0, z: block.z || 0 };
+}
+
+function normalizeBlockDefinitions(model, dxf) {
+  const blocks = dxf?.blocks || {};
+  if (!blocks || typeof blocks !== 'object') return;
+
+  for (const [name, block] of Object.entries(blocks)) {
+    if (!block || typeof block !== 'object') continue;
+    const entities = Array.isArray(block.entities) ? block.entities : [];
+    addBlockDefinition(model, block.name || name, {
+      name: block.name || name,
+      entities,
+      basePoint: blockBasePoint(block),
+      raw: block,
+    });
+  }
+}
 
 /**
  * Parse a DXF string into a RawDXFModel.
@@ -48,6 +75,7 @@ export function parseDxfToRawModel(dxfText) {
   }
 
   const model    = createRawDxfModel();
+  normalizeBlockDefinitions(model, dxf);
   const entities = dxf?.entities || [];
 
   for (let index = 0; index < entities.length; index += 1) {
@@ -108,11 +136,19 @@ export function parseDxfToRawModel(dxfText) {
         break;
       case 'INSERT':
         addInsert(model, {
-          type: 'INSERT', handle, layer,
+          type: 'INSERT',
+          handle,
+          layer,
           x: ent.position.x,
           y: ent.position.y,
           z: ent.position.z,
+          position: ent.position,
           blockName: ent.blockName || null,
+          raw: ent.raw || {},
+          rotation: ent.raw?.rotation ?? ent.raw?.rotationAngle ?? 0,
+          xScale: ent.raw?.xScale ?? ent.raw?.scaleX ?? ent.raw?.scale?.x ?? 1,
+          yScale: ent.raw?.yScale ?? ent.raw?.scaleY ?? ent.raw?.scale?.y ?? 1,
+          zScale: ent.raw?.zScale ?? ent.raw?.scaleZ ?? ent.raw?.scale?.z ?? 1,
         });
         break;
       case 'LWPOLYLINE':
@@ -140,5 +176,6 @@ export function parseDxfToRawModel(dxfText) {
     }
   }
 
+  expandAllInserts(model);
   return model;
 }
