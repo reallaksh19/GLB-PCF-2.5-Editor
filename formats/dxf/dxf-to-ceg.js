@@ -11,6 +11,7 @@ import { createComponent }          from '../../core/ceg/canonical-component.js'
 import { createAnchor }             from '../../core/ceg/canonical-anchor.js';
 import { defaultCapabilities }      from '../../core/ceg/capabilities.js';
 import { buildLayerMap }            from './dxf-layer-resolver.js';
+import { expandCurveEntityToSegments } from './dxf-curve-utils.js';
 
 let anchorCounter = 0;
 let compCounter   = 0;
@@ -26,7 +27,10 @@ function addLineComponent(graph, input) {
   graph.components[id] = createComponent({
     id, type: 'LINE', layerId: input.layer || 'default',
     anchorIds: [a1Id, a2Id], geometryRole: 'LINEAR',
-    attributes: {}, rawAttributes: {}, derived: {},
+    attributes: {}, rawAttributes: {}, derived: {
+      approximatedFrom: input.approximatedFrom || null,
+      bulge: input.bulge ?? null,
+    },
     capabilities: defaultCapabilities('LINE'),
     sourceRef: {
       format: 'DXF',
@@ -34,31 +38,11 @@ function addLineComponent(graph, input) {
       entityType: input.entityType || 'LINE',
       layer: input.layer || null,
       segmentIndex: input.segmentIndex ?? null,
+      chordIndex: input.chordIndex ?? null,
       downgradedFrom: input.downgradedFrom || null,
     }
   });
   return id;
-}
-
-function isZeroLength(a, b) {
-  if (!a || !b) return true;
-  const dx = (b.x ?? 0) - (a.x ?? 0);
-  const dy = (b.y ?? 0) - (a.y ?? 0);
-  const dz = (b.z ?? 0) - (a.z ?? 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
-}
-
-function expandPolylineVertices(pl) {
-  const vertices = Array.isArray(pl.vertices) ? [...pl.vertices] : [];
-  if ((pl.closed || pl.shape || pl.isClosed) && vertices.length > 2) vertices.push(vertices[0]);
-  const segments = [];
-  for (let i = 0; i < vertices.length - 1; i += 1) {
-    const ep1 = vertices[i];
-    const ep2 = vertices[i + 1];
-    if (isZeroLength(ep1, ep2)) continue;
-    segments.push({ ep1, ep2, segmentIndex: i });
-  }
-  return segments;
 }
 
 /**
@@ -129,7 +113,7 @@ export function dxfToCeg(rawModel, options = {}) {
     graph.components[id] = createComponent({
       id, type: 'ARC', layerId: circ.layer || 'default',
       anchorIds: [a1Id, cpId, a2Id], geometryRole: 'CURVE',
-      attributes: {}, rawAttributes: {}, derived: { radius },
+      attributes: {}, rawAttributes: {}, derived: { radius, closed: true },
       capabilities: defaultCapabilities('ARC'),
       sourceRef: { format: 'DXF', handle: circ.handle, entityType: 'CIRCLE', layer: circ.layer || null }
     });
@@ -143,18 +127,25 @@ export function dxfToCeg(rawModel, options = {}) {
     graph.components[id] = createComponent({
       id, type: 'BLOCK_COMPONENT', layerId: ins.layer || 'default',
       anchorIds: [aId], geometryRole: 'POINT',
-      attributes: { blockName: ins.blockName || null }, rawAttributes: {}, derived: {},
+      attributes: { blockName: ins.blockName || null }, rawAttributes: {}, derived: {
+        rotation: ins.rotation || 0,
+        scale: ins.scale || { x: 1, y: 1, z: 1 },
+        warning: 'BLOCK_NOT_EXPANDED_PLACEHOLDER_RENDERED',
+      },
       capabilities: defaultCapabilities('BLOCK_COMPONENT'),
       sourceRef: { format: 'DXF', handle: ins.handle, entityType: 'INSERT', layer: ins.layer || null, blockName: ins.blockName || null }
     });
+    graph.lossContract.downgradedEntities.push({
+      type: 'INSERT',
+      handle: ins.handle || null,
+      to: 'BLOCK_PLACEHOLDER',
+      reason: 'BLOCK_EXPANSION_PENDING',
+    });
   }
 
-  // ── POLYLINE entities ──────────────────────────────────────────────────
-  // Structural fix: preserve real-world POLYLINE/LWPOLYLINE geometry by
-  // downgrading each segment to an editable LINE instead of creating only a
-  // non-renderable proxy at origin.
+  // ── POLYLINE/SPLINE entities ───────────────────────────────────────────
   for (const pl of rawModel.polylines) {
-    const segments = expandPolylineVertices(pl);
+    const segments = expandCurveEntityToSegments(pl, options);
     if (!segments.length) {
       const id  = `DXF_POLYLINE_${pl.handle || nextCompId('pline')}`;
       const aId = nextAnchorId(`${pl.handle || id}_origin_`);
@@ -173,12 +164,15 @@ export function dxfToCeg(rawModel, options = {}) {
 
     for (const seg of segments) {
       addLineComponent(graph, {
-        id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_SEG_${seg.segmentIndex}`,
+        id: `DXF_POLYLINE_${pl.handle || nextCompId('pline')}_SEG_${seg.segmentIndex}_${seg.chordIndex ?? 0}`,
         handle: pl.handle,
         layer: pl.layer || 'default',
         entityType: 'LINE',
         downgradedFrom: pl.type || 'POLYLINE',
         segmentIndex: seg.segmentIndex,
+        chordIndex: seg.chordIndex ?? null,
+        approximatedFrom: seg.approximatedFrom || null,
+        bulge: seg.bulge ?? null,
         x1: seg.ep1.x,
         y1: seg.ep1.y,
         z1: seg.ep1.z,
@@ -192,6 +186,7 @@ export function dxfToCeg(rawModel, options = {}) {
       handle: pl.handle || null,
       to: 'LINE_SEGMENTS',
       segmentCount: segments.length,
+      hasCurveApproximation: segments.some((seg) => !!seg.approximatedFrom),
     });
   }
 
