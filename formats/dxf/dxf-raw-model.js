@@ -14,6 +14,9 @@ export function createRawDxfModel() {
     polylines:   [],
     circles:     [],
     guides:      [],
+    blocks:      {},
+    blockExpansions: [],
+    diagnostics: [],
     unsupported: []
   };
 }
@@ -26,3 +29,19 @@ export function addPolyline(model, entity)    { model.polylines.push(entity); }
 export function addCircle(model, entity)      { model.circles.push(entity); }
 export function addGuide(model, entity)       { model.guides.push(entity); }
 export function addUnsupported(model, entity) { model.unsupported.push(entity); }
+export function addDiagnostic(model, item)    { model.diagnostics.push(item); }
+
+export function addBlockDefinition(model, blockName, definition) {
+  if (!blockName) return;
+  model.blocks[String(blockName).toUpperCase()] = {
+    name: blockName,
+    entities: Array.isArray(definition?.entities) ? definition.entities : [],
+    basePoint: definition?.basePoint || definition?.position || { x: 0, y: 0, z: 0 },
+    raw: definition || {},
+  };
+}
+
+export function findBlockDefinition(model, blockName) {
+  if (!blockName) return null;
+  return model.blocks[String(blockName).toUpperCase()] || null;
+}
