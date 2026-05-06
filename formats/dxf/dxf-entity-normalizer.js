@@ -27,11 +27,14 @@ export function normalizeDxfPoint(value, fallback = null) {
   const z = finiteNumber(firstDefined(value.z, value.Z, value[2]), 0);
 
   if (x === null || y === null) return fallback;
-  return { x, y, z };
+  const point = { x, y, z };
+  const bulge = finiteNumber(firstDefined(value.bulge, value.Bulge, value[4]), null);
+  if (bulge !== null) point.bulge = bulge;
+  return point;
 }
 
 function normalizeVertices(ent) {
-  const candidates = firstDefined(ent?.vertices, ent?.points, ent?.controlPoints, []);
+  const candidates = firstDefined(ent?.vertices, ent?.points, ent?.controlPoints, ent?.fitPoints, []);
   if (!Array.isArray(candidates)) return [];
   return candidates
     .map((pt) => normalizeDxfPoint(pt, null))
@@ -85,6 +88,17 @@ function textPoint(ent) {
     || { x: 0, y: 0, z: 0 };
 }
 
+function normalizeScale(value) {
+  if (typeof value === 'object' && value) {
+    return {
+      x: finiteNumber(firstDefined(value.x, value.X), 1),
+      y: finiteNumber(firstDefined(value.y, value.Y), 1),
+      z: finiteNumber(firstDefined(value.z, value.Z), 1),
+    };
+  }
+  return { x: 1, y: 1, z: 1 };
+}
+
 export function normalizeDxfEntity(ent, index = 0) {
   const rawType = String(ent?.type || 'UNKNOWN').toUpperCase();
   const vertices = normalizeVertices(ent);
@@ -113,6 +127,8 @@ export function normalizeDxfEntity(ent, index = 0) {
     endAngle,
     text: String(firstDefined(ent?.text, ent?.plainText, ent?.string, '') || ''),
     blockName: firstDefined(ent?.name, ent?.blockName, ent?.block, null),
+    rotation: finiteNumber(firstDefined(ent?.rotation, ent?.angle), 0),
+    scale: normalizeScale(ent?.scale),
     raw: ent || {},
   };
 }
