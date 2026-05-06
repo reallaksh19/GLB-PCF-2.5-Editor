@@ -13,13 +13,14 @@
  *   TEXT    → { x,y,z, text, layer, handle }
  *   INSERT  → { x,y,z, blockName, layer, handle }
  *   LWPOLYLINE/POLYLINE → polylines list with vertices preserved
+ *   SPLINE  → guides list with control/fit points preserved
  *   anything else → unsupported list
  */
 
 import DxfParser from 'dxf-parser';
 import {
   createRawDxfModel,
-  addLine, addArc, addText, addInsert, addPolyline, addCircle, addUnsupported
+  addLine, addArc, addText, addInsert, addPolyline, addCircle, addGuide, addUnsupported
 } from './dxf-raw-model.js';
 import {
   dxfEntitySource,
@@ -116,13 +117,21 @@ export function parseDxfToRawModel(dxfText) {
         break;
       case 'LWPOLYLINE':
       case 'POLYLINE':
-      case 'SPLINE':
         addPolyline(model, {
           type: ent.type,
           handle,
           layer,
           vertices: ent.vertices,
           closed: Boolean(ent.raw?.closed || ent.raw?.shape || ent.raw?.isClosed),
+        });
+        break;
+      case 'SPLINE':
+        addGuide(model, {
+          type: 'SPLINE',
+          handle,
+          layer,
+          points: ent.vertices,
+          sourcePointType: ent.raw?.fitPoints?.length ? 'FIT' : 'CONTROL',
         });
         break;
       default:
