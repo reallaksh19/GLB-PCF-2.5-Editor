@@ -29,14 +29,6 @@ function dist3d(a, b) {
   return Math.hypot(dx, dy, dz);
 }
 
-function lerp(a, b, t) {
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-    z: (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t,
-  };
-}
-
 function isZeroLength(a, b) {
   return !a || !b || dist3d(a, b) < 1e-9;
 }
@@ -70,7 +62,7 @@ function bulgeToPoints(start, end, bulge, options = {}) {
   const mid = {
     x: (start.x + end.x) / 2,
     y: (start.y + end.y) / 2,
-    z: (start.z ?? 0 + end.z ?? 0) / 2,
+    z: ((start.z ?? 0) + (end.z ?? 0)) / 2,
   };
   const d = chord * (1 - b * b) / (4 * b);
   const center = {
