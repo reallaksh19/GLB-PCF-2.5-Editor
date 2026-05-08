@@ -27,7 +27,10 @@ export function normalizeDxfPoint(value, fallback = null) {
   const z = finiteNumber(firstDefined(value.z, value.Z, value[2]), 0);
 
   if (x === null || y === null) return fallback;
-  return { x, y, z };
+  const point = { x, y, z };
+  const bulge = finiteNumber(firstDefined(value.bulge, value.BULGE, value[3]), null);
+  if (bulge !== null) point.bulge = bulge;
+  return point;
 }
 
 function normalizeVertices(ent) {

@@ -142,6 +142,21 @@ function buildWarnings(component, mappedAnchors) {
   return warnings;
 }
 
+function copyCurveDerivedFields(geometry, component) {
+  const derived = safeObj(component?.derived);
+  const radius = toNumberOrNull(derived.radius);
+  const startAngle = toNumberOrNull(derived.startAngle);
+  const endAngle = toNumberOrNull(derived.endAngle);
+  const bulge = toNumberOrNull(derived.bulge);
+
+  if (radius !== null) geometry.radius = radius;
+  if (startAngle !== null) geometry.startAngle = startAngle;
+  if (endAngle !== null) geometry.endAngle = endAngle;
+  if (bulge !== null) geometry.bulge = bulge;
+  if (derived.clockwise != null) geometry.clockwise = Boolean(derived.clockwise);
+  if (derived.closed != null) geometry.closed = Boolean(derived.closed);
+}
+
 /**
  * Derive renderer-compatible geometry for one CEG component.
  */
@@ -161,6 +176,15 @@ export function componentToGeometryView(component, graph) {
   };
   if (Array.isArray(raw.points) && raw.points.length) {
     geometry.points = raw.points;
+  }
+
+  const rawAttributes = safeObj(component?.rawAttributes);
+  if (rawAttributes.dxfStyle) {
+    geometry.dxfStyle = rawAttributes.dxfStyle;
+  }
+
+  if (['ARC', 'ELBOW', 'BEND'].includes(String(component?.type || '').toUpperCase())) {
+    copyCurveDerivedFields(geometry, component);
   }
   return {
     geometry,

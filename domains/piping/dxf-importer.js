@@ -2,6 +2,7 @@ import DxfParser from 'dxf-parser';
 import { parseDxfToRawModel } from '../../formats/dxf/dxf-parser-adapter.js';
 import { dxfToCeg }           from '../../formats/dxf/dxf-to-ceg.js';
 import { graphToGenericComponents } from '../../core/geometry/geometry-view.js';
+import { expandPolylineSegments } from '../../formats/dxf/dxf-bulge-utils.js';
 import {
   dxfEntitySource,
   getDxfEntityIssue,
@@ -17,6 +18,11 @@ function AciToMaterial(aci) {
   }
 }
 
+function AciToDxfColor(aci) {
+  const n = Number(aci);
+  return Number.isFinite(n) ? n : 256;
+}
+
 function makeAttributes(ent) {
   return {
     'PIPELINE-REFERENCE': ent.layer || '0',
@@ -24,6 +30,7 @@ function makeAttributes(ent) {
     'DXF-TYPE': ent.type,
     'DXF-HANDLE': ent.handle || '',
     'DXF-LAYER': ent.layer || '0',
+    'DXF-COLOR-INDEX': String(AciToDxfColor(ent.colorIndex || 256)),
   };
 }
 
@@ -40,29 +47,6 @@ function makeComponent(localId, type, geometry, attributes, metadata = {}) {
       ...metadata,
     },
   };
-}
-
-function isZeroLength(a, b) {
-  if (!a || !b) return true;
-  const dx = (b.x ?? 0) - (a.x ?? 0);
-  const dy = (b.y ?? 0) - (a.y ?? 0);
-  const dz = (b.z ?? 0) - (a.z ?? 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz) < 1e-9;
-}
-
-function polylineSegments(ent) {
-  const vertices = [...(ent.vertices || [])];
-  const closed = Boolean(ent.raw?.closed || ent.raw?.shape || ent.raw?.isClosed);
-  if (closed && vertices.length > 2) vertices.push(vertices[0]);
-
-  const segments = [];
-  for (let i = 0; i < vertices.length - 1; i += 1) {
-    const ep1 = vertices[i];
-    const ep2 = vertices[i + 1];
-    if (isZeroLength(ep1, ep2)) continue;
-    segments.push({ ep1, ep2, segmentIndex: i });
-  }
-  return segments;
 }
 
 function logEntityWarn(log, code, ent, extra = {}) {
@@ -96,6 +80,7 @@ export function parseDxf(text, log) {
   let warnCount = 0;
   let skippedCount = 0;
   let downgradedCount = 0;
+  let bulgeArcCount = 0;
 
   for (let index = 0; index < entities.length; index += 1) {
     const ent = normalizeDxfEntity(entities[index], index);
@@ -122,7 +107,7 @@ export function parseDxf(text, log) {
       }
 
       if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE' || ent.type === 'SPLINE') {
-        const segments = polylineSegments(ent);
+        const segments = expandPolylineSegments(ent);
         if (!segments.length) {
           logEntityWarn(log, 'DXF_ENTITY_INVALID', ent, { reason: `${ent.type}_HAS_NO_NON_ZERO_SEGMENTS` });
           warnCount += 1;
@@ -131,14 +116,32 @@ export function parseDxf(text, log) {
         }
 
         for (const seg of segments) {
-          components.push(makeComponent(localId++, 'PIPE', {
-            ep1: seg.ep1,
-            ep2: seg.ep2,
-          }, attributes, {
-            source,
-            downgradedFrom: ent.type,
-            segmentIndex: seg.segmentIndex,
-          }));
+          if (seg.kind === 'ARC') {
+            bulgeArcCount += 1;
+            components.push(makeComponent(localId++, 'ELBOW', {
+              ep1: seg.ep1,
+              cp: seg.cp,
+              ep2: seg.ep2,
+              bore: null,
+            }, attributes, {
+              source,
+              downgradedFrom: ent.type,
+              segmentIndex: seg.segmentIndex,
+              bulge: seg.bulge,
+              radius: seg.radius,
+              clockwise: seg.clockwise,
+              fidelity: 'DXF_POLYLINE_BULGE_ARC',
+            }));
+          } else {
+            components.push(makeComponent(localId++, 'PIPE', {
+              ep1: seg.ep1,
+              ep2: seg.ep2,
+            }, attributes, {
+              source,
+              downgradedFrom: ent.type,
+              segmentIndex: seg.segmentIndex,
+            }));
+          }
         }
         downgradedCount += 1;
         continue;
@@ -215,6 +218,7 @@ export function parseDxf(text, log) {
     warnCount,
     skippedCount,
     downgradedCount,
+    bulgeArcCount,
     entityTypes: byType,
   });
 
@@ -247,6 +251,7 @@ export function parseDxfWithCeg(text, log) {
       componentCount: components.length,
       anchorCount: Object.keys(ceg.anchors || {}).length,
       cegComponentCount: Object.keys(ceg.components || {}).length,
+      downgradedCount: ceg.lossContract?.downgradedEntities?.length || 0,
     });
   } catch (err) {
     log.warn('CEG_BUILD_WARN', { message: String(err?.message || err) });
