@@ -49,6 +49,13 @@ assert.equal(model.lines.length, 1, 'block LINE child must expand into raw lines
 assert.equal(model.circles.length, 1, 'block CIRCLE child must expand into raw circles');
 assert.equal(model.blockExpansions.length, 1);
 
+const expansion2 = expandAllInserts(model);
+assert.equal(expansion2.skipped, true, 'second expansion must be guarded');
+assert.equal(expansion2.reason, 'ALREADY_EXPANDED');
+assert.equal(model.lines.length, 1, 'second expansion must not duplicate LINE child');
+assert.equal(model.circles.length, 1, 'second expansion must not duplicate CIRCLE child');
+assert.equal(model.blockExpansions.length, 1, 'second expansion must not duplicate expansion records');
+
 const line = model.lines[0];
 assert.equal(line.sourceRef.expandedFromInsert, 'I1');
 assert.equal(line.sourceRef.blockName, 'VALVE_BLOCK');

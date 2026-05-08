@@ -317,3 +317,35 @@ function filterStretchesByDensity(stretches) {
 
     return kept;
 }
+
+export function createDxfTextLabel(text, pos, options = {}) {
+  const div = document.createElement('div');
+  div.className = 'dxf-text-label';
+  div.textContent = String(text || '');
+
+  const color = Number.isFinite(Number(options.color))
+    ? `#${Number(options.color).toString(16).padStart(6, '0')}`
+    : '#e5e7eb';
+  const height = Number.isFinite(Number(options.textHeight))
+    ? Math.max(8, Math.min(24, Number(options.textHeight) * 0.35))
+    : 10;
+  const rotation = Number.isFinite(Number(options.rotation)) ? Number(options.rotation) : 0;
+
+  div.style.cssText = `
+    font: 500 ${height}px/1.15 "Arial", "Courier New", sans-serif;
+    color: ${color};
+    background: transparent;
+    pointer-events: none;
+    white-space: pre;
+    transform: rotate(${rotation}deg);
+    transform-origin: left center;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+  `;
+
+  const obj = new CSS2DObject(div);
+  const p = toThree(pos || { x: 0, y: 0, z: 0 });
+  obj.position.copy(p);
+  obj.userData.type = 'dxf-text-label';
+  obj.userData.text = String(text || '');
+  return obj;
+}

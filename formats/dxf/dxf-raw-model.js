@@ -7,6 +7,16 @@
 
 export function createRawDxfModel() {
   return {
+    header: {},
+    units: null,
+    layerTable: {},
+    headerExtents: null,
+    computedBounds: null,
+    view: {
+      preferredProjection: 'DXF_XY',
+      fitBounds: null,
+      recenter: null,
+    },
     lines:       [],
     arcs:        [],
     texts:       [],

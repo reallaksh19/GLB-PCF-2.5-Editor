@@ -40,7 +40,13 @@ function addLineComponent(graph, input) {
   graph.components[id] = createComponent({
     id, type: 'LINE', layerId: input.layer || 'default',
     anchorIds: [a1Id, a2Id], geometryRole: 'LINEAR',
-    attributes: {}, rawAttributes: {}, derived: {},
+    attributes: {
+      dxfLayer: input.layer || 'default',
+      dxfColorIndex: input.dxfStyle?.colorIndex ?? null,
+      dxfLineType: input.dxfStyle?.lineType ?? null,
+    },
+    rawAttributes: { dxfStyle: input.dxfStyle || null },
+    derived: {},
     capabilities: defaultCapabilities('LINE'),
     sourceRef: sourceRef(input, { entityType: 'LINE' })
   });
@@ -137,6 +143,19 @@ export function dxfToCeg(rawModel, options = {}) {
   graph.layers    = buildLayerMap(rawModel);
   addRawDiagnostics(graph, rawModel);
 
+  graph.units = {
+    model: 'mm',
+    source: rawModel.units || null,
+  };
+
+  graph.view = {
+    ...(graph.view || {}),
+    preferredProjection: rawModel.view?.preferredProjection || 'DXF_XY',
+    sourceHeaderExtents: rawModel.headerExtents || null,
+    computedBounds: rawModel.computedBounds || null,
+    recenter: rawModel.view?.recenter || null,
+  };
+
   // ── LINE entities ──────────────────────────────────────────────────────
   for (const line of rawModel.lines) {
     addLineComponent(graph, line);
@@ -168,7 +187,15 @@ export function dxfToCeg(rawModel, options = {}) {
     graph.components[id] = createComponent({
       id, type: 'ANNOTATION', layerId: txt.layer || 'default',
       anchorIds: [aId], geometryRole: 'POINT',
-      attributes: { text: txt.text || '' }, rawAttributes: {}, derived: {},
+      attributes: {
+        text: txt.text || '',
+        dxfLayer: txt.layer || 'default',
+        dxfColorIndex: txt.dxfStyle?.colorIndex ?? null,
+        dxfTextHeight: txt.dxfStyle?.textHeight ?? null,
+        dxfTextRotation: txt.dxfStyle?.textRotation ?? 0,
+      },
+      rawAttributes: { dxfStyle: txt.dxfStyle || null },
+      derived: {},
       capabilities: { canMove: true, canDelete: true, canStretch: false, canExtend: false, canExportDXF: true, canExportGLB: true },
       sourceRef: sourceRef(txt, { entityType: txt.type || 'TEXT' })
     });

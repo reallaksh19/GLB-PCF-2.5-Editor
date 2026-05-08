@@ -319,6 +319,31 @@ export function expandInsert(model, insert, transformOverride = null, depth = 0,
 }
 
 export function expandAllInserts(model) {
+  if (!model || typeof model !== 'object') {
+    return {
+      expanded: 0,
+      missing: 0,
+      insertCount: 0,
+      skipped: true,
+      reason: 'INVALID_MODEL',
+    };
+  }
+
+  if (model.__blocksExpanded === true) {
+    addDiagnostic?.(model, {
+      severity: 'INFO',
+      code: 'DXF_BLOCK_EXPANSION_ALREADY_DONE',
+      message: 'Block expansion skipped because this raw DXF model was already expanded.',
+    });
+    return {
+      expanded: 0,
+      missing: 0,
+      insertCount: model.inserts?.length || 0,
+      skipped: true,
+      reason: 'ALREADY_EXPANDED',
+    };
+  }
+
   let expanded = 0;
   let missing = 0;
   for (const insert of model.inserts || []) {
@@ -326,5 +351,6 @@ export function expandAllInserts(model) {
     expanded += result.expanded || 0;
     if (result.missing) missing += 1;
   }
+  model.__blocksExpanded = true;
   return { expanded, missing, insertCount: model.inserts?.length || 0 };
 }

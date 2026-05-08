@@ -177,6 +177,12 @@ export function componentToGeometryView(component, graph) {
   if (Array.isArray(raw.points) && raw.points.length) {
     geometry.points = raw.points;
   }
+
+  const rawAttributes = safeObj(component?.rawAttributes);
+  if (rawAttributes.dxfStyle) {
+    geometry.dxfStyle = rawAttributes.dxfStyle;
+  }
+
   if (['ARC', 'ELBOW', 'BEND'].includes(String(component?.type || '').toUpperCase())) {
     copyCurveDerivedFields(geometry, component);
   }
