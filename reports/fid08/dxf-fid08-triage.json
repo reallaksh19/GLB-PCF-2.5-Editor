@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-05-08T03:33:09.401Z",
+  "inputs": {
+    "inventory": "reports/dxf-fid-01.inventory.json",
+    "dxf": "Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf",
+    "autocad": "Comments/dxf-1/actual geometry dxf _in AutoCad dwg viewer.jpg",
+    "canvas": "Comments/dxf-1/dxf on canvas upon import.jpg",
+    "json": "reports/fid08/dxf-fid08-triage.json",
+    "md": "reports/fid08/dxf-fid08-triage.md"
+  },
+  "evidence": {
+    "inventoryExists": false,
+    "dxfExists": true,
+    "autocadExists": true,
+    "canvasExists": true
+  },
+  "findings": []
+}
