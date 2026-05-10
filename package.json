@@ -29,7 +29,10 @@
     "test:dxf-visual": "npx playwright test --config tests/playwright.fid07.config.js",
     "test:dxf-all": "npm run test:dxf-fidelity && npm run test:dxf-visual",
     "wave0:dxf": "node tools/wave0-dxf-safety-gate.mjs",
-    "test:slice1": "npm run wave0:dxf"
+    "test:slice1": "npm run wave0:dxf",
+    "test:visual-profile": "node tests/visual-profile.smoke.mjs",
+    "test:viewer-ui-visual-profile": "node tests/viewer-ui-visual-profile.smoke.mjs",
+    "test:slice2": "npm run test:visual-profile && npm run test:viewer-ui-visual-profile && npm run test:slice1"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
