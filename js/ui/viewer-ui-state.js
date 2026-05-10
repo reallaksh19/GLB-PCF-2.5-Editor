@@ -3,6 +3,13 @@
  * Keeps interaction state deterministic and decoupled from DOM wiring.
  */
 
+import {
+  VISUAL_PROFILES,
+  resolveVisualProfile,
+  setVisualProfile as applyVisualProfileSettings,
+  toggleLineDiagram as applyLineDiagramToggle,
+} from '../../core/view/visual-profile.js';
+
 export const VIEWER_UI_MODES = Object.freeze({
   draft2d: 'draft2d',
   stick: 'stick',
@@ -12,7 +19,14 @@ export const VIEWER_UI_MODES = Object.freeze({
 export const VIEWER_UI_ACTIONS = Object.freeze({
   setActiveTool: 'set-active-tool',
   setActiveMode: 'set-active-mode',
+
+  // Slice 2 canonical profile actions.
+  setVisualProfile: 'set-visual-profile',
+  toggleLineDiagram: 'toggle-line-diagram',
+
+  // Backward-compatible legacy action.
   toggleStick: 'toggle-stick',
+
   setPanelVisibility: 'set-panel-visibility',
   setInspectorSection: 'set-inspector-section',
   setSelectedComponentId: 'set-selected-component-id',
@@ -26,6 +40,54 @@ function assertMode(mode) {
   throw new Error(`Unsupported viewer mode: ${mode}`);
 }
 
+function visualProfileFromMode(mode) {
+  const safeMode = assertMode(mode);
+
+  if (safeMode === VIEWER_UI_MODES.stick) {
+    return VISUAL_PROFILES.LINE_DIAGRAM;
+  }
+
+  if (safeMode === VIEWER_UI_MODES.draft2d) {
+    return VISUAL_PROFILES.DRAFT_2D;
+  }
+
+  return VISUAL_PROFILES.SOLID_3D;
+}
+
+function modeFromVisualProfile(visualProfile) {
+  if (visualProfile === VISUAL_PROFILES.LINE_DIAGRAM) {
+    return VIEWER_UI_MODES.stick;
+  }
+
+  if (visualProfile === VISUAL_PROFILES.DRAFT_2D) {
+    return VIEWER_UI_MODES.draft2d;
+  }
+
+  return VIEWER_UI_MODES.mode3d;
+}
+
+function syncVisualState(state, visualProfile) {
+  const nextVisual = applyVisualProfileSettings(state, visualProfile);
+
+  return {
+    ...nextVisual,
+    activeMode: modeFromVisualProfile(nextVisual.visualProfile),
+    lineDiagramEnabled: nextVisual.visualProfile === VISUAL_PROFILES.LINE_DIAGRAM,
+  };
+}
+
+function initialVisualProfileFromState(initialState = {}) {
+  if (initialState.visualProfile != null) {
+    return resolveVisualProfile({ visualProfile: initialState.visualProfile });
+  }
+
+  if (initialState.activeMode != null) {
+    return visualProfileFromMode(initialState.activeMode);
+  }
+
+  return resolveVisualProfile(initialState);
+}
+
 function reduceViewerUiState(state, action) {
   if (!action || typeof action !== 'object') return state;
 
@@ -35,21 +97,35 @@ function reduceViewerUiState(state, action) {
 
   if (action.type === VIEWER_UI_ACTIONS.setActiveMode) {
     const mode = assertMode(action.mode);
-    return { ...state, activeMode: mode, lineDiagramEnabled: mode === VIEWER_UI_MODES.stick };
+    return syncVisualState(state, visualProfileFromMode(mode));
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.setVisualProfile) {
+    return syncVisualState(state, action.visualProfile || action.profile);
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.toggleLineDiagram) {
+    const nextVisual = applyLineDiagramToggle(state, action.enabled);
+    return {
+      ...nextVisual,
+      activeMode: modeFromVisualProfile(nextVisual.visualProfile),
+      lineDiagramEnabled: nextVisual.visualProfile === VISUAL_PROFILES.LINE_DIAGRAM,
+    };
   }
 
   if (action.type === VIEWER_UI_ACTIONS.toggleStick) {
-    const nextEnabled = !Boolean(state.lineDiagramEnabled);
+    const nextVisual = applyLineDiagramToggle(state);
     return {
-      ...state,
-      lineDiagramEnabled: nextEnabled,
-      activeMode: nextEnabled ? VIEWER_UI_MODES.stick : VIEWER_UI_MODES.draft2d,
+      ...nextVisual,
+      activeMode: modeFromVisualProfile(nextVisual.visualProfile),
+      lineDiagramEnabled: nextVisual.visualProfile === VISUAL_PROFILES.LINE_DIAGRAM,
     };
   }
 
   if (action.type === VIEWER_UI_ACTIONS.setPanelVisibility) {
     const panelKey = String(action.panelKey || '');
     if (!panelKey) return state;
+
     return {
       ...state,
       panelVisibility: {
@@ -74,11 +150,18 @@ function reduceViewerUiState(state, action) {
   return state;
 }
 
-export function createViewerUiStore(initialState) {
-  let state = {
+export function createViewerUiStore(initialState = {}) {
+  const initialVisualProfile = initialVisualProfileFromState(initialState);
+
+  let state = syncVisualState({
     activeTool: null,
     activeMode: VIEWER_UI_MODES.draft2d,
+    visualProfile: VISUAL_PROFILES.DRAFT_2D,
     lineDiagramEnabled: false,
+    lineDiagram: false,
+    wireframe: false,
+    draft2d: true,
+    solid3d: false,
     panelVisibility: {
       leftPalette: true,
       rightViewbar: true,
@@ -89,8 +172,8 @@ export function createViewerUiStore(initialState) {
     inspectorSection: 'component',
     selectedComponentId: null,
     theme: 'NavisDark',
-    ...(initialState || {}),
-  };
+    ...initialState,
+  }, initialVisualProfile);
 
   const listeners = new Set();
 
@@ -100,13 +183,19 @@ export function createViewerUiStore(initialState) {
 
   function dispatch(action) {
     const next = reduceViewerUiState(state, action);
+
     if (next === state) return state;
+
     state = next;
+
     listeners.forEach((listener) => {
       try {
         listener(state, action);
-      } catch (_) {}
+      } catch (_) {
+        // State listeners must not break UI reducer flow.
+      }
     });
+
     return state;
   }
 
@@ -116,5 +205,9 @@ export function createViewerUiStore(initialState) {
     return () => listeners.delete(listener);
   }
 
-  return { getState, dispatch, subscribe };
+  return {
+    getState,
+    dispatch,
+    subscribe,
+  };
 }

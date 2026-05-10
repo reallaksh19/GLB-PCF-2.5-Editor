@@ -1,0 +1,86 @@
+{
+  "contract": "SLICE-1-DXF-SAFETY-GATE-1.0.0",
+  "generatedAt": "2026-05-10T10:06:27.346Z",
+  "startedAt": "2026-05-10T10:06:25.311Z",
+  "finishedAt": "2026-05-10T10:06:27.346Z",
+  "passed": true,
+  "reportPaths": {
+    "json": "reports/wave0/wave0-dxf-safety-gate.json",
+    "markdown": "reports/wave0/wave0-dxf-safety-gate.md",
+    "inventory": "reports/dxf-fid-01.inventory.json"
+  },
+  "steps": [
+    {
+      "id": "S1-001",
+      "title": "Real DXF file gate",
+      "scriptName": "dxf:real-gate",
+      "startedAt": "2026-05-10T10:06:25.312Z",
+      "finishedAt": "2026-05-10T10:06:25.727Z",
+      "status": 0,
+      "signal": null,
+      "passed": true,
+      "stdout": "\n> glb-pcf-editor@1.0.0 dxf:real-gate\n> node tools/dxf-real-file-gate.mjs \"Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf\"\n\nPASS dxf-real-file-gate {\n  file: 'Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf',\n  bytes: 1458568,\n  ascii: true,\n  entityMarkerCount: 34087\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "S1-002",
+      "title": "DXF fidelity smoke tests",
+      "scriptName": "test:dxf-fidelity",
+      "startedAt": "2026-05-10T10:06:25.727Z",
+      "finishedAt": "2026-05-10T10:06:26.047Z",
+      "status": 0,
+      "signal": null,
+      "passed": true,
+      "stdout": "\n> glb-pcf-editor@1.0.0 test:dxf-fidelity\n> node tests/dxf-bulge-utils.smoke.mjs && node tests/dxf-ceg-curve-guide.smoke.mjs && node tests/dxf-block-expander.smoke.mjs\n\nDXF bulge utility smoke passed {\n  radius: 50,\n  center: { x: 50, y: 0, z: 0 },\n  expanded: [ 'ARC', 'LINE' ],\n  closedSegments: 3\n}\nDXF CEG curve/guide smoke passed { arcs: 3, guides: 1, generic: 4 }\nDXF block expansion smoke passed { expanded: 2, components: 3, diagnostics: 2 }\n",
+      "stderr": ""
+    },
+    {
+      "id": "S1-003",
+      "title": "DXF inventory scan",
+      "scriptName": "dxf:fid01",
+      "startedAt": "2026-05-10T10:06:26.047Z",
+      "finishedAt": "2026-05-10T10:06:27.275Z",
+      "status": 0,
+      "signal": null,
+      "passed": true,
+      "stdout": "\n> glb-pcf-editor@1.0.0 dxf:fid01\n> node tools/dxf-fidelity-inventory.mjs \"Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf\" --json reports/dxf-fid-01.inventory.json\n\n\nDXF-FID-01 Entity Inventory\n================================\nFile: Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf\nSize: 1458568 bytes\nEntities: 34061\n\nBy type:\n  VERTEX         19711\n  POLYLINE       7050\n  SEQEND         7050\n  TEXT           250\n\nTop layers:\n  GT_1                             27011\n  <none>                           7050\n\nExtents:\n  min {\"x\":0,\"y\":0,\"z\":0}\n  max {\"x\":420,\"y\":297,\"z\":0}\n  size {\"x\":420,\"y\":297,\"z\":0}\n\nFidelity risks:\n  none detected by inventory scanner\n\nWrote JSON inventory: reports/dxf-fid-01.inventory.json\n",
+      "stderr": ""
+    }
+  ],
+  "inventorySummary": {
+    "exists": true,
+    "parseError": null,
+    "contract": "DXF-FID-01-INVENTORY-1.0.0",
+    "file": "Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf",
+    "fileSizeBytes": 1458568,
+    "entityCount": 34061,
+    "byType": {
+      "POLYLINE": 7050,
+      "VERTEX": 19711,
+      "SEQEND": 7050,
+      "TEXT": 250
+    },
+    "issueCount": 0,
+    "highRiskCount": 0,
+    "mediumRiskCount": 0,
+    "lowRiskCount": 0,
+    "extents": {
+      "min": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "max": {
+        "x": 420,
+        "y": 297,
+        "z": 0
+      },
+      "size": {
+        "x": 420,
+        "y": 297,
+        "z": 0
+      }
+    }
+  },
+  "failureNotes": []
+}
