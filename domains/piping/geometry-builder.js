@@ -18,6 +18,9 @@ import {
 import {
   buildLineDiagramMesh as buildSchematicLineDiagramMesh,
 } from './line-diagram-symbols.js';
+import {
+  buildDraft2dMesh as buildProfessionalDraft2dMesh,
+} from './draft2d-renderer.js';
 
 // ── Line-diagram colour table (mirrors buildDraftingScene COLORS) ─────────────
 const LD_COLORS = {
@@ -326,18 +329,19 @@ export function buildMesh(comp, theme, options = {}) {
     return buildSchematicLineDiagramMesh(comp, theme);
   }
 
-  const draft2d = isDraft2dProfile(visualProfile);
+  if (isDraft2dProfile(visualProfile)) {
+    return buildProfessionalDraft2dMesh(comp, theme);
+  }
+
   const builder = MESH_DISPATCH[comp.type];
 
   if (builder === undefined) {
-    const fallback = buildGenericDraft(comp, theme);
-    return draft2d ? decorateAsDraft2d(fallback, comp, theme) : fallback;
+    return buildGenericDraft(comp, theme);
   }
 
   if (builder === null) return null;
 
-  const mesh = builder(comp, theme);
-  return draft2d ? decorateAsDraft2d(mesh, comp, theme) : mesh;
+  return builder(comp, theme);
 }
 
 export function buildLabel(comp) {
