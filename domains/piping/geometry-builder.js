@@ -10,6 +10,14 @@ import {
   createMessageSquareLabel,
   createSupportLabel,
 } from '../../geometry/labels.js';
+import {
+  resolveVisualProfile,
+  isLineDiagramProfile,
+  isDraft2dProfile,
+} from '../../core/view/visual-profile.js';
+import {
+  buildLineDiagramMesh as buildSchematicLineDiagramMesh,
+} from './line-diagram-symbols.js';
 
 // ── Line-diagram colour table (mirrors buildDraftingScene COLORS) ─────────────
 const LD_COLORS = {
@@ -305,15 +313,31 @@ const MESH_DISPATCH = {
 };
 
 export function buildMesh(comp, theme, options = {}) {
-  if (options.visualProfile === 'stick' || options.lineDiagram) return buildLineDiagramMesh(comp, theme);
+  const visualProfile = resolveVisualProfile({
+    visualProfile: options.visualProfile,
+    lineDiagram: options.lineDiagram,
+    lineDiagramEnabled: options.lineDiagramEnabled,
+    wireframe: options.wireframe,
+    draft2d: options.draft2d,
+    solid3d: options.solid3d,
+  });
+
+  if (isLineDiagramProfile(visualProfile)) {
+    return buildSchematicLineDiagramMesh(comp, theme);
+  }
+
+  const draft2d = isDraft2dProfile(visualProfile);
   const builder = MESH_DISPATCH[comp.type];
+
   if (builder === undefined) {
     const fallback = buildGenericDraft(comp, theme);
-    return options.visualProfile === 'draft2d' ? decorateAsDraft2d(fallback, comp, theme) : fallback;
+    return draft2d ? decorateAsDraft2d(fallback, comp, theme) : fallback;
   }
+
   if (builder === null) return null;
+
   const mesh = builder(comp, theme);
-  return options.visualProfile === 'draft2d' ? decorateAsDraft2d(mesh, comp, theme) : mesh;
+  return draft2d ? decorateAsDraft2d(mesh, comp, theme) : mesh;
 }
 
 export function buildLabel(comp) {
