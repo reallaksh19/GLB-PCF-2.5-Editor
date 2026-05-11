@@ -38,7 +38,10 @@
     "test:slice3": "npm run test:line-diagram-symbols && npm run test:geometry-builder-line-diagram && npm run test:slice2",
     "test:draft2d-renderer": "node tests/draft2d-renderer.smoke.mjs",
     "test:geometry-builder-draft2d": "node tests/geometry-builder-draft2d.smoke.mjs",
-    "test:slice4": "npm run test:draft2d-renderer && npm run test:geometry-builder-draft2d && npm run test:slice3"
+    "test:slice4": "npm run test:draft2d-renderer && npm run test:geometry-builder-draft2d && npm run test:slice3",
+    "test:hifi-layout": "node tests/hifi-layout-contract.smoke.mjs",
+    "test:viewer-ui-shell-state": "node tests/viewer-ui-shell-state.smoke.mjs",
+    "test:slice5": "npm run test:hifi-layout && npm run test:viewer-ui-shell-state && npm run test:slice4"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

@@ -585,6 +585,71 @@
     .val-error { color: var(--red-err, #ef4444); }
     .val-warn  { color: var(--yellow-warn, #fbbf24); }
     .val-info  { color: var(--blue-info, #60a5fa); }
+
+#hifi-canvas-active-pill,
+#hifi-canvas-view-badge,
+#hifi-canvas-snapbar {
+  position: absolute;
+  z-index: 18;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.86);
+  color: #1f2937;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-code, 'JetBrains Mono', monospace);
+  pointer-events: none;
+}
+
+#hifi-canvas-active-pill {
+  left: 12px;
+  top: 12px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+#hifi-canvas-view-badge {
+  right: 12px;
+  top: 12px;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+#hifi-canvas-snapbar {
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  min-height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.hifi-snap-sep {
+  color: rgba(31, 41, 55, 0.38);
+}
+
+.hifi-viewcube-btn {
+  height: 36px;
+  font-size: 9px;
+  border-style: dashed;
+}
+
+.hifi-view-btn.active {
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--amber, #f59e0b);
+  border-color: rgba(245, 158, 11, 0.45);
+}
   </style>
 </head>
 <body>
@@ -680,6 +745,15 @@
 
           <div id="hifi-viewer-stage">
             <div id="hifi-viewer-canvas"></div>
+            <div id="hifi-canvas-active-pill">Tool: Select</div>
+            <div id="hifi-canvas-view-badge">Draft 2D</div>
+            <div id="hifi-canvas-snapbar">
+              <span id="hifi-cursor-coord">X 0.0&nbsp;&nbsp;Y 0.0&nbsp;&nbsp;Z 0.0</span>
+              <span class="hifi-snap-sep">|</span>
+              <span id="hifi-snap-mode">SNAP: Grid</span>
+              <span class="hifi-snap-sep">|</span>
+              <span id="hifi-active-profile">PROFILE: Draft 2D</span>
+            </div>
           </div>
 
           <aside id="hifi-right-viewbar">
@@ -692,7 +766,12 @@
               <button class="hifi-view-btn" data-view="iso-sw">SW</button>
               <button class="hifi-view-btn" data-view="plan">Plan</button>
               <button class="hifi-view-btn" data-view="front">Front</button>
+              <button class="hifi-view-btn" data-view="right">Right</button>
               <button class="hifi-view-btn" id="hifi-btn-fit-viewbar">Fit</button>
+              <button class="hifi-view-btn" id="hifi-btn-snap-toggle">Snap</button>
+              <button class="hifi-view-btn" id="hifi-btn-layer-toggle">Layers</button>
+              <button class="hifi-view-btn" id="hifi-btn-lock-view">Lock</button>
+              <button class="hifi-view-btn hifi-viewcube-btn" id="hifi-btn-view-cube">Cube</button>
             </div>
           </aside>
 

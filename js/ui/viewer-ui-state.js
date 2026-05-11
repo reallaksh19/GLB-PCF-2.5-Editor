@@ -20,12 +20,14 @@ export const VIEWER_UI_ACTIONS = Object.freeze({
   setActiveTool: 'set-active-tool',
   setActiveMode: 'set-active-mode',
 
-  // Slice 2 canonical profile actions.
   setVisualProfile: 'set-visual-profile',
   toggleLineDiagram: 'toggle-line-diagram',
-
-  // Backward-compatible legacy action.
   toggleStick: 'toggle-stick',
+
+  toggleSnap: 'toggle-snap',
+  toggleLayers: 'toggle-layers',
+  toggleViewLock: 'toggle-view-lock',
+  setCursorPoint: 'set-cursor-point',
 
   setPanelVisibility: 'set-panel-visibility',
   setInspectorSection: 'set-inspector-section',
@@ -88,6 +90,20 @@ function initialVisualProfileFromState(initialState = {}) {
   return resolveVisualProfile(initialState);
 }
 
+function normalizePoint(point) {
+  if (!point) return null;
+
+  const x = Number(point.x);
+  const y = Number(point.y);
+  const z = Number(point.z);
+
+  return {
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
+    z: Number.isFinite(z) ? z : 0,
+  };
+}
+
 function reduceViewerUiState(state, action) {
   if (!action || typeof action !== 'object') return state;
 
@@ -120,6 +136,25 @@ function reduceViewerUiState(state, action) {
       activeMode: modeFromVisualProfile(nextVisual.visualProfile),
       lineDiagramEnabled: nextVisual.visualProfile === VISUAL_PROFILES.LINE_DIAGRAM,
     };
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.toggleSnap) {
+    const next = action.enabled == null ? !Boolean(state.snapEnabled) : Boolean(action.enabled);
+    return { ...state, snapEnabled: next };
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.toggleLayers) {
+    const next = action.open == null ? !Boolean(state.layersOpen) : Boolean(action.open);
+    return { ...state, layersOpen: next };
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.toggleViewLock) {
+    const next = action.locked == null ? !Boolean(state.viewLocked) : Boolean(action.locked);
+    return { ...state, viewLocked: next };
+  }
+
+  if (action.type === VIEWER_UI_ACTIONS.setCursorPoint) {
+    return { ...state, cursorPoint: normalizePoint(action.point || action.cursorPoint) };
   }
 
   if (action.type === VIEWER_UI_ACTIONS.setPanelVisibility) {
@@ -162,6 +197,12 @@ export function createViewerUiStore(initialState = {}) {
     wireframe: false,
     draft2d: true,
     solid3d: false,
+
+    snapEnabled: true,
+    layersOpen: false,
+    viewLocked: false,
+    cursorPoint: null,
+
     panelVisibility: {
       leftPalette: true,
       rightViewbar: true,
