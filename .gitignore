@@ -1,1 +1,8 @@
 node_modules/
+
+# Generated validation/runtime artifacts
+reports/**
+!reports/.gitkeep
+test-results/
+playwright-report/
+*.log
