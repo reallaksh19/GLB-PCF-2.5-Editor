@@ -1,4 +1,5 @@
 import { formatMm, formatPt, formatProvenanceLabel } from './hud-format.js';
+import { polylineSegmentTableRows } from './hud-polyline-professional.js';
 
 function esc(value) {
   return String(value ?? '')
@@ -102,6 +103,26 @@ function infoStrip(pairs) {
     rows.push(`<span class="hud-info-key">${esc(pairs[i])}</span><span class="hud-info-val">${esc(pairs[i + 1] ?? '')}</span>`);
   }
   return `<div class="hud-info-strip">${rows.join('')}</div>`;
+}
+
+function segmentTable(rows) {
+  if (!rows.length) {
+    return `<div class="hud-segment-empty">No segments yet</div>`;
+  }
+
+  return `<div class="hud-segment-table">
+    <div class="hud-segment-head">
+      <span>#</span><span>Len</span><span>Axis</span><span>Token</span>
+    </div>
+    ${rows.slice(-6).map((row) => `
+      <div class="hud-segment-row">
+        <span>${esc(row.index)}</span>
+        <span>${esc(row.length)}</span>
+        <span>${esc(row.axis)}</span>
+        <span title="${esc(row.token)}">${esc(row.token)}</span>
+      </div>
+    `).join('')}
+  </div>`;
 }
 
 /* ── Actions bar ── */
@@ -266,19 +287,48 @@ function insertDraftHtml(state) {
 }
 
 function polylineDraftHtml(state) {
-  const pts = state.draftPoints || [];
-  const ac  = TOOL_COLOR['polyline-draw'];
+  const draft = state.draft || {};
+  const pts = draft.points || state.draftPoints || [];
+  const rows = polylineSegmentTableRows(draft);
+  const ac = TOOL_COLOR['polyline-draw'];
+  const waiting = !draft.currentPoint;
+
+  if (waiting) {
+    return [
+      infoStrip(['Start', 'Click canvas to set first point']),
+      actionsBar([
+        { label:'Esc', action:'cancel', danger:true },
+      ], ac),
+    ].join('');
+  }
+
   return [
     '<div class="hud-fields-section">',
     fieldRow([
-      { id:'pipeline', label:'Pipeline', type:'text', val: state.draft?.routeId || 'new', flex:1 },
-      { id:'pts',      label:'Pts',      type:'badge', val: String(pts.length), flex:1 },
+      { id:'axis', label:'Axis', type:'seg', opts:['X','Y','Z'], val: draft.axis || 'X', flex:1 },
+      { id:'sign', label:'Dir',  type:'seg', opts:['+','−'],    val: (draft.sign >= 0 ? '+' : '−'), flex:1 },
+    ]),
+    fieldRow([
+      { id:'lengthMm', label:'Length mm', type:'number', val: String(draft.lengthMm || ''), flex:2 },
+      { id:'routeId',  label:'Pipeline',  type:'text',   val: draft.routeId || 'new', flex:3 },
+    ]),
+    fieldRow([
+      { id:'commandText', label:'Input', type:'text', val: draft.commandText || '', flex:1 },
     ]),
     '</div>',
-    infoStrip(['Mode','Click to add points','End','Dbl-click']),
+    infoStrip([
+      'Pts', String(pts.length),
+      'Seg', String(rows.length),
+      'Current', formatPt(draft.currentPoint),
+      'Preview', formatPt(draft.previewPoint),
+    ]),
+    segmentTable(rows),
     actionsBar([
-      { label:'↵ Finish', action:'cancel', primary:true },
-      { label:'Esc',      action:'cancel', danger:true },
+      { label:'Add',    action:'poly-add', primary:true },
+      { label:'Undo',   action:'poly-undo' },
+      { label:'Close',  action:'poly-close' },
+      { label:'Finish', action:'poly-finish', primary:true },
+      { label:'Esc',    action:'cancel', danger:true },
     ], ac),
   ].join('');
 }
@@ -427,6 +477,10 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'cancel')        return handlers.cancel?.();
     if (action === 'commit-line')   return handlers.commitLine?.();
     if (action === 'repeat-line')   return handlers.repeatLine?.();
+    if (action === 'poly-add')      return handlers.addPolylineSegment?.();
+    if (action === 'poly-undo')     return handlers.undoPolylineSegment?.();
+    if (action === 'poly-close')    return handlers.closePolyline?.();
+    if (action === 'poly-finish')   return handlers.finishPolyline?.();
     if (action === 'commit-insert') return handlers.commitInsert?.();
     if (action === 'rise')          return handlers.commitRise?.();
     if (action === 'drop')          return handlers.commitDrop?.();
