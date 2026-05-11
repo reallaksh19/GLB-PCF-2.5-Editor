@@ -41,7 +41,9 @@
     "test:slice4": "npm run test:draft2d-renderer && npm run test:geometry-builder-draft2d && npm run test:slice3",
     "test:hifi-layout": "node tests/hifi-layout-contract.smoke.mjs",
     "test:viewer-ui-shell-state": "node tests/viewer-ui-shell-state.smoke.mjs",
-    "test:slice5": "npm run test:hifi-layout && npm run test:viewer-ui-shell-state && npm run test:slice4"
+    "test:slice5": "npm run test:hifi-layout && npm run test:viewer-ui-shell-state && npm run test:slice4",
+    "test:hud-line-professional": "node tests/hud-line-professional.smoke.mjs",
+    "test:slice6": "npm run test:hud-line-professional && npm run test:slice5"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

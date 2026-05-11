@@ -1,6 +1,6 @@
 import { clampLength } from './hud-format.js';
-import { buildAxisLengthToken } from '../editor/route-segment-input.js';
 import { parseHudLineCommand } from './hud-line-command-parser.js';
+import { buildLineCommandFromDraft } from './hud-line-professional.js';
 
 export function buildAxisDelta(axis = 'X', lengthMm = 1000, sign = 1) {
   const len = clampLength(lengthMm, 1000) * (sign < 0 ? -1 : 1);
@@ -43,7 +43,13 @@ export async function commitLineDraft(hudState, shellApi) {
   const lengthMm = clampLength(draft.lengthMm, 1000);
   const anchor = draft.anchorPoint || getActiveRouteAnchor(shellApi);
   const commandText = String(draft.commandText || '').trim()
-    || buildAxisLengthToken(axis, lengthMm, sign);
+    || buildLineCommandFromDraft({
+      ...draft,
+      anchorPoint: anchor,
+      axis,
+      sign,
+      lengthMm,
+    });
   const parsed = parseHudLineCommand(commandText, anchor, axis);
 
   let routeId = draft.routeId || shellApi?.getRouteEngine?.()?.getActiveRoute?.()?.id || null;

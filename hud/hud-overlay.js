@@ -152,12 +152,14 @@ function lineDraftHtml(state) {
     ]),
     '</div>',
     infoStrip([
+      'Mode',    draft.inputMode || draft.lastParsed?.mode || 'Length',
       'Anchor',  formatPt(draft.anchorPoint),
       'Preview', formatPt(draft.previewPoint),
       'Last',    formatMm(state.lastLengthMm),
     ]),
     actionsBar([
       { label:'↵ Commit', action:'commit-line', primary:true },
+      { label:'Repeat',   action:'repeat-line' },
       { label:'↑ Rise',   action:'rise' },
       { label:'↓ Drop',   action:'drop' },
       { label:'Esc',      action:'cancel', danger:true },
@@ -424,6 +426,7 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'open')          return handlers.open?.();
     if (action === 'cancel')        return handlers.cancel?.();
     if (action === 'commit-line')   return handlers.commitLine?.();
+    if (action === 'repeat-line')   return handlers.repeatLine?.();
     if (action === 'commit-insert') return handlers.commitInsert?.();
     if (action === 'rise')          return handlers.commitRise?.();
     if (action === 'drop')          return handlers.commitDrop?.();
