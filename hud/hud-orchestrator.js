@@ -4,6 +4,11 @@ import { createHudStore } from './hud-state.js';
 import { createHudOverlay } from './hud-overlay.js';
 import { installHudKeyboard } from './hud-keyboard.js';
 import { computePreviewPoint, getActiveRouteAnchor, commitLineDraft } from './hud-line-draw.js';
+import {
+  buildRepeatLineDraft,
+  safeResolveLineDraftPreview,
+  updateLineDraftField,
+} from './hud-line-professional.js';
 import { getInsertDefaults, resolveInsertContext, commitInsertDraft } from './hud-component-insert.js';
 
 function clone(value) {
@@ -25,33 +30,35 @@ function hasRealRouteAnchor(shellApi) {
 function buildInitialLineDraft(shellApi, prev = {}) {
   const axis      = String(prev.axis || 'X').toUpperCase();
   const sign      = prev.sign < 0 ? -1 : 1;
-  const routeId   = shellApi?.getRouteEngine?.()?.getActiveRoute?.()?.id || null;
+  const routeId   = shellApi?.getRouteEngine?.()?.getActiveRoute?.()?.id || prev.routeId || null;
   const lengthMm  = Number(prev.lengthMm) > 0 ? Number(prev.lengthMm) : 1000;
 
   // Only auto-set anchor if there is a real continuation point (existing route or
   // selected object). Otherwise leave it null so the user clicks the canvas.
-  const anchorPoint = hasRealRouteAnchor(shellApi) ? getActiveRouteAnchor(shellApi) : null;
+  const anchorPoint = prev.anchorPoint
+    || (hasRealRouteAnchor(shellApi) ? getActiveRouteAnchor(shellApi) : null);
 
-  return {
+  return safeResolveLineDraftPreview({
     axis,
     sign,
     lengthMm,
     routeId,
+    inputMode: prev.inputMode || 'Length',
+    angleDeg: Number(prev.angleDeg) || 0,
+    dx: Number(prev.dx) || 0,
+    dy: Number(prev.dy) || 0,
+    dz: Number(prev.dz) || 0,
     commandText: String(prev.commandText || ''),
     anchorPoint,
-    previewPoint: anchorPoint ? computePreviewPoint(anchorPoint, axis, lengthMm, sign) : null,
+    previewPoint: prev.previewPoint || null,
     size:        prev.size        || '',
     rating:      prev.rating      || '',
     pipelineRef: prev.pipelineRef || '',
-  };
+  });
 }
 
 function mergeDraftField(draft, field, value) {
-  const next = { ...(draft || {}) };
-  if (field === 'lengthMm') next.lengthMm = Number(value);
-  else if (field === 'axis') next.axis = String(value || 'X').toUpperCase().slice(0, 1);
-  else next[field] = value;
-  return next;
+  return updateLineDraftField(draft || {}, field, value);
 }
 
 function resolveInsertDefaults(component, shellApi) {
@@ -133,17 +140,26 @@ export function createHudOrchestrator({ container, shellApi }) {
   function setAxisFn(axis) {
     const state = store.getState();
     if (state.mode !== 'line-draw') return;
-    const draft = { ...(state.draft || {}), axis: String(axis || 'X').toUpperCase() };
-    draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-    store.patch({ draft, axisLock: draft.axis });
+
+    const draft = updateLineDraftField(state.draft || {}, 'axis', axis);
+
+    store.patch({
+      draft,
+      axisLock: draft.axis,
+      errors: draft.errors || [],
+    });
   }
 
   function setSignFn(sign) {
     const state = store.getState();
     if (state.mode !== 'line-draw') return;
-    const draft = { ...(state.draft || {}), sign: sign < 0 ? -1 : 1 };
-    draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-    store.patch({ draft });
+
+    const draft = updateLineDraftField(state.draft || {}, 'sign', sign < 0 ? -1 : 1);
+
+    store.patch({
+      draft,
+      errors: draft.errors || [],
+    });
   }
 
   const overlay = createHudOverlay(container, {
@@ -163,8 +179,11 @@ export function createHudOrchestrator({ container, shellApi }) {
       const state = store.getState();
       if (state.mode === 'line-draw') {
         const draft = mergeDraftField(state.draft, field, value);
-        draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-        store.patch({ draft, axisLock: draft.axis, errors: [] });
+        store.patch({
+          draft,
+          axisLock: draft.axis,
+          errors: draft.errors || [],
+        });
       } else if (state.mode === 'insert-component') {
         const insertContext = updateInsertContextField(state, field, value, shellApi);
         store.patch({ insertContext, provenance: insertContext.provenance || 'manual', errors: [] });
@@ -187,6 +206,25 @@ export function createHudOrchestrator({ container, shellApi }) {
       } catch (err) {
         store.patch({ errors: [String(err?.message || err)] });
         emitHudTrace('LINE_COMMIT_FAIL', { message: String(err?.message || err) }, false);
+      }
+    },
+    repeatLine: () => {
+      const state = store.getState();
+      if (state.mode !== 'line-draw') return;
+
+      try {
+        const draft = buildRepeatLineDraft(state.draft || {}, state.lastLengthMm || state.draft?.lengthMm || 1000);
+
+        store.patch({
+          draft,
+          axisLock: draft.axis,
+          errors: draft.errors || [],
+        });
+
+        overlay.root.querySelector('[data-action="commit-line"]')?.click();
+      } catch (err) {
+        store.patch({ errors: [String(err?.message || err)] });
+        emitHudTrace('LINE_REPEAT_FAIL', { message: String(err?.message || err) }, false);
       }
     },
     commitRise: () => {
@@ -324,9 +362,15 @@ export function createHudOrchestrator({ container, shellApi }) {
               const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
               const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
               if (worldPt) {
-                  const draft = { ...(state.draft || {}), anchorPoint: worldPt };
-                  draft.previewPoint = computePreviewPoint(worldPt, draft.axis, draft.lengthMm, draft.sign);
-                  store.patch({ draft, awaitingAnchorClick: false });
+                  const draft = safeResolveLineDraftPreview({
+                    ...(state.draft || {}),
+                    anchorPoint: worldPt,
+                  });
+                  store.patch({
+                    draft,
+                    awaitingAnchorClick: false,
+                    errors: draft.errors || [],
+                  });
                   emitHudTrace('LINE_ANCHOR_SET', { point: worldPt });
               }
           }
@@ -572,9 +616,11 @@ export function createHudOrchestrator({ container, shellApi }) {
     if (axis === 'X') sign = ev.clientX >= rect.left + rect.width / 2 ? 1 : -1;
     if (axis === 'Y' || axis === 'Z') sign = ev.clientY <= rect.top + rect.height / 2 ? 1 : -1;
     if (sign !== state.draft?.sign) {
-      const draft = { ...(state.draft || {}), sign };
-      draft.previewPoint = computePreviewPoint(draft.anchorPoint, draft.axis, draft.lengthMm, draft.sign);
-      store.patch({ draft });
+      const draft = updateLineDraftField(state.draft || {}, 'sign', sign);
+      store.patch({
+        draft,
+        errors: draft.errors || [],
+      });
     }
   };
   container.addEventListener('mousemove', onPointerMove);
