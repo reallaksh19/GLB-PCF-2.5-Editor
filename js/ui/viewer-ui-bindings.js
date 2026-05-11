@@ -7,11 +7,15 @@ import {
   VIEWER_UI_ACTIONS,
   VIEWER_UI_MODES,
 } from './viewer-ui-state.js';
+import {
+  visualProfileLabel,
+} from '../../core/view/visual-profile.js';
 import { appLogger } from '../debug/logger.js';
 
 function bindClick(id, handler, unsubs) {
   const el = byId(id);
   if (!el || typeof handler !== 'function') return;
+
   const wrapped = async (event) => {
     try {
       await handler(event);
@@ -22,6 +26,7 @@ function bindClick(id, handler, unsubs) {
       });
     }
   };
+
   el.addEventListener('click', wrapped);
   unsubs.push(() => el.removeEventListener('click', wrapped));
 }
@@ -29,6 +34,7 @@ function bindClick(id, handler, unsubs) {
 function bindChange(id, handler, unsubs) {
   const el = byId(id);
   if (!el || typeof handler !== 'function') return;
+
   const wrapped = async (event) => {
     try {
       await handler(event);
@@ -39,6 +45,7 @@ function bindChange(id, handler, unsubs) {
       });
     }
   };
+
   el.addEventListener('change', wrapped);
   unsubs.push(() => el.removeEventListener('change', wrapped));
 }
@@ -50,6 +57,16 @@ function readTextFile(file) {
     reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
     reader.readAsText(file);
   });
+}
+
+function formatCoord(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(1) : '0.0';
+}
+
+function formatCursorPoint(point) {
+  if (!point) return 'X 0.0  Y 0.0  Z 0.0';
+  return `X ${formatCoord(point.x)}  Y ${formatCoord(point.y)}  Z ${formatCoord(point.z)}`;
 }
 
 function updateModeButtons(state) {
@@ -85,6 +102,43 @@ function updatePanelChrome(state) {
   if (leftToggle) leftToggle.innerHTML = leftOpen ? '&lsaquo;' : '&rsaquo;';
   if (rightToggle) rightToggle.innerHTML = rightOpen ? '&rsaquo;' : '&lsaquo;';
   if (inspectorToggle) inspectorToggle.innerHTML = inspectorOpen ? '&rsaquo;' : '&lsaquo;';
+}
+
+function updateCanvasOverlays(state) {
+  const label = visualProfileLabel(state.visualProfile);
+  const toolLabel = state.activeTool
+    ? String(state.activeTool).replace(/-/g, ' ')
+    : 'Select';
+
+  const activeToolPill = byId(VIEWER_UI_IDS.activeToolPill);
+  const viewBadge = byId(VIEWER_UI_IDS.viewBadge);
+  const cursorCoord = byId(VIEWER_UI_IDS.cursorCoord);
+  const snapMode = byId(VIEWER_UI_IDS.snapMode);
+  const activeProfile = byId(VIEWER_UI_IDS.activeProfile);
+
+  if (activeToolPill) {
+    activeToolPill.textContent = `Tool: ${toolLabel}`;
+  }
+
+  if (viewBadge) {
+    viewBadge.textContent = label;
+  }
+
+  if (cursorCoord) {
+    cursorCoord.textContent = formatCursorPoint(state.cursorPoint);
+  }
+
+  if (snapMode) {
+    snapMode.textContent = `SNAP: ${state.snapEnabled ? 'Grid' : 'Off'}`;
+  }
+
+  if (activeProfile) {
+    activeProfile.textContent = `PROFILE: ${label}`;
+  }
+
+  byId(VIEWER_UI_IDS.snapToggle)?.classList.toggle('active', Boolean(state.snapEnabled));
+  byId(VIEWER_UI_IDS.layerToggle)?.classList.toggle('active', Boolean(state.layersOpen));
+  byId(VIEWER_UI_IDS.lockView)?.classList.toggle('active', Boolean(state.viewLocked));
 }
 
 export function initViewerUiBindings(config) {
@@ -171,8 +225,29 @@ export function initViewerUiBindings(config) {
   bindClick(VIEWER_UI_IDS.fitMain, () => onCameraAction?.('fit-all'), unsubs);
   bindClick(VIEWER_UI_IDS.fitViewbar, () => onCameraAction?.('fit-all'), unsubs);
 
+  bindClick(VIEWER_UI_IDS.snapToggle, () => {
+    store.dispatch({ type: VIEWER_UI_ACTIONS.toggleSnap });
+  }, unsubs);
+
+  bindClick(VIEWER_UI_IDS.layerToggle, () => {
+    const nextState = store.dispatch({ type: VIEWER_UI_ACTIONS.toggleLayers });
+    onPanelChange?.('layers', Boolean(nextState.layersOpen));
+  }, unsubs);
+
+  bindClick(VIEWER_UI_IDS.lockView, () => {
+    const nextState = store.dispatch({ type: VIEWER_UI_ACTIONS.toggleViewLock });
+    onPanelChange?.('viewLock', Boolean(nextState.viewLocked));
+  }, unsubs);
+
+  bindClick(VIEWER_UI_IDS.viewCube, () => {
+    onCameraAction?.('set-view', 'iso-ne');
+  }, unsubs);
+
   queryAll('[data-view]').forEach((button) => {
-    const onClick = () => onCameraAction?.('set-view', button.getAttribute('data-view'));
+    const onClick = () => {
+      if (store.getState().viewLocked) return;
+      onCameraAction?.('set-view', button.getAttribute('data-view'));
+    };
     button.addEventListener('click', onClick);
     unsubs.push(() => button.removeEventListener('click', onClick));
   });
@@ -240,17 +315,22 @@ export function initViewerUiBindings(config) {
     updateToolButtons(state);
     updateMacroTray(state);
     updatePanelChrome(state);
+    updateCanvasOverlays(state);
   });
 
   updateModeButtons(store.getState());
   updateToolButtons(store.getState());
   updateMacroTray(store.getState());
   updatePanelChrome(store.getState());
+  updateCanvasOverlays(store.getState());
 
   return {
     setSelectedComponent(componentId) {
       store.dispatch({ type: VIEWER_UI_ACTIONS.setSelectedComponentId, componentId });
       onSelect?.(componentId || null);
+    },
+    setCursorPoint(point) {
+      store.dispatch({ type: VIEWER_UI_ACTIONS.setCursorPoint, point });
     },
     destroy() {
       unsubscribeStore?.();

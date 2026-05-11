@@ -19,6 +19,14 @@ export const VIEWER_UI_IDS = Object.freeze({
   themeToggle: 'hifi-theme-toggle',
   topToolbar: 'hifi-viewer-toolbar',
   canvas: 'hifi-viewer-canvas',
+
+  activeToolPill: 'hifi-canvas-active-pill',
+  viewBadge: 'hifi-canvas-view-badge',
+  snapBar: 'hifi-canvas-snapbar',
+  cursorCoord: 'hifi-cursor-coord',
+  snapMode: 'hifi-snap-mode',
+  activeProfile: 'hifi-active-profile',
+
   leftPalette: 'hifi-left-palette',
   leftPaletteToggle: 'hifi-left-palette-toggle',
   rightViewbar: 'hifi-right-viewbar',
@@ -49,6 +57,10 @@ export const VIEWER_UI_IDS = Object.freeze({
 
   fitMain: 'hifi-btn-fit-main',
   fitViewbar: 'hifi-btn-fit-viewbar',
+  snapToggle: 'hifi-btn-snap-toggle',
+  layerToggle: 'hifi-btn-layer-toggle',
+  lockView: 'hifi-btn-lock-view',
+  viewCube: 'hifi-btn-view-cube',
 
   toolLine: 'hifi-tool-line',
   toolPolyline: 'hifi-tool-polyline',
