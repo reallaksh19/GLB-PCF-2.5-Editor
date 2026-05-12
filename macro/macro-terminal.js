@@ -20,10 +20,11 @@ function downloadText(name, text) {
 export function initMacroTerminal(options) {
   const {
     container = document.getElementById('hifi-viewer-canvas'),
-    renderer,
+    renderer = null,
     getComponents,
     setComponents,
     getDomain,
+    getRouteEngine = null,
     setStatus = () => {},
     addComponent = null,
     addComponents = null,
@@ -31,7 +32,7 @@ export function initMacroTerminal(options) {
   } = options || {};
 
   if (!container || !renderer || typeof getComponents !== 'function' || typeof setComponents !== 'function' || typeof getDomain !== 'function') {
-    console.warn('[macro-terminal] Missing required init options');
+    console.error('initMacroTerminal requires container, renderer, getComponents, setComponents, getDomain');
     return null;
   }
 
@@ -90,6 +91,7 @@ export function initMacroTerminal(options) {
     routeState: null,
     getComponents,
     getDomain,
+    getRouteEngine,
   };
 
   function updateBadges() {
@@ -154,6 +156,8 @@ export function initMacroTerminal(options) {
       '  CIRCLE cx,cy,cz RADIUS=500  |  CIRCLE cx,cy,cz rx,ry,rz (radius point)',
       'Construction: ORIGIN, ALIGN, ARRAY LAST n dx,dy,dz, MIRROR LAST PLANE=XY/XZ/YZ',
       'Route mode: ROUTE ... / START / RUN / ELBOW 90 DIR / TEE BRANCH-OD=.. BRANCH=.. / END',
+      'Draft parity: LINE, POLYLINE, SPLINE/SPLINE_GUIDE',
+      'Draft tokens: START=x,y,z X1000 Y-750 R500 D250 @dx,dy,dz @length<angle',
       'Queries: LIST [TYPE], DIST p1 p2, INSPECT id, VALIDATE',
       'Keys: ↑↓ history, Ctrl+Z undo, Ctrl+L clear, F1 help',
     ];

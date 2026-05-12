@@ -625,6 +625,7 @@ export function initViewerTab() {
       getComponents,
       setComponents,
       getDomain,
+      getRouteEngine,
       setStatus: (tone, text) => setViewerStatus(text, tone),
       refreshModel: () => refreshScene('macro-terminal', { sourceName: 'macro-terminal', sourceType: 'macro' }),
     });
