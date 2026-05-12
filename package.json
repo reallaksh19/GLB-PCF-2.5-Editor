@@ -46,7 +46,10 @@
     "test:slice6": "npm run test:hud-line-professional && npm run test:slice5",
     "test:hud-polyline-professional": "node tests/hud-polyline-professional.smoke.mjs",
     "test:hud-polyline-integration": "node tests/hud-polyline-integration-contract.smoke.mjs",
-    "test:slice7": "npm run test:hud-polyline-professional && npm run test:hud-polyline-integration && npm run test:slice6"
+    "test:slice7": "npm run test:hud-polyline-professional && npm run test:hud-polyline-integration && npm run test:slice6",
+    "test:hud-spline-professional": "node tests/hud-spline-professional.smoke.mjs",
+    "test:hud-spline-integration": "node tests/hud-spline-integration-contract.smoke.mjs",
+    "test:slice8": "npm run test:hud-spline-professional && npm run test:hud-spline-integration && npm run test:slice7"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

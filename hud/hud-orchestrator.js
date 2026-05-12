@@ -19,6 +19,16 @@ import {
   undoPolylineSegment,
   updatePolylineDraftField,
 } from './hud-polyline-professional.js';
+import {
+  addSplineAbsolutePoint,
+  addSplinePoint,
+  clearSplineDraft,
+  createSplineDraft,
+  finishSplineDraftPayload,
+  setSplinePreviewPoint,
+  undoSplinePoint,
+  updateSplineDraftField,
+} from './hud-spline-professional.js';
 import { getInsertDefaults, resolveInsertContext, commitInsertDraft } from './hud-component-insert.js';
 
 function clone(value) {
@@ -121,8 +131,20 @@ export function createHudOrchestrator({ container, shellApi }) {
   }
 
   function activateSpline() {
-    store.patch({ visible: true, mode: 'spline-draw', draftPoints: [], errors: [] });
-    emitHudTrace('SPLINE_MODE_OPEN');
+    const startPoint = hasRealRouteAnchor(shellApi) ? getActiveRouteAnchor(shellApi) : null;
+    const draft = createSplineDraft(startPoint);
+
+    store.patch({
+      visible: true,
+      mode: 'spline-draw',
+      draft,
+      draftPoints: draft.points,
+      errors: [],
+    });
+
+    emitHudTrace('SPLINE_MODE_OPEN', {
+      hasStartPoint: Boolean(startPoint),
+    });
   }
 
   function activateCircle() {
@@ -210,6 +232,14 @@ export function createHudOrchestrator({ container, shellApi }) {
         });
       } else if (state.mode === 'polyline-draw') {
         const draft = updatePolylineDraftField(state.draft || {}, field, value);
+        store.patch({
+          draft,
+          draftPoints: draft.points || [],
+          currentPreviewPoint: draft.previewPoint || null,
+          errors: draft.errors || [],
+        });
+      } else if (state.mode === 'spline-draw') {
+        const draft = updateSplineDraftField(state.draft || {}, field, value);
         store.patch({
           draft,
           draftPoints: draft.points || [],
@@ -356,6 +386,98 @@ export function createHudOrchestrator({ container, shellApi }) {
       } catch (err) {
         store.patch({ errors: [String(err?.message || err)] });
         emitHudTrace('POLYLINE_COMMIT_FAIL', { message: String(err?.message || err) }, false);
+      }
+    },
+    addSplinePoint: () => {
+      const state = store.getState();
+      if (state.mode !== 'spline-draw') return;
+
+      const draft = addSplinePoint(state.draft || {});
+
+      store.patch({
+        draft,
+        draftPoints: draft.points || [],
+        currentPreviewPoint: draft.previewPoint || null,
+        errors: draft.errors || [],
+      });
+
+      if (!(draft.errors || []).length) {
+        emitHudTrace('SPLINE_POINT_ADDED', {
+          points: draft.points?.length || 0,
+        }, true);
+      }
+    },
+
+    undoSplinePoint: () => {
+      const state = store.getState();
+      if (state.mode !== 'spline-draw') return;
+
+      const draft = undoSplinePoint(state.draft || {});
+
+      store.patch({
+        draft,
+        draftPoints: draft.points || [],
+        currentPreviewPoint: draft.previewPoint || null,
+        errors: draft.errors || [],
+      });
+
+      emitHudTrace('SPLINE_UNDO', {
+        points: draft.points?.length || 0,
+      }, true);
+    },
+
+    clearSpline: () => {
+      const state = store.getState();
+      if (state.mode !== 'spline-draw') return;
+
+      const draft = clearSplineDraft(state.draft || {});
+
+      store.patch({
+        draft,
+        draftPoints: [],
+        currentPreviewPoint: null,
+        errors: [],
+      });
+
+      emitHudTrace('SPLINE_CLEAR', {}, true);
+    },
+
+    finishSpline: () => {
+      const state = store.getState();
+      if (state.mode !== 'spline-draw') return;
+
+      const payload = finishSplineDraftPayload(state.draft || {});
+      if (!payload.ok) {
+        store.patch({ errors: payload.errors || [] });
+        emitHudTrace('SPLINE_COMMIT_FAIL', { errors: payload.errors || [] }, false);
+        return;
+      }
+
+      try {
+        shellApi.getRouteEngine?.().createGuide(
+          payload.points,
+          payload.guideType,
+          {
+            source: 'hud-spline',
+            pipelineRef: payload.pipelineRef || undefined,
+          }
+        );
+
+        store.patch({
+          mode: 'idle',
+          draft: null,
+          draftPoints: [],
+          currentPreviewPoint: null,
+          errors: [],
+        });
+
+        emitHudTrace('SPLINE_COMMIT', {
+          points: payload.points.length,
+          guideType: payload.guideType,
+        }, true);
+      } catch (err) {
+        store.patch({ errors: [String(err?.message || err)] });
+        emitHudTrace('SPLINE_COMMIT_FAIL', { message: String(err?.message || err) }, false);
       }
     },
     commitRise: () => {
@@ -543,9 +665,18 @@ export function createHudOrchestrator({ container, shellApi }) {
           const { x: ndcX, y: ndcY } = ndcFromEvent(ev);
           const worldPt = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
           if (worldPt) {
-              const pts = [...(state.draftPoints || []), worldPt];
-              store.patch({ draftPoints: pts, currentPreviewPoint: worldPt });
-              emitHudTrace('SPLINE_POINT_ADDED', { points: pts.length });
+              const draft = addSplineAbsolutePoint(state.draft || {}, worldPt);
+
+              store.patch({
+                draft,
+                draftPoints: draft.points || [],
+                currentPreviewPoint: draft.previewPoint || null,
+                errors: draft.errors || [],
+              });
+
+              emitHudTrace('SPLINE_POINT_ADDED', {
+                points: draft.points?.length || 0,
+              }, !(draft.errors || []).length);
           }
       /* ── CIRCLE: click 1 = center, click 2 = commit ── */
       } else if (state.mode === 'circle-draw') {
@@ -717,16 +848,7 @@ export function createHudOrchestrator({ container, shellApi }) {
       if (state.mode === 'polyline-draw') {
           overlay.root.querySelector('[data-action="poly-finish"]')?.click();
       } else if (state.mode === 'spline-draw') {
-          const pts = state.draftPoints || [];
-          if (pts.length > 1) {
-              try {
-                  shellApi.getRouteEngine?.().createGuide(pts, 'SPLINE', { source: 'hud-spline' });
-                  store.patch({ mode: 'idle', draftPoints: [], errors: [] });
-                  emitHudTrace('SPLINE_COMMIT', { points: pts.length });
-              } catch (e) {
-                  store.patch({ errors: [String(e.message)] });
-              }
-          }
+          overlay.root.querySelector('[data-action="spline-finish"]')?.click();
       }
   };
   container.addEventListener('dblclick', onDoubleClick);
@@ -753,7 +875,23 @@ export function createHudOrchestrator({ container, shellApi }) {
         return;
     }
 
-    if (state.mode === 'spline-draw' || state.mode === 'circle-draw' || state.mode === 'arc-draw' || (state.mode === 'modify-tool' && state.modifyDraft)) {
+    if (state.mode === 'spline-draw') {
+        const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+        const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+        const hit = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
+
+        if (hit) {
+            const draft = setSplinePreviewPoint(state.draft || {}, hit);
+            store.patch({
+              draft,
+              currentPreviewPoint: draft.previewPoint || hit,
+              errors: draft.errors || [],
+            });
+        }
+        return;
+    }
+
+    if (state.mode === 'circle-draw' || state.mode === 'arc-draw' || (state.mode === 'modify-tool' && state.modifyDraft)) {
         const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
         const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
         const hit = shellApi.renderer?.pickPlane?.(ndcX, ndcY, 0);
