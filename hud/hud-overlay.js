@@ -1,5 +1,6 @@
 import { formatMm, formatPt, formatProvenanceLabel } from './hud-format.js';
 import { polylineSegmentTableRows } from './hud-polyline-professional.js';
+import { splinePointTableRows } from './hud-spline-professional.js';
 
 function esc(value) {
   return String(value ?? '')
@@ -120,6 +121,26 @@ function segmentTable(rows) {
         <span>${esc(row.length)}</span>
         <span>${esc(row.axis)}</span>
         <span title="${esc(row.token)}">${esc(row.token)}</span>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function pointTable(rows) {
+  if (!rows.length) {
+    return `<div class="hud-segment-empty">No control points yet</div>`;
+  }
+
+  return `<div class="hud-segment-table">
+    <div class="hud-segment-head">
+      <span>#</span><span>X</span><span>Y</span><span>Z</span>
+    </div>
+    ${rows.slice(-8).map((row) => `
+      <div class="hud-segment-row">
+        <span>${esc(row.index)}</span>
+        <span>${esc(row.x)}</span>
+        <span>${esc(row.y)}</span>
+        <span>${esc(row.z)}</span>
       </div>
     `).join('')}
   </div>`;
@@ -334,18 +355,48 @@ function polylineDraftHtml(state) {
 }
 
 function splineDraftHtml(state) {
-  const pts = state.draftPoints || [];
+  const draft = state.draft || {};
+  const pts = draft.points || state.draftPoints || [];
+  const rows = splinePointTableRows(draft);
   const ac  = TOOL_COLOR['spline-draw'];
+  const waiting = !draft.currentPoint;
+
+  if (waiting) {
+    return [
+      infoStrip(['Start', 'Click canvas to set first control point']),
+      actionsBar([
+        { label:'Esc', action:'cancel', danger:true },
+      ], ac),
+    ].join('');
+  }
+
   return [
     '<div class="hud-fields-section">',
     fieldRow([
-      { id:'pts', label:'Points', type:'badge', val: String(pts.length), flex:1 },
+      { id:'axis', label:'Axis', type:'seg', opts:['X','Y','Z'], val: draft.axis || 'X', flex:1 },
+      { id:'sign', label:'Dir',  type:'seg', opts:['+','−'],    val: (draft.sign >= 0 ? '+' : '−'), flex:1 },
+    ]),
+    fieldRow([
+      { id:'lengthMm', label:'Length mm', type:'number', val: String(draft.lengthMm || ''), flex:2 },
+      { id:'pipelineRef', label:'Guide Ref', type:'text', val: draft.pipelineRef || '', flex:3 },
+    ]),
+    fieldRow([
+      { id:'commandText', label:'Input', type:'text', val: draft.commandText || '', flex:1 },
     ]),
     '</div>',
-    infoStrip(['Mode','Click to add','End','Dbl-click']),
+    infoStrip([
+      'Pts', String(pts.length),
+      'Current', formatPt(draft.currentPoint),
+      'Preview', formatPt(draft.previewPoint),
+      'Type', 'SPLINE guide',
+    ]),
+    pointTable(rows),
     actionsBar([
-      { label:'↵ Finish', action:'cancel', primary:true },
-      { label:'Esc',      action:'cancel', danger:true },
+      { label:'Add',    action:'spline-add', primary:true },
+      { label:'Undo',   action:'spline-undo' },
+      { label:'Clear',  action:'spline-clear' },
+      { label:'Finish', action:'spline-finish', primary:true },
+      { label:'Esc',    action:'cancel', danger:true },
     ], ac),
   ].join('');
 }
@@ -481,6 +532,10 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'poly-undo')     return handlers.undoPolylineSegment?.();
     if (action === 'poly-close')    return handlers.closePolyline?.();
     if (action === 'poly-finish')   return handlers.finishPolyline?.();
+    if (action === 'spline-add')    return handlers.addSplinePoint?.();
+    if (action === 'spline-undo')   return handlers.undoSplinePoint?.();
+    if (action === 'spline-clear')  return handlers.clearSpline?.();
+    if (action === 'spline-finish') return handlers.finishSpline?.();
     if (action === 'commit-insert') return handlers.commitInsert?.();
     if (action === 'rise')          return handlers.commitRise?.();
     if (action === 'drop')          return handlers.commitDrop?.();
