@@ -43,7 +43,10 @@
     "test:viewer-ui-shell-state": "node tests/viewer-ui-shell-state.smoke.mjs",
     "test:slice5": "npm run test:hifi-layout && npm run test:viewer-ui-shell-state && npm run test:slice4",
     "test:hud-line-professional": "node tests/hud-line-professional.smoke.mjs",
-    "test:slice6": "npm run test:hud-line-professional && npm run test:slice5"
+    "test:slice6": "npm run test:hud-line-professional && npm run test:slice5",
+    "test:hud-polyline-professional": "node tests/hud-polyline-professional.smoke.mjs",
+    "test:hud-polyline-integration": "node tests/hud-polyline-integration-contract.smoke.mjs",
+    "test:slice7": "npm run test:hud-polyline-professional && npm run test:hud-polyline-integration && npm run test:slice6"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
