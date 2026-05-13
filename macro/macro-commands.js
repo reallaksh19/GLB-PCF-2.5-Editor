@@ -1,6 +1,14 @@
 import { beginRoute, consumePendingElbow, requireActiveRoute, routeEnd, routeQueueElbow, routeRunDelta, routeStart } from './macro-route.js';
 import { parseDraftCommand, parseDraftCommandOrThrow, parseDraftTokens } from '../editor/draft-command-parser.js';
 import { validateMatrixInput } from './validate-matrix-input.js';
+import {
+  buildPipelineSpec,
+  looksLikeDraftToken,
+  resolveMacroDraftSequence,
+  resolveMacroLine,
+  routeEngineOrThrow,
+  summarizePoint,
+} from './macro-draft-parity.js';
 
 const _commands = new Map();
 
@@ -166,32 +174,38 @@ function runRouteDelta(ctx, delta, opts, macroInput) {
   return { comps, pipe, run };
 }
 
+function routeSegmentRefs(route) {
+  return (route?.segments || []).map((seg) => ({
+    id: seg.id,
+    type: 'PIPE',
+    routeId: route.id,
+    segmentId: seg.id,
+  }));
+}
+
+function updateRouteMacroContext(ctx, points, route = null) {
+  const safePoints = Array.isArray(points) ? points : [];
+  ctx.lastPoint = safePoints[safePoints.length - 1] || ctx.lastPoint || null;
+  ctx.lastEntities = routeSegmentRefs(route);
+}
+
 export function registerBuiltinCommands() {
   if (_commands.size) return;
 
   register('POLYLINE', (args, ctx) => {
-    // Accepts:
-    //   POLYLINE x1,y1,z1 x2,y2,z2 ...              (old absolute-point list)
-    //   POLYLINE START=x,y,z X1000 Y750 R500 ...    (draft-token sequence)
     const opts = parseKV(args);
     const valueTokens = args.filter((token) => !String(token).includes('='));
 
     let points = [];
-    if (opts.START) {
-      // Draft-token mode: START= defines origin, remaining tokens are draft segments
-      const startPt = parseXYZ(opts.START, ctx);
-      const result = parseDraftTokens(valueTokens, startPt);
-      if (!result.ok) throw new Error(`POLYLINE token error: ${result.diagnostics.join('; ')}`);
-      points = result.points;
-    } else if (valueTokens.length > 0 && !/^[XYZRD@]/.test(String(valueTokens[0]).trim().toUpperCase())) {
-      // Old absolute-coordinate list syntax
-      points = valueTokens.map(arg => parseXYZ(arg, ctx));
+
+    if (opts.START || valueTokens.some((token) => looksLikeDraftToken(token))) {
+      const resolved = resolveMacroDraftSequence(args, ctx, {
+        commandName: 'POLYLINE',
+        axisLock: opts.AXIS || 'X',
+      });
+      points = resolved.points;
     } else if (valueTokens.length > 0) {
-      // Draft-token sequence without explicit START — use workingOrigin
-      const startPt = ctx.lastPoint || ctx.workingOrigin || { x: 0, y: 0, z: 0 };
-      const result = parseDraftTokens(valueTokens, startPt);
-      if (!result.ok) throw new Error(`POLYLINE token error: ${result.diagnostics.join('; ')}`);
-      points = result.points;
+      points = valueTokens.map((arg) => parseXYZ(arg, ctx));
     } else if (ctx.matrix) {
       const v = validateMatrixInput(ctx.matrix);
       if (!v.ok) throw new Error('Invalid matrix input for POLYLINE: ' + JSON.stringify(v.errors));
@@ -202,40 +216,42 @@ export function registerBuiltinCommands() {
 
     if (points.length < 2) throw new Error('POLYLINE requires at least two valid points');
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const routeEngine = routeEngineOrThrow(ctx);
+    const spec = buildPipelineSpec(opts, ctx);
 
-    const spec = { pipelineRef: opts.PIPELINE || ctx.pipeline || '' };
+    const routeId = routeEngine.createPolyline(
+      points,
+      spec,
+      { source: 'macro-polyline' }
+    );
 
-    const routeId = routeEngine.createPolyline(points, spec, { source: 'macro-polyline' });
-    const route = routeEngine.getRoutes().find(r => r.id === routeId);
+    const route = routeEngine.getRoutes?.().find((r) => r.id === routeId) || null;
     if (!route) throw new Error('Failed to create POLYLINE route');
 
-    const createdComps = (route.segments || []).map(seg => ({ id: seg.id, type: 'PIPE' }));
-    return registerCompsResult(createdComps, ctx, `POLYLINE created route ${routeId} with ${route.segments.length} segments`);
+    updateRouteMacroContext(ctx, points, route);
+
+    return {
+      message: `POLYLINE created route ${routeId} with ${(route.segments || []).length} segments`,
+      routeId,
+      points,
+      segments: routeSegmentRefs(route),
+    };
   });
 
   register('SPLINE_GUIDE', (args, ctx) => {
-    // Accepts:
-    //   SPLINE_GUIDE x,y,z x,y,z ...              (old absolute list)
-    //   SPLINE_GUIDE START=x,y,z X500 Y300 ...    (draft-token sequence)
-    //   SPLINE_GUIDE MODE=FIT TOL=25 x,y,z ...    (fit-mode passthrough)
     const opts = parseKV(args);
     const valueTokens = args.filter((token) => !String(token).includes('='));
 
     let points = [];
-    if (opts.START) {
-      const startPt = parseXYZ(opts.START, ctx);
-      const result = parseDraftTokens(valueTokens, startPt);
-      if (!result.ok) throw new Error(`SPLINE_GUIDE token error: ${result.diagnostics.join('; ')}`);
-      points = result.points;
-    } else if (valueTokens.length > 0 && !/^[XYZRD@]/.test(String(valueTokens[0]).trim().toUpperCase())) {
-      points = valueTokens.map(arg => parseXYZ(arg, ctx));
+
+    if (opts.START || valueTokens.some((token) => looksLikeDraftToken(token))) {
+      const resolved = resolveMacroDraftSequence(args, ctx, {
+        commandName: 'SPLINE_GUIDE',
+        axisLock: opts.AXIS || 'X',
+      });
+      points = resolved.points;
     } else if (valueTokens.length > 0) {
-      const startPt = ctx.lastPoint || ctx.workingOrigin || { x: 0, y: 0, z: 0 };
-      const result = parseDraftTokens(valueTokens, startPt);
-      if (!result.ok) throw new Error(`SPLINE_GUIDE token error: ${result.diagnostics.join('; ')}`);
-      points = result.points;
+      points = valueTokens.map((arg) => parseXYZ(arg, ctx));
     } else if (ctx.matrix) {
       const v = validateMatrixInput(ctx.matrix);
       if (!v.ok) throw new Error('Invalid matrix input for SPLINE_GUIDE: ' + JSON.stringify(v.errors));
@@ -246,11 +262,26 @@ export function registerBuiltinCommands() {
 
     if (points.length < 2) throw new Error('SPLINE_GUIDE requires at least two valid points');
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const routeEngine = routeEngineOrThrow(ctx);
 
-    const id = routeEngine.createGuide(points, 'SPLINE', { source: 'macro-spline-guide' });
-    return { message: `SPLINE_GUIDE created: ${id} (${points.length} control points)` };
+    const guideId = routeEngine.createGuide(points, 'SPLINE', {
+      source: 'macro-spline-guide',
+      pipelineRef: opts.PIPELINE || ctx.pipeline || undefined,
+    });
+
+    ctx.lastPoint = points[points.length - 1];
+    ctx.lastEntities = [];
+
+    return {
+      message: `SPLINE_GUIDE created: ${guideId} (${points.length} control points)`,
+      guideId,
+      points,
+    };
+  });
+
+  register('SPLINE', (args, ctx) => {
+    const handler = getCommandHandler('SPLINE_GUIDE');
+    return handler(args, ctx);
   });
 
   register('STRETCH', (args, ctx) => {
@@ -589,18 +620,31 @@ export function registerBuiltinCommands() {
   });
 
   register('LINE', (args, ctx) => {
-    requireArgs(args, 1, 'LINE <token>');
-    const rs = requireActiveRoute(ctx);
-    if (!rs.lastPoint) throw new Error('ROUTE START must be issued before LINE');
-    const token = String(args[0] || '').trim();
-    const opts = parseKV(args.slice(1));
-    const parsed = parseDraftCommandOrThrow(token, rs.lastPoint, { axisLock: 'X' });
-    const result = runRouteDelta(ctx, parsed.delta, opts, parsed.commandText);
-    return registerCompsResult(
-      result.comps,
-      ctx,
-      `LINE created: ${result.pipe.id} (${formatDistance(result.run.start, result.run.end)}mm)`
+    const resolved = resolveMacroLine(args, ctx);
+    const routeEngine = routeEngineOrThrow(ctx);
+    const spec = buildPipelineSpec(resolved.opts, ctx);
+
+    const routeId = routeEngine.createPolyline(
+      resolved.points,
+      spec,
+      {
+        source: 'macro-line',
+        token: resolved.token,
+        mode: resolved.mode,
+      }
     );
+
+    const route = routeEngine.getRoutes?.().find((r) => r.id === routeId) || null;
+    if (!route) throw new Error('Failed to create LINE route');
+
+    updateRouteMacroContext(ctx, resolved.points, route);
+
+    return {
+      message: `LINE created route ${routeId} from ${summarizePoint(resolved.startPoint)} to ${summarizePoint(resolved.endPoint)}`,
+      routeId,
+      points: resolved.points,
+      segments: routeSegmentRefs(route),
+    };
   });
 
   register('RUN', (args, ctx) => {

@@ -49,7 +49,11 @@
     "test:slice7": "npm run test:hud-polyline-professional && npm run test:hud-polyline-integration && npm run test:slice6",
     "test:hud-spline-professional": "node tests/hud-spline-professional.smoke.mjs",
     "test:hud-spline-integration": "node tests/hud-spline-integration-contract.smoke.mjs",
-    "test:slice8": "npm run test:hud-spline-professional && npm run test:hud-spline-integration && npm run test:slice7"
+    "test:slice8": "npm run test:hud-spline-professional && npm run test:hud-spline-integration && npm run test:slice7",
+    "test:macro-draft-parity": "node tests/macro-draft-parity.smoke.mjs",
+    "test:macro-line-polyline-spline": "node tests/macro-line-polyline-spline.smoke.mjs",
+    "test:macro-terminal-context": "node tests/macro-terminal-context.smoke.mjs",
+    "test:slice9": "npm run test:macro-draft-parity && npm run test:macro-line-polyline-spline && npm run test:macro-terminal-context && npm run test:slice8"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
