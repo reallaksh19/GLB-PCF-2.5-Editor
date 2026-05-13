@@ -58,7 +58,11 @@
     "test:slice9-clean": "npm run test:no-temp-patch-artifacts && npm run test:slice9",
     "test:route-render-reconciler": "node tests/route-render-reconciler.smoke.mjs",
     "test:scene-renderer-reconcile-contract": "node tests/scene-renderer-reconcile-contract.smoke.mjs",
-    "test:slice10": "npm run test:route-render-reconciler && npm run test:scene-renderer-reconcile-contract && npm run test:slice9-clean"
+    "test:slice10": "npm run test:route-render-reconciler && npm run test:scene-renderer-reconcile-contract && npm run test:slice9-clean",
+    "test:macro-route-edit-results": "node tests/macro-route-edit-results.smoke.mjs",
+    "test:macro-route-edit-commands": "node tests/macro-route-edit-commands.smoke.mjs",
+    "test:macro-route-edit-contract": "node tests/macro-route-edit-contract.smoke.mjs",
+    "test:slice11": "npm run test:macro-route-edit-results && npm run test:macro-route-edit-commands && npm run test:macro-route-edit-contract && npm run test:slice10"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

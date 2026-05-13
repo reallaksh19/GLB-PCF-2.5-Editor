@@ -9,6 +9,16 @@ import {
   routeEngineOrThrow,
   summarizePoint,
 } from './macro-draft-parity.js';
+import {
+  findRouteTargetKind,
+  parseMacroRouteKv,
+  parseRouteDeltaToken,
+  routeById,
+  routeEditResult,
+  routeEngineOrThrow as routeEditEngineOrThrow,
+  routeIdFromOptsOrActive,
+  routeSnapshot,
+} from './macro-route-edit-results.js';
 
 const _commands = new Map();
 
@@ -285,97 +295,146 @@ export function registerBuiltinCommands() {
   });
 
   register('STRETCH', (args, ctx) => {
-    requireArgs(args, 2, 'STRETCH nodeId dx,dy,dz');
-    const nodeId = String(args[0]);
-    const delta = parseXYZ(args[1], ctx, 'route-delta');
+    requireArgs(args, 2, 'STRETCH nodeId dx,dy,dz [ROUTE=routeId]');
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const { opts, values } = parseMacroRouteKv(args);
+    const nodeId = String(values[0]);
+    const delta = parseRouteDeltaToken(values[1]);
 
-    const activeRouteId = routeEngine.getState().selection?.activeRouteId;
-    if (!activeRouteId) throw new Error('STRETCH requires an active route selection');
+    const routeEngine = routeEditEngineOrThrow(ctx);
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'STRETCH');
 
-    routeEngine.stretchNode(activeRouteId, nodeId, delta, { source: 'macro-stretch' });
-    return { message: `STRETCH applied to node ${nodeId}` };
+    routeEngine.stretchNode(routeId, nodeId, delta, { source: 'macro-stretch' });
+
+    const route = routeById(routeEngine, routeId);
+
+    return routeEditResult('STRETCH', {
+      message: `STRETCH applied to node ${nodeId}`,
+      routeId,
+      nodeId,
+      delta,
+      routeSnapshot: routeSnapshot(route),
+    });
   });
 
   register('ROTATE', (args, ctx) => {
-    requireArgs(args, 3, 'ROTATE nodeId1,nodeId2,... angle pivotX,pivotY,pivotZ [AXIS=Z]');
-    const nodeIds = String(args[0]).split(',').map(s => s.trim()).filter(Boolean);
-    const angle = Number(args[1]);
-    if (!Number.isFinite(angle)) throw new Error('ROTATE angle must be numeric');
-    const pivot = parseXYZ(args[2], ctx);
-    const opts = parseKV(args.slice(3));
+    requireArgs(args, 3, 'ROTATE nodeId1,nodeId2,... angle pivotX,pivotY,pivotZ [AXIS=Z] [ROUTE=routeId]');
+
+    const { opts, values } = parseMacroRouteKv(args);
+    const nodeIds = String(values[0]).split(',').map((item) => item.trim()).filter(Boolean);
+    const angle = Number(values[1]);
+
+    if (!Number.isFinite(angle)) {
+      throw new Error('ROTATE angle must be numeric');
+    }
+
+    const pivot = parseRouteDeltaToken(values[2]);
     const axis = String(opts.AXIS || 'Z').toUpperCase();
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const routeEngine = routeEditEngineOrThrow(ctx);
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'ROTATE');
 
-    const activeRouteId = routeEngine.getState().selection?.activeRouteId;
-    if (!activeRouteId) throw new Error('ROTATE requires an active route selection');
+    routeEngine.rotateNodes(routeId, pivot, angle, axis, nodeIds, { source: 'macro-rotate' });
 
-    routeEngine.rotateNodes(activeRouteId, pivot, angle, axis, nodeIds, { source: 'macro-rotate' });
-    return { message: `ROTATE applied to nodes ${nodeIds.join(', ')} by ${angle} degrees` };
+    const route = routeById(routeEngine, routeId);
+
+    return routeEditResult('ROTATE', {
+      message: `ROTATE applied to nodes ${nodeIds.join(', ')} by ${angle} degrees`,
+      routeId,
+      nodeIds,
+      angle,
+      pivot,
+      axis,
+      routeSnapshot: routeSnapshot(route),
+    });
   });
 
   register('BREAK', (args, ctx) => {
-    requireArgs(args, 1, 'BREAK segmentId [x,y,z]');
-    const segmentId = String(args[0]);
-    let point = null;
-    if (args[1]) {
-      point = parseXYZ(args[1], ctx);
-    }
+    requireArgs(args, 1, 'BREAK segmentId [x,y,z] [ROUTE=routeId]');
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const { opts, values } = parseMacroRouteKv(args);
+    const segmentId = String(values[0]);
+    const point = values[1] ? parseRouteDeltaToken(values[1]) : null;
 
-    const activeRouteId = routeEngine.getState().selection?.activeRouteId;
-    if (!activeRouteId) throw new Error('BREAK requires an active route selection');
+    const routeEngine = routeEditEngineOrThrow(ctx);
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'BREAK');
 
-    routeEngine.breakSegment(activeRouteId, segmentId, point, { source: 'macro-break' });
-    return { message: `BREAK applied to segment ${segmentId}` };
+    routeEngine.breakSegment(routeId, segmentId, point, { source: 'macro-break' });
+
+    const route = routeById(routeEngine, routeId);
+
+    return routeEditResult('BREAK', {
+      message: `BREAK applied to segment ${segmentId}`,
+      routeId,
+      segmentId,
+      point,
+      routeSnapshot: routeSnapshot(route),
+    });
   });
 
   register('DELETE', (args, ctx) => {
-    requireArgs(args, 1, 'DELETE segmentId|nodeId|routeId');
-    const id = String(args[0]);
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    requireArgs(args, 1, 'DELETE segmentId|nodeId|routeId [ROUTE=routeId]');
 
-    const activeRouteId = routeEngine.getState().selection?.activeRouteId;
-    if (!activeRouteId) throw new Error('DELETE requires an active route selection (for segment/node delete)');
+    const { opts, values } = parseMacroRouteKv(args);
+    const targetId = String(values[0]);
 
-    const state = routeEngine.getState();
-    const route = (state.model?.routes || []).find(r => r.id === activeRouteId);
+    const routeEngine = routeEditEngineOrThrow(ctx);
+    const activeRouteId = routeEngine.getState?.()?.selection?.activeRouteId || null;
+    const routeId = opts.ROUTE || opts.ROUTE_ID || opts.ROUTEID || activeRouteId || targetId;
+    const route = routeById(routeEngine, routeId) || routeById(routeEngine, activeRouteId);
+    const targetKind = findRouteTargetKind(route, targetId);
 
-    let isSegment = route?.segments?.some(s => s.id === id);
-    let isNode = route?.nodes?.some(n => n.id === id);
-
-    if (isSegment) {
-       routeEngine.execute({ type: 'ROUTE_DELETE', payload: { routeId: activeRouteId, segmentId: id }, meta: { source: 'macro-delete' }});
-       return { message: `DELETE applied to segment ${id}` };
-    } else if (isNode) {
-       routeEngine.execute({ type: 'ROUTE_DELETE', payload: { routeId: activeRouteId, nodeId: id }, meta: { source: 'macro-delete' }});
-       return { message: `DELETE applied to node ${id}` };
+    if (targetKind === 'segment') {
+      routeEngine.execute({
+        type: 'ROUTE_DELETE',
+        payload: { routeId: route.id, segmentId: targetId },
+        meta: { source: 'macro-delete' },
+      });
+    } else if (targetKind === 'node') {
+      routeEngine.execute({
+        type: 'ROUTE_DELETE',
+        payload: { routeId: route.id, nodeId: targetId },
+        meta: { source: 'macro-delete' },
+      });
     } else {
-       routeEngine.execute({ type: 'ROUTE_DELETE', payload: { routeId: id }, meta: { source: 'macro-delete' }});
-       return { message: `DELETE applied to route ${id}` };
+      routeEngine.execute({
+        type: 'ROUTE_DELETE',
+        payload: { routeId: targetId },
+        meta: { source: 'macro-delete' },
+      });
     }
+
+    const nextRoute = routeById(routeEngine, route?.id || targetId);
+
+    return routeEditResult('DELETE', {
+      message: `DELETE applied to ${targetKind} ${targetId}`,
+      routeId: route?.id || targetId,
+      targetId,
+      routeSnapshot: routeSnapshot(nextRoute),
+    });
   });
 
   register('MOVE', (args, ctx) => {
-    requireArgs(args, 2, 'MOVE nodeId dx,dy,dz');
-    const nodeId = String(args[0]);
-    const delta = parseXYZ(args[1], ctx, 'route-delta');
+    requireArgs(args, 2, 'MOVE nodeId dx,dy,dz [ROUTE=routeId]');
 
-    const routeEngine = ctx.getRouteEngine?.();
-    if (!routeEngine) throw new Error('ROUTE engine not initialized');
+    const { opts, values } = parseMacroRouteKv(args);
+    const nodeId = String(values[0]);
+    const delta = parseRouteDeltaToken(values[1]);
 
-    const activeRouteId = routeEngine.getState().selection?.activeRouteId;
-    if (!activeRouteId) throw new Error('MOVE requires an active route selection');
+    const routeEngine = routeEditEngineOrThrow(ctx);
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'MOVE');
 
-    routeEngine.moveNode(activeRouteId, nodeId, delta, { source: 'macro-move' });
-    return { message: `MOVE applied to node ${nodeId}` };
+    routeEngine.moveNode(routeId, nodeId, delta, { source: 'macro-move' });
+
+    const route = routeById(routeEngine, routeId);
+
+    return routeEditResult('MOVE', {
+      message: `MOVE applied to node ${nodeId}`,
+      routeId,
+      nodeId,
+      delta,
+      routeSnapshot: routeSnapshot(route),
+    });
   });
 
   register('PIPE', (args, ctx) => {
