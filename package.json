@@ -53,7 +53,9 @@
     "test:macro-draft-parity": "node tests/macro-draft-parity.smoke.mjs",
     "test:macro-line-polyline-spline": "node tests/macro-line-polyline-spline.smoke.mjs",
     "test:macro-terminal-context": "node tests/macro-terminal-context.smoke.mjs",
-    "test:slice9": "npm run test:macro-draft-parity && npm run test:macro-line-polyline-spline && npm run test:macro-terminal-context && npm run test:slice8"
+    "test:slice9": "npm run test:macro-draft-parity && npm run test:macro-line-polyline-spline && npm run test:macro-terminal-context && npm run test:slice8",
+    "test:no-temp-patch-artifacts": "node tests/no-temp-patch-artifacts.smoke.mjs",
+    "test:slice9-clean": "npm run test:no-temp-patch-artifacts && npm run test:slice9"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
