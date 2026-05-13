@@ -27,6 +27,11 @@ import { initMacroTerminal } from '../../macro/macro-terminal.js';
 import { initViewerUiBindings } from '../ui/viewer-ui-bindings.js';
 import { createViewerUiStore, VIEWER_UI_ACTIONS, VIEWER_UI_MODES } from '../ui/viewer-ui-state.js';
 import { VIEWER_UI_IDS, byId } from '../ui/viewer-ui-contract.js';
+import {
+  buildRouteRenderSnapshot,
+  diffRouteRenderSnapshot,
+  summarizeRouteRenderDiff,
+} from '../renderer/route-render-reconciler.js';
 
 let _sceneRenderer = null;
 let _components = [];
@@ -43,7 +48,8 @@ let _masterDbResolver = null;
 let _masterDbPopup = null;
 let _macroTerminalApi = null;
 let _cegGraph = null;   // Canonical Edit Graph — set when a DXF is imported
-let _knownRouteCompIds = new Set(); // tracks IDs already rendered incrementally
+let _knownRouteCompIds = new Set(); // legacy compatibility/debug mirror
+let _routeRenderSnapshot = new Map(); // id -> deterministic route-derived component fingerprint
 let _autoFitEnabled = false; // Controls if scene should zoom/fit when new geometry is added
 
 function _exposeSceneRenderer(renderer) {
@@ -144,8 +150,10 @@ function refreshScene(reason = 'refresh-scene', meta = {}) {
   if (!_sceneRenderer || !domain) return;
 
   _sceneRenderer.loadComponents(getSceneComponents(), domain, _autoFitEnabled);
-  // After a full reload, rebuild the known-ID set so incremental sync stays consistent
-  _knownRouteCompIds = new Set((_routeEngine?.getDerivedComponents?.() || []).map(c => c.id));
+    // After a full reload, rebuild route render state so incremental sync stays consistent.
+    const routeDerived = _routeEngine?.getDerivedComponents?.() || [];
+    _knownRouteCompIds = new Set(routeDerived.map(c => c.id));
+    _routeRenderSnapshot = buildRouteRenderSnapshot(routeDerived);
   _lastLoadMeta = buildLoadMeta(reason, meta);
   emit('model-loaded', _lastLoadMeta);
 }
@@ -455,6 +463,7 @@ function destroyViewerTab() {
   _cegGraph = null;
   _autoFitEnabled = false;
   _knownRouteCompIds = new Set();
+  _routeRenderSnapshot = new Map();
   if (typeof window !== 'undefined') {
     window._sceneRenderer = null;
     window.__viewerShell  = null;
@@ -554,23 +563,47 @@ export function initViewerTab() {
     emit('debug:trace', { scope: 'masterdb', event: 'STATE_CHANGE', ok: true, timestamp: Date.now(), details: { rowCount: (state.rows || []).length, open: Boolean(state.open), dirty: Boolean(state.dirty), lastResolution: state.lastResolution || null } });
   });
   _routeEngine.subscribe(() => {
-    // Incremental sync: add only newly derived components without clearing the scene.
-    // This avoids the flash/clear cycle on every commit.
     const domain = getDomain();
     if (!_sceneRenderer || !domain) return;
+
     const allDerived = _routeEngine?.getDerivedComponents?.() || [];
-    const newComps = allDerived.filter(c => !_knownRouteCompIds.has(c.id));
-    let added = false;
-    for (const comp of newComps) {
-      _sceneRenderer.addComponent(comp, domain, false); // pass false, we'll fitAll once at the end if needed
-      _knownRouteCompIds.add(comp.id);
-      added = true;
+    const diff = diffRouteRenderSnapshot(_routeRenderSnapshot, allDerived);
+
+    _routeRenderSnapshot = diff.nextSnapshot;
+    _knownRouteCompIds = new Set(allDerived.map((comp) => comp.id));
+
+    if (diff.changed) {
+      const result = _sceneRenderer.reconcileComponents?.(diff, domain, {
+        allComponents: getSceneComponents(),
+        autoFit: _autoFitEnabled,
+      });
+
+      if (!result) {
+        refreshScene('route-engine-reconcile-fallback', {
+          sourceName: 'route-engine',
+          sourceType: 'route',
+        });
+        return;
+      }
+
+      emit('debug:trace', {
+        scope: 'viewer',
+        event: 'ROUTE_RENDER_RECONCILE',
+        ok: true,
+        timestamp: Date.now(),
+        details: {
+          diff: summarizeRouteRenderDiff(diff),
+          result,
+        },
+      });
     }
-    if (added && _autoFitEnabled) {
-      _sceneRenderer.fitAll();
-    }
-    // Update load meta for debug tab
-    _lastLoadMeta = buildLoadMeta('route-engine-incremental', { sourceName: 'route-engine', sourceType: 'route' });
+
+    _lastLoadMeta = buildLoadMeta('route-engine-reconcile', {
+      sourceName: 'route-engine',
+      sourceType: 'route',
+      reconcile: summarizeRouteRenderDiff(diff),
+    });
+
     emit('model-loaded', _lastLoadMeta);
   });
   _exposeSceneRenderer(_sceneRenderer);

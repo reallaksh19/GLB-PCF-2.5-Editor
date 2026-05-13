@@ -100,6 +100,26 @@ export class SceneRenderer {
     this._animate();
   }
 
+  _disposeObjectTree(root) {
+    root?.traverse?.((node) => {
+      if (node.element?.remove) {
+        node.element.remove();
+      }
+
+      if (node.geometry?.dispose) {
+        node.geometry.dispose();
+      }
+
+      if (node.material) {
+        if (Array.isArray(node.material)) {
+          node.material.forEach((material) => material?.dispose?.());
+        } else {
+          node.material.dispose?.();
+        }
+      }
+    });
+  }
+
   _addComponentToScene(comp, domain) {
     const mesh = domain.buildMesh(comp, this._theme, {
       lineDiagram: this._lineDiagram,
@@ -142,6 +162,115 @@ export class SceneRenderer {
       }
     }
     if (autoFit) this.fitAll();
+  }
+
+  _objectTreeHasComponent(root, compId) {
+    let found = false;
+
+    root?.traverse?.((node) => {
+      if (node.userData?.compId === compId || node.userData?.id === compId) {
+        found = true;
+      }
+    });
+
+    return found;
+  }
+
+  removeComponentById(compId) {
+    if (!compId) return 0;
+
+    let removed = 0;
+    const groups = [this._meshGroup, this._symbolGroup, this._labelGroup, this._previewGroup];
+
+    for (const group of groups) {
+      const children = [...(group?.children || [])];
+
+      for (const child of children) {
+        if (!this._objectTreeHasComponent(child, compId)) continue;
+
+        group.remove(child);
+        this._disposeObjectTree(child);
+        removed += 1;
+      }
+    }
+
+    this._compIndex.delete(compId);
+
+    for (const [uuid, comp] of [...this._meshIndex.entries()]) {
+      if (comp?.id === compId) {
+        this._meshIndex.delete(uuid);
+      }
+    }
+
+    if (this._highlighted && this._objectTreeHasComponent(this._highlighted, compId)) {
+      this.highlight(null);
+    }
+
+    return removed;
+  }
+
+  replaceComponent(comp, domain, autoFit = false) {
+    if (!comp?.id || !domain) return false;
+
+    this.removeComponentById(comp.id);
+    this.addComponent(comp, domain, false);
+
+    if (autoFit) this.fitAll();
+
+    return true;
+  }
+
+  reconcileComponents(diff = {}, domain, options = {}) {
+    if (!domain) {
+      return {
+        added: 0,
+        updated: 0,
+        removed: 0,
+        changed: false,
+      };
+    }
+
+    const removedIds = diff.removedIds || [];
+    const updated = diff.updated || [];
+    const added = diff.added || [];
+
+    let removed = 0;
+    let updatedCount = 0;
+    let addedCount = 0;
+
+    for (const compId of removedIds) {
+      removed += this.removeComponentById(compId);
+    }
+
+    for (const comp of updated) {
+      if (this.replaceComponent(comp, domain, false)) {
+        updatedCount += 1;
+      }
+    }
+
+    for (const comp of added) {
+      if (!comp) continue;
+      this.addComponent(comp, domain, false);
+      addedCount += 1;
+    }
+
+    if (Array.isArray(options.allComponents)) {
+      this._lastComponents = options.allComponents;
+      this._lastDomain = domain;
+    }
+
+    const changed = removed > 0 || updatedCount > 0 || addedCount > 0;
+
+    if (changed && options.autoFit) {
+      this.fitAll();
+    }
+
+    return {
+      added: addedCount,
+      updated: updatedCount,
+      removed,
+      changed,
+    };
   }
 
   loadComponents(components, domain, autoFit = true) {
@@ -245,13 +374,7 @@ export class SceneRenderer {
       while (group.children.length > 0) {
         const child = group.children[0];
         group.remove(child);
-        child.traverse?.((node) => {
-          if (node.geometry?.dispose) node.geometry.dispose();
-          if (node.material) {
-            if (Array.isArray(node.material)) node.material.forEach((material) => material?.dispose?.());
-            else node.material.dispose?.();
-          }
-        });
+        this._disposeObjectTree(child);
       }
     });
     this._compIndex.clear();
