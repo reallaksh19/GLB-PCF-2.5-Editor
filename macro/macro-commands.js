@@ -19,6 +19,17 @@ import {
   routeIdFromOptsOrActive,
   routeSnapshot,
 } from './macro-route-edit-results.js';
+import {
+  formatDerivedMessage,
+  formatRouteDetailMessage,
+  formatRouteInventoryMessage,
+  getRouteInventoryDetail,
+  listDerivedRouteComponents,
+  listRouteInventory,
+  parseRouteInventoryArgs,
+  resolveInventoryRouteId,
+  routeInventoryEngineOrThrow,
+} from './macro-route-inventory.js';
 
 const _commands = new Map();
 
@@ -412,6 +423,49 @@ export function registerBuiltinCommands() {
       targetId,
       routeSnapshot: routeSnapshot(nextRoute),
     });
+  });
+
+  register('ROUTES', (args, ctx) => {
+    const routeEngine = routeInventoryEngineOrThrow(ctx);
+    const routes = listRouteInventory(routeEngine);
+
+    return {
+      message: formatRouteInventoryMessage(routes),
+      count: routes.length,
+      routes,
+    };
+  });
+
+  register('ROUTE_INFO', (args, ctx) => {
+    const parsed = parseRouteInventoryArgs(args);
+    const routeEngine = routeInventoryEngineOrThrow(ctx);
+    const routeId = resolveInventoryRouteId(parsed, routeEngine);
+
+    if (!routeId) {
+      throw new Error('ROUTE_INFO requires ROUTE=routeId, a positional routeId, or an active route');
+    }
+
+    const route = getRouteInventoryDetail(routeEngine, routeId);
+
+    return {
+      message: formatRouteDetailMessage(route),
+      routeId,
+      route,
+    };
+  });
+
+  register('ROUTE_DERIVED', (args, ctx) => {
+    const parsed = parseRouteInventoryArgs(args);
+    const routeEngine = routeInventoryEngineOrThrow(ctx);
+    const routeId = resolveInventoryRouteId(parsed, routeEngine);
+    const components = listDerivedRouteComponents(routeEngine, routeId);
+
+    return {
+      message: formatDerivedMessage(components, routeId),
+      routeId,
+      count: components.length,
+      components,
+    };
   });
 
   register('MOVE', (args, ctx) => {
