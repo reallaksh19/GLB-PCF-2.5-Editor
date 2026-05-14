@@ -1,4 +1,12 @@
 import { registerBuiltinCommands, getCommandHandler } from './macro-commands.js';
+import {
+  appendMacroScriptResult,
+  createMacroScriptReport,
+  finalizeMacroScriptReport,
+  normalizeMacroScriptError,
+  splitMacroScript,
+  stripMacroComments,
+} from './macro-script-report.js';
 
 let _bootstrapped = false;
 
@@ -30,30 +38,70 @@ export function executeMacro(line, context) {
   return handler(tokens.slice(1), context || {});
 }
 
-export function executeMacroScript(script, context) {
+export function executeMacroScriptReport(script, context, options = {}) {
   ensureBuiltins();
-  const results = [];
-  const lines = String(script || '').split(/\r?\n/);
-  lines.forEach((line, idx) => {
-    const trimmed = stripComments(line).trim();
-    if (!trimmed) return;
-    try {
-      const result = executeMacro(trimmed, context);
-      if (result) results.push({ ok: true, line: idx + 1, result });
-    } catch (err) {
-      results.push({ ok: false, line: idx + 1, error: err });
-      throw err;
-    }
+
+  const executableLines = splitMacroScript(script);
+  const stopOnError = options.stopOnError !== false;
+  const throwOnError = options.throwOnError === true;
+
+  const report = createMacroScriptReport({
+    sourceName: options.sourceName || 'macro-script',
+    stopOnError,
+    startedAt: options.startedAt,
   });
-  return results;
+
+  report.linesTotal = executableLines.length;
+
+  for (const entry of executableLines) {
+    try {
+      const result = executeMacro(entry.command, context || {});
+      appendMacroScriptResult(report, {
+        ok: true,
+        line: entry.line,
+        lineNo: entry.lineNo,
+        command: entry.command,
+        raw: entry.raw,
+        result,
+      });
+    } catch (err) {
+      appendMacroScriptResult(report, {
+        ok: false,
+        line: entry.line,
+        lineNo: entry.lineNo,
+        command: entry.command,
+        raw: entry.raw,
+        error: normalizeMacroScriptError(err),
+      });
+
+      if (stopOnError) break;
+    }
+  }
+
+  finalizeMacroScriptReport(report, {
+    linesTotal: executableLines.length,
+    finishedAt: options.finishedAt,
+  });
+
+  if (throwOnError && !report.ok) {
+    const firstFailure = report.results.find((item) => !item.ok);
+    const err = new Error(firstFailure?.error?.message || 'Macro script failed');
+    err.report = report;
+    throw err;
+  }
+
+  return report;
+}
+
+export function executeMacroScript(script, context) {
+  const report = executeMacroScriptReport(script, context, {
+    stopOnError: true,
+    throwOnError: true,
+  });
+
+  return report.results;
 }
 
 export function stripComments(line) {
-  let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') inQuote = !inQuote;
-    if (ch === ';' && !inQuote) return line.slice(0, i);
-  }
-  return line;
+  return stripMacroComments(line);
 }

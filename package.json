@@ -70,7 +70,11 @@
     "test:macro-route-session": "node tests/macro-route-session.smoke.mjs",
     "test:macro-route-session-commands": "node tests/macro-route-session-commands.smoke.mjs",
     "test:macro-route-session-contract": "node tests/macro-route-session-contract.smoke.mjs",
-    "test:slice13": "npm run test:macro-route-session && npm run test:macro-route-session-commands && npm run test:macro-route-session-contract && npm run test:slice12"
+    "test:slice13": "npm run test:macro-route-session && npm run test:macro-route-session-commands && npm run test:macro-route-session-contract && npm run test:slice12",
+    "test:macro-script-report": "node tests/macro-script-report.smoke.mjs",
+    "test:macro-script-execution": "node tests/macro-script-execution.smoke.mjs",
+    "test:macro-script-contract": "node tests/macro-script-contract.smoke.mjs",
+    "test:slice14": "npm run test:macro-script-report && npm run test:macro-script-execution && npm run test:macro-script-contract && npm run test:slice13"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
