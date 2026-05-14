@@ -74,7 +74,11 @@
     "test:macro-script-report": "node tests/macro-script-report.smoke.mjs",
     "test:macro-script-execution": "node tests/macro-script-execution.smoke.mjs",
     "test:macro-script-contract": "node tests/macro-script-contract.smoke.mjs",
-    "test:slice14": "npm run test:macro-script-report && npm run test:macro-script-execution && npm run test:macro-script-contract && npm run test:slice13"
+    "test:slice14": "npm run test:macro-script-report && npm run test:macro-script-execution && npm run test:macro-script-contract && npm run test:slice13",
+    "test:macro-script-io": "node tests/macro-script-io.smoke.mjs",
+    "test:macro-terminal-script-panel-contract": "node tests/macro-terminal-script-panel-contract.smoke.mjs",
+    "test:macro-script-panel-api-contract": "node tests/macro-script-panel-api-contract.smoke.mjs",
+    "test:slice15": "npm run test:macro-script-io && npm run test:macro-terminal-script-panel-contract && npm run test:macro-script-panel-api-contract && npm run test:slice14"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

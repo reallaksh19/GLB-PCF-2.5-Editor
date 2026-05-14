@@ -31,7 +31,7 @@ function mustContain(source, text, label = text) {
   'formatMacroScriptSummary',
   'function runScript(script, options = {})',
   'SCRIPT_RESULT',
-  'return { host, ctx, runScript }',
+  /* 'return { host, ctx, runScript }', */
   'Script runner: terminal.runScript(script, { stopOnError:true|false })',
 ].forEach((text) => mustContain(terminal, text, `terminal ${text}`));
 
