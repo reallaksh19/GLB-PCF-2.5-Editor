@@ -1,3 +1,5 @@
+import { getMacroActiveRouteId } from './macro-route-session.js';
+
 function finiteNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -59,14 +61,17 @@ export function routeEngineOrThrow(ctx = {}) {
   return routeEngine;
 }
 
-export function routeIdFromOptsOrActive(routeEngine, opts = {}, usage = 'route edit') {
+export function routeIdFromOptsOrActive(routeEngine, opts = {}, usage = 'route edit', ctx = {}) {
   const requested = opts.ROUTE || opts.ROUTE_ID || opts.ROUTEID;
   if (requested) return requested;
+
+  const macroActive = getMacroActiveRouteId(ctx);
+  if (macroActive) return macroActive;
 
   const active = routeEngine.getState?.()?.selection?.activeRouteId;
   if (active) return active;
 
-  throw new Error(`${usage} requires ROUTE=... or an active route selection`);
+  throw new Error(`${usage} requires ROUTE=..., USE_ROUTE, or an active route selection`);
 }
 
 export function routeById(routeEngine, routeId) {
