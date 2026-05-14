@@ -1,4 +1,5 @@
-import { executeMacro } from './macro-engine.js';
+import { executeMacro, executeMacroScriptReport } from './macro-engine.js';
+import { formatMacroScriptSummary } from './macro-script-report.js';
 import { emit } from '../core/event-bus.js';
 import { pushHistory, undoLast, historyCount } from './macro-history.js';
 
@@ -160,6 +161,7 @@ export function initMacroTerminal(options) {
       'Draft tokens: START=x,y,z X1000 Y-750 R500 D250 @dx,dy,dz @length<angle',
       'Route inspect: ROUTES / ROUTE_INFO ROUTE=<id> / ROUTE_DERIVED ROUTE=<id>',
       'Route session: USE_ROUTE <id> / CURRENT_ROUTE / CLEAR_ROUTE',
+      'Script runner: terminal.runScript(script, { stopOnError:true|false })',
       'Queries: LIST [TYPE], DIST p1 p2, INSPECT id, VALIDATE',
       'Keys: ↑↓ history, Ctrl+Z undo, Ctrl+L clear, F1 help',
     ];
@@ -241,7 +243,43 @@ export function initMacroTerminal(options) {
     downloadText('macro-terminal-history.txt', inputHistory.slice().reverse().join('\n'));
   });
 
+  function runScript(script, options = {}) {
+    const report = executeMacroScriptReport(script, ctx, {
+      stopOnError: options.stopOnError !== false,
+      throwOnError: false,
+      sourceName: options.sourceName || 'macro-terminal-script',
+    });
+
+    for (const entry of report.results) {
+      log(`> [${entry.line}] ${entry.command}`, '#94a3b8');
+
+      if (entry.ok) {
+        applyResult(entry.result, entry.command);
+      } else {
+        log(`✗ [${entry.line}] ${entry.error?.message || 'Macro script line failed'}`, '#ef4444');
+      }
+    }
+
+    const summary = formatMacroScriptSummary(report);
+    log(summary, report.ok ? '#4ade80' : '#ef4444');
+    setStatus(report.ok ? 'idle' : 'error', summary);
+
+    emit('debug:trace', {
+      scope: 'macro-terminal',
+      event: 'SCRIPT_RESULT',
+      ok: report.ok,
+      timestamp: Date.now(),
+      details: {
+        summary: report.summary,
+        sourceName: report.sourceName,
+      },
+    });
+
+    updateBadges();
+    return report;
+  }
+
   printHelp();
   updateBadges();
-  return { host, ctx };
+  return { host, ctx, runScript };
 }
