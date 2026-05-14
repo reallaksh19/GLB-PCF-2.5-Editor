@@ -30,6 +30,11 @@ import {
   resolveInventoryRouteId,
   routeInventoryEngineOrThrow,
 } from './macro-route-inventory.js';
+import {
+  clearMacroRoute,
+  currentMacroRoute,
+  useMacroRoute,
+} from './macro-route-session.js';
 
 const _commands = new Map();
 
@@ -313,7 +318,7 @@ export function registerBuiltinCommands() {
     const delta = parseRouteDeltaToken(values[1]);
 
     const routeEngine = routeEditEngineOrThrow(ctx);
-    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'STRETCH');
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'STRETCH', ctx);
 
     routeEngine.stretchNode(routeId, nodeId, delta, { source: 'macro-stretch' });
 
@@ -343,7 +348,7 @@ export function registerBuiltinCommands() {
     const axis = String(opts.AXIS || 'Z').toUpperCase();
 
     const routeEngine = routeEditEngineOrThrow(ctx);
-    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'ROTATE');
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'ROTATE', ctx);
 
     routeEngine.rotateNodes(routeId, pivot, angle, axis, nodeIds, { source: 'macro-rotate' });
 
@@ -368,7 +373,7 @@ export function registerBuiltinCommands() {
     const point = values[1] ? parseRouteDeltaToken(values[1]) : null;
 
     const routeEngine = routeEditEngineOrThrow(ctx);
-    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'BREAK');
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'BREAK', ctx);
 
     routeEngine.breakSegment(routeId, segmentId, point, { source: 'macro-break' });
 
@@ -390,7 +395,8 @@ export function registerBuiltinCommands() {
     const targetId = String(values[0]);
 
     const routeEngine = routeEditEngineOrThrow(ctx);
-    const activeRouteId = routeEngine.getState?.()?.selection?.activeRouteId || null;
+    const macroActiveRouteId = ctx.activeRouteId || ctx.macroActiveRouteId || null;
+    const activeRouteId = macroActiveRouteId || routeEngine.getState?.()?.selection?.activeRouteId || null;
     const routeId = opts.ROUTE || opts.ROUTE_ID || opts.ROUTEID || activeRouteId || targetId;
     const route = routeById(routeEngine, routeId) || routeById(routeEngine, activeRouteId);
     const targetKind = findRouteTargetKind(route, targetId);
@@ -425,6 +431,18 @@ export function registerBuiltinCommands() {
     });
   });
 
+  register('USE_ROUTE', (args, ctx) => {
+    return useMacroRoute(args, ctx);
+  });
+
+  register('CURRENT_ROUTE', (args, ctx) => {
+    return currentMacroRoute(ctx);
+  });
+
+  register('CLEAR_ROUTE', (args, ctx) => {
+    return clearMacroRoute(ctx);
+  });
+
   register('ROUTES', (args, ctx) => {
     const routeEngine = routeInventoryEngineOrThrow(ctx);
     const routes = listRouteInventory(routeEngine);
@@ -439,7 +457,7 @@ export function registerBuiltinCommands() {
   register('ROUTE_INFO', (args, ctx) => {
     const parsed = parseRouteInventoryArgs(args);
     const routeEngine = routeInventoryEngineOrThrow(ctx);
-    const routeId = resolveInventoryRouteId(parsed, routeEngine);
+    const routeId = resolveInventoryRouteId(parsed, routeEngine, ctx);
 
     if (!routeId) {
       throw new Error('ROUTE_INFO requires ROUTE=routeId, a positional routeId, or an active route');
@@ -457,7 +475,7 @@ export function registerBuiltinCommands() {
   register('ROUTE_DERIVED', (args, ctx) => {
     const parsed = parseRouteInventoryArgs(args);
     const routeEngine = routeInventoryEngineOrThrow(ctx);
-    const routeId = resolveInventoryRouteId(parsed, routeEngine);
+    const routeId = resolveInventoryRouteId(parsed, routeEngine, ctx);
     const components = listDerivedRouteComponents(routeEngine, routeId);
 
     return {
@@ -476,7 +494,7 @@ export function registerBuiltinCommands() {
     const delta = parseRouteDeltaToken(values[1]);
 
     const routeEngine = routeEditEngineOrThrow(ctx);
-    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'MOVE');
+    const routeId = routeIdFromOptsOrActive(routeEngine, opts, 'MOVE', ctx);
 
     routeEngine.moveNode(routeId, nodeId, delta, { source: 'macro-move' });
 

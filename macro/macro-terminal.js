@@ -152,13 +152,14 @@ export function initMacroTerminal(options) {
 
   function printHelp() {
     const lines = [
-      'Commands: ROUTES, ROUTE_INFO, ROUTE_DERIVED, LINE, POLYLINE, SPLINE/SPLINE_GUIDE, PIPE, ELBOW, TEE, FLANGE, VALVE, REDUCER, SUPPORT, LABEL, CIRCLE',
+      'Commands: USE_ROUTE, CURRENT_ROUTE, CLEAR_ROUTE, ROUTES, ROUTE_INFO, ROUTE_DERIVED, LINE, POLYLINE, SPLINE/SPLINE_GUIDE, PIPE, ELBOW, TEE, FLANGE, VALVE, REDUCER, SUPPORT, LABEL, CIRCLE',
       '  CIRCLE cx,cy,cz RADIUS=500  |  CIRCLE cx,cy,cz rx,ry,rz (radius point)',
       'Construction: ORIGIN, ALIGN, ARRAY LAST n dx,dy,dz, MIRROR LAST PLANE=XY/XZ/YZ',
       'Route mode: ROUTE ... / START / RUN / ELBOW 90 DIR / TEE BRANCH-OD=.. BRANCH=.. / END',
       'Draft parity: LINE, POLYLINE, SPLINE/SPLINE_GUIDE',
       'Draft tokens: START=x,y,z X1000 Y-750 R500 D250 @dx,dy,dz @length<angle',
       'Route inspect: ROUTES / ROUTE_INFO ROUTE=<id> / ROUTE_DERIVED ROUTE=<id>',
+      'Route session: USE_ROUTE <id> / CURRENT_ROUTE / CLEAR_ROUTE',
       'Queries: LIST [TYPE], DIST p1 p2, INSPECT id, VALIDATE',
       'Keys: ↑↓ history, Ctrl+Z undo, Ctrl+L clear, F1 help',
     ];

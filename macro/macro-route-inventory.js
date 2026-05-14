@@ -1,3 +1,5 @@
+import { getMacroActiveRouteId } from './macro-route-session.js';
+
 function finiteNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -39,7 +41,7 @@ export function routeInventoryEngineOrThrow(ctx = {}) {
   return routeEngine;
 }
 
-export function resolveInventoryRouteId(args = {}, routeEngine = null) {
+export function resolveInventoryRouteId(args = {}, routeEngine = null, ctx = {}) {
   const opts = args.opts || {};
   const values = args.values || [];
 
@@ -49,7 +51,7 @@ export function resolveInventoryRouteId(args = {}, routeEngine = null) {
 
   if (values[0]) return String(values[0]);
 
-  return routeEngine?.getState?.()?.selection?.activeRouteId || null;
+  return getMacroActiveRouteId(ctx) || routeEngine?.getState?.()?.selection?.activeRouteId || null;
 }
 
 export function routeToInventorySummary(route = {}) {
