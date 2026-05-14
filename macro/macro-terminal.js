@@ -1,5 +1,10 @@
 import { executeMacro, executeMacroScriptReport } from './macro-engine.js';
 import { formatMacroScriptSummary } from './macro-script-report.js';
+import {
+  buildMacroScriptExample,
+  createMacroScriptDownloadPayload,
+  normalizeMacroScriptText,
+} from './macro-script-io.js';
 import { emit } from '../core/event-bus.js';
 import { pushHistory, undoLast, historyCount } from './macro-history.js';
 
@@ -44,9 +49,24 @@ export function initMacroTerminal(options) {
       <span style="font-weight:600;color:#f59e0b;">⌨ MACRO TERMINAL</span>
       <span id="macro-route-badge" style="font-size:11px;color:#94a3b8;opacity:.85">idle</span>
       <span style="margin-left:auto;font-size:11px;color:#94a3b8;">History: <span id="macro-history-count">0</span> cmds</span>
+      <button id="macro-script-toggle" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Script</button>
+      <button id="macro-run-script" style="border:1px solid #3a4255;background:#1f3b2d;color:#bbf7d0;border-radius:4px;cursor:pointer;">Run</button>
       <button id="macro-toggle" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">▼</button>
     </div>
     <div id="macro-output" style="max-height:140px;overflow:auto;padding:8px 10px;"></div>
+    <div id="macro-script-panel" style="display:none;border-top:1px solid rgba(58,66,85,.5);padding:8px 10px;background:rgba(15,23,42,.75);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-weight:600;color:#93c5fd;">SCRIPT</span>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;font-size:11px;">
+          <input id="macro-script-stop-on-error" type="checkbox" checked>
+          Stop on error
+        </label>
+        <button id="macro-script-example" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Example</button>
+        <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
+        <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Report</button>
+      </div>
+      <textarea id="macro-script-textarea" spellcheck="false" placeholder="LINE START=0,0,0 X1000&#10;ROUTES&#10;USE_ROUTE R-1" style="width:100%;min-height:120px;resize:vertical;background:#070b14;border:1px solid #3a4255;border-radius:6px;color:#e8eaf0;font-family:monospace;font-size:12px;padding:8px;box-sizing:border-box;"></textarea>
+    </div>
     <div id="macro-input-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid rgba(58,66,85,.5);">
       <span style="color:#f59e0b">›</span>
       <input id="macro-input" autocomplete="off" spellcheck="false" placeholder="PIPE 0,0,0 3000,0,0 OD=168.3" style="flex:1;background:transparent;border:none;outline:none;color:#e8eaf0;font-family:monospace;font-size:12px;">
@@ -77,9 +97,18 @@ export function initMacroTerminal(options) {
   const toggle = host.querySelector('#macro-toggle');
   const badge = host.querySelector('#macro-route-badge');
   const countEl = host.querySelector('#macro-history-count');
+  const scriptToggle = host.querySelector('#macro-script-toggle');
+  const runScriptBtn = host.querySelector('#macro-run-script');
+  const scriptPanel = host.querySelector('#macro-script-panel');
+  const scriptTextarea = host.querySelector('#macro-script-textarea');
+  const scriptStopOnError = host.querySelector('#macro-script-stop-on-error');
+  const scriptExample = host.querySelector('#macro-script-example');
+  const scriptClear = host.querySelector('#macro-script-clear');
+  const scriptExport = host.querySelector('#macro-script-export');
 
   const inputHistory = [];
   let hIdx = -1;
+  let lastScriptReport = null;
 
   const ctx = {
     defaultOD: 168.3,
@@ -168,6 +197,60 @@ export function initMacroTerminal(options) {
     lines.forEach(line => log(line, '#60a5fa'));
   }
 
+  function setScript(script = '') {
+    scriptTextarea.value = normalizeMacroScriptText(script);
+    return scriptTextarea.value;
+  }
+
+  function getScript() {
+    return normalizeMacroScriptText(scriptTextarea.value || '');
+  }
+
+  function toggleScriptPanel(force = null) {
+    const nextVisible = force == null
+      ? scriptPanel.style.display === 'none'
+      : Boolean(force);
+
+    scriptPanel.style.display = nextVisible ? 'block' : 'none';
+    return nextVisible;
+  }
+
+  function exportLastReport() {
+    if (!lastScriptReport) {
+      log('• No macro script report available to export', '#94a3b8');
+      return null;
+    }
+
+    const payload = createMacroScriptDownloadPayload(lastScriptReport);
+    downloadText(payload.filename, payload.text);
+    log(`✓ Exported ${payload.filename}`, '#4ade80');
+    return payload;
+  }
+
+  scriptToggle.addEventListener('click', () => {
+    toggleScriptPanel();
+  });
+
+  runScriptBtn.addEventListener('click', () => {
+    runScript(getScript(), {
+      stopOnError: Boolean(scriptStopOnError.checked),
+      sourceName: 'macro-terminal-panel',
+    });
+  });
+
+  scriptExample.addEventListener('click', () => {
+    setScript(buildMacroScriptExample());
+    toggleScriptPanel(true);
+  });
+
+  scriptClear.addEventListener('click', () => {
+    setScript('');
+  });
+
+  scriptExport.addEventListener('click', () => {
+    exportLastReport();
+  });
+
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const line = input.value.trim();
@@ -249,6 +332,7 @@ export function initMacroTerminal(options) {
       throwOnError: false,
       sourceName: options.sourceName || 'macro-terminal-script',
     });
+    lastScriptReport = report;
 
     for (const entry of report.results) {
       log(`> [${entry.line}] ${entry.command}`, '#94a3b8');
@@ -281,5 +365,14 @@ export function initMacroTerminal(options) {
 
   printHelp();
   updateBadges();
-  return { host, ctx, runScript };
+  return {
+    host,
+    ctx,
+    runScript,
+    setScript,
+    getScript,
+    toggleScriptPanel,
+    exportLastReport,
+    getLastScriptReport: () => lastScriptReport,
+  };
 }
