@@ -27,6 +27,43 @@ export function macroScriptIdFromName(name = '') {
   return sanitizeMacroScriptId(normalizeMacroScriptName(name));
 }
 
+export function normalizeMacroScriptTag(tag = '') {
+  return String(tag || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]+/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+export function normalizeMacroScriptTags(tags = []) {
+  const raw = Array.isArray(tags)
+    ? tags
+    : String(tags || '').split(/[,;]+/);
+
+  const seen = new Set();
+  const out = [];
+
+  for (const tag of raw) {
+    const normalized = normalizeMacroScriptTag(tag);
+    if (!normalized || seen.has(normalized)) continue;
+
+    seen.add(normalized);
+    out.push(normalized);
+  }
+
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+export function parseMacroScriptTags(value = '') {
+  return normalizeMacroScriptTags(value);
+}
+
+export function formatMacroScriptTags(tags = []) {
+  return normalizeMacroScriptTags(tags).join(', ');
+}
+
 export function uniqueMacroScriptId(entries = [], baseId = 'macro-script') {
   const used = new Set((entries || []).map((entry) => entry.id));
   const base = sanitizeMacroScriptId(baseId);
@@ -51,7 +88,7 @@ export function normalizeMacroScriptLibraryEntry(entry = {}, fallbackNow = null)
     id,
     name,
     script: normalizeMacroScriptText(entry.script || ''),
-    tags: Array.isArray(entry.tags) ? entry.tags.map(String).filter(Boolean) : [],
+    tags: normalizeMacroScriptTags(entry.tags || []),
     createdAt,
     updatedAt,
   };
@@ -67,7 +104,7 @@ export function createMacroScriptLibraryEntry(input = {}, existingEntries = [], 
     id,
     name,
     script: input.script || '',
-    tags: input.tags || [],
+    tags: normalizeMacroScriptTags(input.tags || []),
     createdAt: input.createdAt || stamp,
     updatedAt: input.updatedAt || stamp,
   }, stamp);
@@ -155,7 +192,7 @@ export function upsertMacroScriptLibraryEntry(entries = [], input = {}, now = nu
       id: existing.id,
       name: normalizeMacroScriptName(input.name || existing.name),
       script: normalizeMacroScriptText(input.script ?? existing.script),
-      tags: input.tags || existing.tags || [],
+      tags: normalizeMacroScriptTags(input.tags || existing.tags || []),
       createdAt: existing.createdAt,
       updatedAt: stamp,
     }, stamp);
@@ -168,6 +205,36 @@ export function upsertMacroScriptLibraryEntry(entries = [], input = {}, now = nu
 
   return {
     entry,
+    entries: sortMacroScriptLibrary(next),
+  };
+}
+
+export function updateMacroScriptLibraryEntryMetadata(entries = [], id = '', metadata = {}, now = null) {
+  const current = sortMacroScriptLibrary(entries);
+  const existing = findMacroScriptLibraryEntry(current, id);
+
+  if (!existing) {
+    throw new Error(`Macro script not found: ${id || 'unknown'}`);
+  }
+
+  const stamp = isoNow(now);
+
+  const updated = normalizeMacroScriptLibraryEntry({
+    ...existing,
+    name: metadata.name != null
+      ? normalizeMacroScriptName(metadata.name)
+      : existing.name,
+    tags: metadata.tags != null
+      ? normalizeMacroScriptTags(metadata.tags)
+      : existing.tags,
+    updatedAt: stamp,
+  }, stamp);
+
+  const next = current.filter((entry) => entry.id !== existing.id);
+  next.push(updated);
+
+  return {
+    entry: updated,
     entries: sortMacroScriptLibrary(next),
   };
 }

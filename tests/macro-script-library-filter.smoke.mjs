@@ -69,7 +69,7 @@ assert.deepEqual(
 
 assert.deepEqual(collectMacroScriptLibraryTags(entries), ['component', 'edit', 'inspect', 'route']);
 
-assert.equal(formatMacroScriptLibraryOptionLabel(entries[0]), 'Route Inspect [route, inspect]');
+assert.equal(formatMacroScriptLibraryOptionLabel(entries[0]), 'Route Inspect [inspect, route]');
 assert.equal(formatMacroScriptLibraryOptionLabel({ name: 'No Tags', script: '' }), 'No Tags');
 
 console.log('PASS macro-script-library-filter.smoke.mjs');

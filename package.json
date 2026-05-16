@@ -90,7 +90,11 @@
     "test:macro-script-library-filter": "node tests/macro-script-library-filter.smoke.mjs",
     "test:macro-terminal-script-library-filter-contract": "node tests/macro-terminal-script-library-filter-contract.smoke.mjs",
     "test:macro-script-library-filter-api-contract": "node tests/macro-script-library-filter-api-contract.smoke.mjs",
-    "test:slice18": "npm run test:macro-script-library-filter && npm run test:macro-terminal-script-library-filter-contract && npm run test:macro-script-library-filter-api-contract && npm run test:slice17"
+    "test:slice18": "npm run test:macro-script-library-filter && npm run test:macro-terminal-script-library-filter-contract && npm run test:macro-script-library-filter-api-contract && npm run test:slice17",
+    "test:macro-script-library-tags": "node tests/macro-script-library-tags.smoke.mjs",
+    "test:macro-terminal-script-library-tags-contract": "node tests/macro-terminal-script-library-tags-contract.smoke.mjs",
+    "test:macro-script-library-tags-api-contract": "node tests/macro-script-library-tags-api-contract.smoke.mjs",
+    "test:slice19": "npm run test:macro-script-library-tags && npm run test:macro-terminal-script-library-tags-contract && npm run test:macro-script-library-tags-api-contract && npm run test:slice18"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

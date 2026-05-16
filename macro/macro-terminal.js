@@ -11,11 +11,14 @@ import {
   filterMacroScriptLibrary,
   findMacroScriptLibraryEntry,
   formatMacroScriptLibraryOptionLabel,
+  formatMacroScriptTags,
   importMacroScriptLibraryJson,
   loadMacroScriptLibraryFromStorage,
+  parseMacroScriptTags,
   removeMacroScriptLibraryEntry,
   saveMacroScriptLibraryToStorage,
   sortMacroScriptLibrary,
+  updateMacroScriptLibraryEntryMetadata,
   upsertMacroScriptLibraryEntry,
   validateMacroScriptLibraryImportJson,
 } from './macro-script-library.js';
@@ -94,9 +97,11 @@ export function initMacroTerminal(options) {
         <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
         <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Report</button>
         <input id="macro-script-library-name" placeholder="Script name" style="min-width:160px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
+        <input id="macro-script-library-tags" placeholder="Tags: route, edit" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <input id="macro-script-library-filter" placeholder="Filter scripts" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <select id="macro-script-library-select" style="max-width:260px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;"></select>
         <button id="macro-script-library-save" style="border:1px solid #3a4255;background:#17324a;color:#bfdbfe;border-radius:4px;cursor:pointer;">Save Script</button>
+        <button id="macro-script-library-update-meta" style="border:1px solid #3a4255;background:#1f2f46;color:#bfdbfe;border-radius:4px;cursor:pointer;">Update Meta</button>
         <button id="macro-script-library-load" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Load</button>
         <button id="macro-script-library-delete" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Delete</button>
         <button id="macro-script-library-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Library</button>
@@ -148,9 +153,11 @@ export function initMacroTerminal(options) {
   const scriptClear = host.querySelector('#macro-script-clear');
   const scriptExport = host.querySelector('#macro-script-export');
   const scriptLibraryName = host.querySelector('#macro-script-library-name');
+  const scriptLibraryTags = host.querySelector('#macro-script-library-tags');
   const scriptLibraryFilter = host.querySelector('#macro-script-library-filter');
   const scriptLibrarySelect = host.querySelector('#macro-script-library-select');
   const scriptLibrarySave = host.querySelector('#macro-script-library-save');
+  const scriptLibraryUpdateMeta = host.querySelector('#macro-script-library-update-meta');
   const scriptLibraryLoad = host.querySelector('#macro-script-library-load');
   const scriptLibraryDelete = host.querySelector('#macro-script-library-delete');
   const scriptLibraryExport = host.querySelector('#macro-script-library-export');
@@ -381,10 +388,12 @@ export function initMacroTerminal(options) {
       id: existing?.id || null,
       name: finalName,
       script: getScript(),
+      tags: parseMacroScriptTags(scriptLibraryTags.value || existing?.tags || []),
     });
 
     scriptLibrary = result.entries;
     scriptLibraryName.value = result.entry.name;
+    scriptLibraryTags.value = formatMacroScriptTags(result.entry.tags);
     persistScriptLibrary(result.entry.id);
 
     log(`✓ Saved script: ${result.entry.name}`, '#4ade80');
@@ -402,6 +411,7 @@ export function initMacroTerminal(options) {
 
     setScript(entry.script);
     scriptLibraryName.value = entry.name;
+    scriptLibraryTags.value = formatMacroScriptTags(entry.tags);
     scriptLibrarySelect.value = entry.id;
     toggleScriptPanel(true);
 
@@ -423,10 +433,33 @@ export function initMacroTerminal(options) {
 
     if (scriptLibraryName.value === result.removed.name) {
       scriptLibraryName.value = '';
+      scriptLibraryTags.value = '';
     }
 
     log(`✓ Deleted script: ${result.removed.name}`, '#fbbf24');
     return result.removed;
+  }
+
+  function updateScriptLibraryEntryMetadata(id = '', metadata = {}) {
+    const scriptId = id || scriptLibrarySelect.value;
+
+    if (!scriptId) {
+      log('• Select a saved macro script to update metadata', '#94a3b8');
+      return null;
+    }
+
+    const result = updateMacroScriptLibraryEntryMetadata(scriptLibrary, scriptId, {
+      name: metadata.name ?? scriptLibraryName.value,
+      tags: metadata.tags ?? parseMacroScriptTags(scriptLibraryTags.value),
+    });
+
+    scriptLibrary = result.entries;
+    scriptLibraryName.value = result.entry.name;
+    scriptLibraryTags.value = formatMacroScriptTags(result.entry.tags);
+    persistScriptLibrary(result.entry.id);
+
+    log(`✓ Updated metadata: ${result.entry.name}`, '#4ade80');
+    return result.entry;
   }
 
   function exportScriptLibrary() {
@@ -472,6 +505,10 @@ export function initMacroTerminal(options) {
     saveCurrentScriptToLibrary();
   });
 
+  scriptLibraryUpdateMeta.addEventListener('click', () => {
+    updateScriptLibraryEntryMetadata();
+  });
+
   scriptLibraryLoad.addEventListener('click', () => {
     loadScriptFromLibrary();
   });
@@ -508,6 +545,7 @@ export function initMacroTerminal(options) {
     const entry = findMacroScriptLibraryEntry(scriptLibrary, scriptLibrarySelect.value);
     if (entry) {
       scriptLibraryName.value = entry.name;
+      scriptLibraryTags.value = formatMacroScriptTags(entry.tags);
     }
   });
 
@@ -643,6 +681,7 @@ export function initMacroTerminal(options) {
     saveCurrentScriptToLibrary,
     loadScriptFromLibrary,
     deleteScriptFromLibrary,
+    updateScriptLibraryEntryMetadata,
     exportScriptLibrary,
     importScriptLibraryFromJson,
     importScriptLibraryFromFile,
