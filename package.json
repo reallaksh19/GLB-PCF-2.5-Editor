@@ -82,7 +82,11 @@
     "test:macro-script-library": "node tests/macro-script-library.smoke.mjs",
     "test:macro-terminal-script-library-contract": "node tests/macro-terminal-script-library-contract.smoke.mjs",
     "test:macro-script-library-api-contract": "node tests/macro-script-library-api-contract.smoke.mjs",
-    "test:slice16": "npm run test:macro-script-library && npm run test:macro-terminal-script-library-contract && npm run test:macro-script-library-api-contract && npm run test:slice15"
+    "test:slice16": "npm run test:macro-script-library && npm run test:macro-terminal-script-library-contract && npm run test:macro-script-library-api-contract && npm run test:slice15",
+    "test:macro-script-library-import": "node tests/macro-script-library-import.smoke.mjs",
+    "test:macro-terminal-script-library-import-contract": "node tests/macro-terminal-script-library-import-contract.smoke.mjs",
+    "test:macro-script-library-import-api-contract": "node tests/macro-script-library-import-api-contract.smoke.mjs",
+    "test:slice17": "npm run test:macro-script-library-import && npm run test:macro-terminal-script-library-import-contract && npm run test:macro-script-library-import-api-contract && npm run test:slice16"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

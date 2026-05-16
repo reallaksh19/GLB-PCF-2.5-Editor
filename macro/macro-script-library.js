@@ -152,6 +152,72 @@ export function parseMacroScriptLibraryJson(jsonText = '') {
   return sortMacroScriptLibrary(parsed.entries);
 }
 
+export function mergeMacroScriptLibraryEntries(existingEntries = [], importedEntries = [], options = {}) {
+  const mode = options.mode === 'replace' ? 'replace' : 'merge';
+  const now = options.now || null;
+
+  if (mode === 'replace') {
+    return {
+      mode,
+      importedCount: importedEntries.length,
+      replacedCount: sortMacroScriptLibrary(existingEntries).length,
+      entries: sortMacroScriptLibrary(importedEntries),
+    };
+  }
+
+  let entries = sortMacroScriptLibrary(existingEntries);
+  let replacedCount = 0;
+  let addedCount = 0;
+
+  for (const importedRaw of importedEntries || []) {
+    const imported = normalizeMacroScriptLibraryEntry(importedRaw, now);
+    const existing = findMacroScriptLibraryEntry(entries, imported.id);
+
+    if (existing) {
+      replacedCount += 1;
+      entries = entries.filter((entry) => entry.id !== existing.id);
+      entries.push(normalizeMacroScriptLibraryEntry({
+        ...existing,
+        ...imported,
+        id: existing.id,
+        createdAt: existing.createdAt || imported.createdAt,
+        updatedAt: now || imported.updatedAt,
+      }, now));
+    } else {
+      addedCount += 1;
+      entries.push(imported);
+    }
+  }
+
+  return {
+    mode,
+    importedCount: importedEntries.length,
+    addedCount,
+    replacedCount,
+    entries: sortMacroScriptLibrary(entries),
+  };
+}
+
+export function importMacroScriptLibraryJson(existingEntries = [], jsonText = '', options = {}) {
+  const importedEntries = parseMacroScriptLibraryJson(jsonText);
+  const result = mergeMacroScriptLibraryEntries(existingEntries, importedEntries, options);
+
+  return {
+    ...result,
+    importedEntries,
+  };
+}
+
+export function validateMacroScriptLibraryImportJson(jsonText = '') {
+  const entries = parseMacroScriptLibraryJson(jsonText);
+
+  return {
+    ok: true,
+    count: entries.length,
+    entries,
+  };
+}
+
 export function createMacroScriptLibraryDownloadPayload(entries = [], options = {}) {
   const stamp = String(options.exportedAt || new Date().toISOString())
     .replace(/[:/\\?%*"<>|]/g, '-');

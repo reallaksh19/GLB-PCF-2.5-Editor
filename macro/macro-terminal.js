@@ -9,11 +9,13 @@ import {
   buildDefaultMacroScriptLibrary,
   createMacroScriptLibraryDownloadPayload,
   findMacroScriptLibraryEntry,
+  importMacroScriptLibraryJson,
   loadMacroScriptLibraryFromStorage,
   removeMacroScriptLibraryEntry,
   saveMacroScriptLibraryToStorage,
   sortMacroScriptLibrary,
   upsertMacroScriptLibraryEntry,
+  validateMacroScriptLibraryImportJson,
 } from './macro-script-library.js';
 import { emit } from '../core/event-bus.js';
 import { pushHistory, undoLast, historyCount } from './macro-history.js';
@@ -31,6 +33,21 @@ function downloadText(name, text, mime = 'text/plain;charset=utf-8') {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No file selected'));
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
 }
 
 export function initMacroTerminal(options) {
@@ -80,6 +97,12 @@ export function initMacroTerminal(options) {
         <button id="macro-script-library-load" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Load</button>
         <button id="macro-script-library-delete" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Delete</button>
         <button id="macro-script-library-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Library</button>
+        <select id="macro-script-library-import-mode" style="max-width:110px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
+          <option value="merge">Merge</option>
+          <option value="replace">Replace</option>
+        </select>
+        <button id="macro-script-library-import" style="border:1px solid #3a4255;background:#2e2a1f;color:#fde68a;border-radius:4px;cursor:pointer;">Import Library</button>
+        <input id="macro-script-library-file" type="file" accept="application/json,.json" style="display:none;">
       </div>
       <textarea id="macro-script-textarea" spellcheck="false" placeholder="LINE START=0,0,0 X1000&#10;ROUTES&#10;USE_ROUTE R-1" style="width:100%;min-height:120px;resize:vertical;background:#070b14;border:1px solid #3a4255;border-radius:6px;color:#e8eaf0;font-family:monospace;font-size:12px;padding:8px;box-sizing:border-box;"></textarea>
     </div>
@@ -127,6 +150,9 @@ export function initMacroTerminal(options) {
   const scriptLibraryLoad = host.querySelector('#macro-script-library-load');
   const scriptLibraryDelete = host.querySelector('#macro-script-library-delete');
   const scriptLibraryExport = host.querySelector('#macro-script-library-export');
+  const scriptLibraryImportMode = host.querySelector('#macro-script-library-import-mode');
+  const scriptLibraryImport = host.querySelector('#macro-script-library-import');
+  const scriptLibraryFile = host.querySelector('#macro-script-library-file');
 
   const inputHistory = [];
   let hIdx = -1;
@@ -373,6 +399,34 @@ export function initMacroTerminal(options) {
     return payload;
   }
 
+  function importScriptLibraryFromJson(jsonText = '', options = {}) {
+    const mode = options.mode === 'replace' ? 'replace' : 'merge';
+    const validation = validateMacroScriptLibraryImportJson(jsonText);
+
+    const result = importMacroScriptLibraryJson(scriptLibrary, jsonText, {
+      mode,
+      now: options.now || null,
+    });
+
+    scriptLibrary = result.entries;
+    persistScriptLibrary();
+
+    log(
+      `✓ Imported ${validation.count} script(s) into library (${mode}; total=${scriptLibrary.length})`,
+      '#4ade80'
+    );
+
+    return {
+      ...result,
+      validation,
+    };
+  }
+
+  async function importScriptLibraryFromFile(file, options = {}) {
+    const text = await readTextFile(file);
+    return importScriptLibraryFromJson(text, options);
+  }
+
   scriptExport.addEventListener('click', () => {
     exportLastReport();
   });
@@ -391,6 +445,26 @@ export function initMacroTerminal(options) {
 
   scriptLibraryExport.addEventListener('click', () => {
     exportScriptLibrary();
+  });
+
+  scriptLibraryImport.addEventListener('click', () => {
+    scriptLibraryFile.value = '';
+    scriptLibraryFile.click();
+  });
+
+  scriptLibraryFile.addEventListener('change', async () => {
+    const file = scriptLibraryFile.files?.[0];
+
+    if (!file) return;
+
+    try {
+      await importScriptLibraryFromFile(file, {
+        mode: scriptLibraryImportMode.value || 'merge',
+      });
+    } catch (err) {
+      log(`✗ Import failed: ${err.message}`, '#ef4444');
+      setStatus('error', err.message);
+    }
   });
 
   scriptLibrarySelect.addEventListener('change', () => {
@@ -529,6 +603,8 @@ export function initMacroTerminal(options) {
     loadScriptFromLibrary,
     deleteScriptFromLibrary,
     exportScriptLibrary,
+    importScriptLibraryFromJson,
+    importScriptLibraryFromFile,
     refreshScriptLibrarySelect,
   };
 }
