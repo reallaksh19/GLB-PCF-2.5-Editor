@@ -73,6 +73,61 @@ export function createMacroScriptLibraryEntry(input = {}, existingEntries = [], 
   }, stamp);
 }
 
+export function tokenizeMacroScriptLibraryQuery(query = '') {
+  return String(query || '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function macroScriptLibraryEntrySearchText(entry = {}) {
+  const normalized = normalizeMacroScriptLibraryEntry(entry);
+
+  return [
+    normalized.id,
+    normalized.name,
+    normalized.script,
+    ...(normalized.tags || []),
+  ]
+    .join('\n')
+    .toLowerCase();
+}
+
+export function macroScriptLibraryEntryMatchesQuery(entry = {}, query = '') {
+  const tokens = tokenizeMacroScriptLibraryQuery(query);
+  if (!tokens.length) return true;
+
+  const haystack = macroScriptLibraryEntrySearchText(entry);
+
+  return tokens.every((token) => haystack.includes(token));
+}
+
+export function filterMacroScriptLibrary(entries = [], query = '') {
+  return sortMacroScriptLibrary(entries).filter((entry) => macroScriptLibraryEntryMatchesQuery(entry, query));
+}
+
+export function collectMacroScriptLibraryTags(entries = []) {
+  const tags = new Set();
+
+  for (const entry of entries || []) {
+    const normalized = normalizeMacroScriptLibraryEntry(entry);
+    for (const tag of normalized.tags || []) {
+      tags.add(String(tag).trim());
+    }
+  }
+
+  return [...tags].filter(Boolean).sort((a, b) => a.localeCompare(b));
+}
+
+export function formatMacroScriptLibraryOptionLabel(entry = {}) {
+  const normalized = normalizeMacroScriptLibraryEntry(entry);
+  const tags = normalized.tags?.length ? ` [${normalized.tags.join(', ')}]` : '';
+
+  return `${normalized.name}${tags}`;
+}
+
 export function sortMacroScriptLibrary(entries = []) {
   return [...(entries || [])]
     .map((entry) => normalizeMacroScriptLibraryEntry(entry))
