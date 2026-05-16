@@ -8,7 +8,9 @@ import {
 import {
   buildDefaultMacroScriptLibrary,
   createMacroScriptLibraryDownloadPayload,
+  filterMacroScriptLibrary,
   findMacroScriptLibraryEntry,
+  formatMacroScriptLibraryOptionLabel,
   importMacroScriptLibraryJson,
   loadMacroScriptLibraryFromStorage,
   removeMacroScriptLibraryEntry,
@@ -92,7 +94,8 @@ export function initMacroTerminal(options) {
         <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
         <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Report</button>
         <input id="macro-script-library-name" placeholder="Script name" style="min-width:160px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
-        <select id="macro-script-library-select" style="max-width:220px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;"></select>
+        <input id="macro-script-library-filter" placeholder="Filter scripts" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
+        <select id="macro-script-library-select" style="max-width:260px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;"></select>
         <button id="macro-script-library-save" style="border:1px solid #3a4255;background:#17324a;color:#bfdbfe;border-radius:4px;cursor:pointer;">Save Script</button>
         <button id="macro-script-library-load" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Load</button>
         <button id="macro-script-library-delete" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Delete</button>
@@ -145,6 +148,7 @@ export function initMacroTerminal(options) {
   const scriptClear = host.querySelector('#macro-script-clear');
   const scriptExport = host.querySelector('#macro-script-export');
   const scriptLibraryName = host.querySelector('#macro-script-library-name');
+  const scriptLibraryFilter = host.querySelector('#macro-script-library-filter');
   const scriptLibrarySelect = host.querySelector('#macro-script-library-select');
   const scriptLibrarySave = host.querySelector('#macro-script-library-save');
   const scriptLibraryLoad = host.querySelector('#macro-script-library-load');
@@ -160,6 +164,7 @@ export function initMacroTerminal(options) {
 
   const macroScriptStorage = typeof window !== 'undefined' ? window.localStorage : null;
   let scriptLibrary = loadMacroScriptLibraryFromStorage(macroScriptStorage);
+  let scriptLibraryFilterQuery = '';
 
   if (!scriptLibrary.length) {
     scriptLibrary = buildDefaultMacroScriptLibrary();
@@ -302,27 +307,59 @@ export function initMacroTerminal(options) {
     setScript('');
   });
 
+  function getFilteredScriptLibrary() {
+    return filterMacroScriptLibrary(scriptLibrary, scriptLibraryFilterQuery);
+  }
+
+  function getScriptLibraryFilter() {
+    return scriptLibraryFilterQuery;
+  }
+
+  function setScriptLibraryFilter(query = '') {
+    scriptLibraryFilterQuery = String(query || '').trim();
+    if (scriptLibraryFilter) {
+      scriptLibraryFilter.value = scriptLibraryFilterQuery;
+    }
+    refreshScriptLibrarySelect(scriptLibrarySelect.value || null);
+    return scriptLibraryFilterQuery;
+  }
+
   function refreshScriptLibrarySelect(selectedId = null) {
     scriptLibrary = sortMacroScriptLibrary(scriptLibrary);
+    const filteredLibrary = getFilteredScriptLibrary();
+    const previousSelection = selectedId || scriptLibrarySelect.value || '';
+
     scriptLibrarySelect.innerHTML = '';
 
     const empty = document.createElement('option');
     empty.value = '';
-    empty.textContent = scriptLibrary.length ? 'Select saved script…' : 'No saved scripts';
+
+    if (!scriptLibrary.length) {
+      empty.textContent = 'No saved scripts';
+    } else if (!filteredLibrary.length) {
+      empty.textContent = 'No matching scripts';
+    } else {
+      empty.textContent = scriptLibraryFilterQuery
+        ? `Select saved script… (${filteredLibrary.length}/${scriptLibrary.length})`
+        : 'Select saved script…';
+    }
+
     scriptLibrarySelect.appendChild(empty);
 
-    for (const entry of scriptLibrary) {
+    for (const entry of filteredLibrary) {
       const option = document.createElement('option');
       option.value = entry.id;
-      option.textContent = entry.name;
+      option.textContent = formatMacroScriptLibraryOptionLabel(entry);
       scriptLibrarySelect.appendChild(option);
     }
 
-    if (selectedId) {
+    if (previousSelection && filteredLibrary.some((entry) => entry.id === previousSelection)) {
+      scriptLibrarySelect.value = previousSelection;
+    } else if (selectedId && filteredLibrary.some((entry) => entry.id === selectedId)) {
       scriptLibrarySelect.value = selectedId;
     }
 
-    return scriptLibrary;
+    return filteredLibrary;
   }
 
   function persistScriptLibrary(selectedId = null) {
@@ -474,6 +511,10 @@ export function initMacroTerminal(options) {
     }
   });
 
+  scriptLibraryFilter.addEventListener('input', () => {
+    setScriptLibraryFilter(scriptLibraryFilter.value || '');
+  });
+
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const line = input.value.trim();
@@ -605,6 +646,9 @@ export function initMacroTerminal(options) {
     exportScriptLibrary,
     importScriptLibraryFromJson,
     importScriptLibraryFromFile,
+    setScriptLibraryFilter,
+    getScriptLibraryFilter,
+    getFilteredScriptLibrary,
     refreshScriptLibrarySelect,
   };
 }
