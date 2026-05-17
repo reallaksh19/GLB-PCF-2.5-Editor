@@ -45,6 +45,10 @@ getCommandHandler.register = function register(name, handler) {
   _commands.set(String(name || '').toUpperCase(), handler);
 };
 
+export function listRegisteredCommandNames() {
+  return [..._commands.keys()].sort((a, b) => a.localeCompare(b));
+}
+
 function register(name, handler) {
   _commands.set(String(name || '').toUpperCase(), handler);
 }
