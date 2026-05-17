@@ -58,7 +58,7 @@ assert.deepEqual(normalized, {
   id: 'x',
   name: 'X Script',
   script: 'A\nB',
-  tags: ['a', '2'],
+  tags: ['2', 'a'],
   createdAt: 'C',
   updatedAt: 'C',
 });

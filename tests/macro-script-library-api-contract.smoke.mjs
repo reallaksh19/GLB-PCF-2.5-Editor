@@ -8,7 +8,7 @@ function countOf(source, text) {
 }
 
 assert.ok(
-  terminal.includes('getScriptLibrary,\n    saveCurrentScriptToLibrary,\n    loadScriptFromLibrary,\n    deleteScriptFromLibrary,\n    exportScriptLibrary,'),
+  terminal.includes('getScriptLibrary,\n    saveCurrentScriptToLibrary,\n    loadScriptFromLibrary,\n    deleteScriptFromLibrary,\n    updateScriptLibraryEntryMetadata,\n    exportScriptLibrary,'),
   'initMacroTerminal must expose script library API methods'
 );
 
