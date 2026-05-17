@@ -1,5 +1,6 @@
-import { executeMacro, executeMacroScriptReport } from './macro-engine.js';
+import { executeMacro, executeMacroScriptReport, lintMacroScript } from './macro-engine.js';
 import { formatMacroScriptSummary } from './macro-script-report.js';
+import { formatMacroScriptLintSummary } from './macro-script-lint.js';
 import {
   buildMacroScriptExample,
   createMacroScriptDownloadPayload,
@@ -94,6 +95,7 @@ export function initMacroTerminal(options) {
           Stop on error
         </label>
         <button id="macro-script-example" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Example</button>
+        <button id="macro-script-lint" style="border:1px solid #3a4255;background:#273449;color:#bfdbfe;border-radius:4px;cursor:pointer;">Lint</button>
         <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
         <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Report</button>
         <input id="macro-script-library-name" placeholder="Script name" style="min-width:160px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
@@ -150,6 +152,7 @@ export function initMacroTerminal(options) {
   const scriptTextarea = host.querySelector('#macro-script-textarea');
   const scriptStopOnError = host.querySelector('#macro-script-stop-on-error');
   const scriptExample = host.querySelector('#macro-script-example');
+  const scriptLint = host.querySelector('#macro-script-lint');
   const scriptClear = host.querySelector('#macro-script-clear');
   const scriptExport = host.querySelector('#macro-script-export');
   const scriptLibraryName = host.querySelector('#macro-script-library-name');
@@ -168,6 +171,7 @@ export function initMacroTerminal(options) {
   const inputHistory = [];
   let hIdx = -1;
   let lastScriptReport = null;
+  let lastScriptLintReport = null;
 
   const macroScriptStorage = typeof window !== 'undefined' ? window.localStorage : null;
   let scriptLibrary = loadMacroScriptLibraryFromStorage(macroScriptStorage);
@@ -294,6 +298,42 @@ export function initMacroTerminal(options) {
     return payload;
   }
 
+  function lintScript(script = getScript(), options = {}) {
+    const report = lintMacroScript(script, {
+      sourceName: options.sourceName || 'macro-terminal-lint',
+      generatedAt: options.generatedAt,
+      enforceKnownCommands: options.enforceKnownCommands !== false,
+    });
+
+    lastScriptLintReport = report;
+
+    for (const entry of report.results) {
+      const prefix = entry.ok ? '✓' : '✗';
+      log(`${prefix} LINT [${entry.line}] ${entry.command}`, entry.ok ? '#94a3b8' : '#ef4444');
+
+      for (const issue of entry.issues || []) {
+        log(`  ${issue.severity.toUpperCase()}: ${issue.message}`, issue.severity === 'error' ? '#ef4444' : '#fbbf24');
+      }
+    }
+
+    const summary = formatMacroScriptLintSummary(report);
+    log(summary, report.ok ? '#4ade80' : '#ef4444');
+    setStatus(report.ok ? 'idle' : 'error', summary);
+
+    emit('debug:trace', {
+      scope: 'macro-terminal',
+      event: 'SCRIPT_LINT_RESULT',
+      ok: report.ok,
+      timestamp: Date.now(),
+      details: {
+        summary: report.summary,
+        sourceName: report.sourceName,
+      },
+    });
+
+    return report;
+  }
+
   scriptToggle.addEventListener('click', () => {
     toggleScriptPanel();
   });
@@ -308,6 +348,12 @@ export function initMacroTerminal(options) {
   scriptExample.addEventListener('click', () => {
     setScript(buildMacroScriptExample());
     toggleScriptPanel(true);
+  });
+
+  scriptLint.addEventListener('click', () => {
+    lintScript(getScript(), {
+      sourceName: 'macro-terminal-panel-lint',
+    });
   });
 
   scriptClear.addEventListener('click', () => {
@@ -672,11 +718,13 @@ export function initMacroTerminal(options) {
     host,
     ctx,
     runScript,
+    lintScript,
     setScript,
     getScript,
     toggleScriptPanel,
     exportLastReport,
     getLastScriptReport: () => lastScriptReport,
+    getLastScriptLintReport: () => lastScriptLintReport,
     getScriptLibrary,
     saveCurrentScriptToLibrary,
     loadScriptFromLibrary,

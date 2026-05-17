@@ -94,7 +94,11 @@
     "test:macro-script-library-tags": "node tests/macro-script-library-tags.smoke.mjs",
     "test:macro-terminal-script-library-tags-contract": "node tests/macro-terminal-script-library-tags-contract.smoke.mjs",
     "test:macro-script-library-tags-api-contract": "node tests/macro-script-library-tags-api-contract.smoke.mjs",
-    "test:slice19": "npm run test:macro-script-library-tags && npm run test:macro-terminal-script-library-tags-contract && npm run test:macro-script-library-tags-api-contract && npm run test:slice18"
+    "test:slice19": "npm run test:macro-script-library-tags && npm run test:macro-terminal-script-library-tags-contract && npm run test:macro-script-library-tags-api-contract && npm run test:slice18",
+    "test:macro-script-lint": "node tests/macro-script-lint.smoke.mjs",
+    "test:macro-script-lint-engine": "node tests/macro-script-lint-engine.smoke.mjs",
+    "test:macro-terminal-script-lint-contract": "node tests/macro-terminal-script-lint-contract.smoke.mjs",
+    "test:slice20": "npm run test:macro-script-lint && npm run test:macro-script-lint-engine && npm run test:macro-terminal-script-lint-contract && npm run test:slice19"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

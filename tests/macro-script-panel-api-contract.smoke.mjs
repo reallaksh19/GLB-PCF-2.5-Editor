@@ -8,7 +8,7 @@ function countOf(source, text) {
 }
 
 assert.ok(
-  terminal.includes('return {\n    host,\n    ctx,\n    runScript,\n    setScript,\n    getScript,\n    toggleScriptPanel,\n    exportLastReport,'),
+  terminal.includes('return {\n    host,\n    ctx,\n    runScript,\n    lintScript,\n    setScript,\n    getScript,\n    toggleScriptPanel,\n    exportLastReport,'),
   'initMacroTerminal must expose script panel API'
 );
 

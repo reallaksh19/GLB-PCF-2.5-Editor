@@ -1,4 +1,8 @@
-import { registerBuiltinCommands, getCommandHandler } from './macro-commands.js';
+import {
+  registerBuiltinCommands,
+  getCommandHandler,
+  listRegisteredCommandNames,
+} from './macro-commands.js';
 import {
   appendMacroScriptResult,
   createMacroScriptReport,
@@ -7,6 +11,7 @@ import {
   splitMacroScript,
   stripMacroComments,
 } from './macro-script-report.js';
+import { createMacroScriptLintReport } from './macro-script-lint.js';
 
 let _bootstrapped = false;
 
@@ -19,6 +24,22 @@ function ensureBuiltins() {
 export function registerCommand(name, handler) {
   ensureBuiltins();
   return getCommandHandler.register(name, handler);
+}
+
+export function listMacroCommands() {
+  ensureBuiltins();
+  return listRegisteredCommandNames();
+}
+
+export function lintMacroScript(script, options = {}) {
+  ensureBuiltins();
+
+  return createMacroScriptLintReport(script, {
+    sourceName: options.sourceName || 'macro-engine-lint',
+    generatedAt: options.generatedAt,
+    knownCommands: options.knownCommands || listRegisteredCommandNames(),
+    enforceKnownCommands: options.enforceKnownCommands !== false,
+  });
 }
 
 export function tokenize(line) {
