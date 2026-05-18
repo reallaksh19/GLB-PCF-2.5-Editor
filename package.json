@@ -102,7 +102,11 @@
     "test:macro-script-run-policy": "node tests/macro-script-run-policy.smoke.mjs",
     "test:macro-terminal-lint-gated-run-contract": "node tests/macro-terminal-lint-gated-run-contract.smoke.mjs",
     "test:macro-script-run-policy-api-contract": "node tests/macro-script-run-policy-api-contract.smoke.mjs",
-    "test:slice21": "npm run test:macro-script-run-policy && npm run test:macro-terminal-lint-gated-run-contract && npm run test:macro-script-run-policy-api-contract && npm run test:slice20"
+    "test:slice21": "npm run test:macro-script-run-policy && npm run test:macro-terminal-lint-gated-run-contract && npm run test:macro-script-run-policy-api-contract && npm run test:slice20",
+    "test:macro-report-io": "node tests/macro-report-io.smoke.mjs",
+    "test:macro-terminal-report-export-contract": "node tests/macro-terminal-report-export-contract.smoke.mjs",
+    "test:macro-report-export-api-contract": "node tests/macro-report-export-api-contract.smoke.mjs",
+    "test:slice22": "npm run test:macro-report-io && npm run test:macro-terminal-report-export-contract && npm run test:macro-report-export-api-contract && npm run test:slice21"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
