@@ -7,6 +7,7 @@ import {
   normalizeMacroScriptRunOptions,
   shouldRunMacroScriptAfterLint,
 } from './macro-script-run-policy.js';
+import { createMacroReportDownloadPayload } from './macro-report-io.js';
 import {
   buildMacroScriptExample,
   createMacroScriptDownloadPayload,
@@ -107,7 +108,9 @@ export function initMacroTerminal(options) {
         <button id="macro-script-example" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Example</button>
         <button id="macro-script-lint" style="border:1px solid #3a4255;background:#273449;color:#bfdbfe;border-radius:4px;cursor:pointer;">Lint</button>
         <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
-        <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Report</button>
+        <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Run</button>
+        <button id="macro-script-export-lint" style="border:1px solid #3a4255;background:#252a3a;color:#bfdbfe;border-radius:4px;cursor:pointer;">Export Lint</button>
+        <button id="macro-script-export-blocked" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Export Blocked</button>
         <input id="macro-script-library-name" placeholder="Script name" style="min-width:160px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <input id="macro-script-library-tags" placeholder="Tags: route, edit" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <input id="macro-script-library-filter" placeholder="Filter scripts" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
@@ -166,6 +169,8 @@ export function initMacroTerminal(options) {
   const scriptLint = host.querySelector('#macro-script-lint');
   const scriptClear = host.querySelector('#macro-script-clear');
   const scriptExport = host.querySelector('#macro-script-export');
+  const scriptExportLint = host.querySelector('#macro-script-export-lint');
+  const scriptExportBlocked = host.querySelector('#macro-script-export-blocked');
   const scriptLibraryName = host.querySelector('#macro-script-library-name');
   const scriptLibraryTags = host.querySelector('#macro-script-library-tags');
   const scriptLibraryFilter = host.querySelector('#macro-script-library-filter');
@@ -308,6 +313,40 @@ export function initMacroTerminal(options) {
     downloadText(payload.filename, payload.text, payload.mime);
     log(`✓ Exported ${payload.filename}`, '#4ade80');
     return payload;
+  }
+
+  function exportMacroReport(report = null, prefix = 'macro-report') {
+    if (!report) {
+      log('• No macro report available to export', '#94a3b8');
+      return null;
+    }
+
+    const payload = createMacroReportDownloadPayload(report, {
+      prefix,
+    });
+
+    downloadText(payload.filename, payload.text, payload.mime);
+    log(`✓ Exported ${payload.filename}`, '#4ade80');
+
+    return payload;
+  }
+
+  function exportLastLintReport() {
+    if (!lastScriptLintReport) {
+      log('• No macro lint report available to export', '#94a3b8');
+      return null;
+    }
+
+    return exportMacroReport(lastScriptLintReport, 'macro-script-lint-report');
+  }
+
+  function exportLastRunBlockedReport() {
+    if (!lastScriptRunBlockedReport) {
+      log('• No macro blocked-run report available to export', '#94a3b8');
+      return null;
+    }
+
+    return exportMacroReport(lastScriptRunBlockedReport, 'macro-script-run-blocked-report');
   }
 
   function lintScript(script = getScript(), options = {}) {
@@ -560,6 +599,14 @@ export function initMacroTerminal(options) {
     exportLastReport();
   });
 
+  scriptExportLint.addEventListener('click', () => {
+    exportLastLintReport();
+  });
+
+  scriptExportBlocked.addEventListener('click', () => {
+    exportLastRunBlockedReport();
+  });
+
   scriptLibrarySave.addEventListener('click', () => {
     saveCurrentScriptToLibrary();
   });
@@ -781,6 +828,9 @@ export function initMacroTerminal(options) {
     getScript,
     toggleScriptPanel,
     exportLastReport,
+    exportMacroReport,
+    exportLastLintReport,
+    exportLastRunBlockedReport,
     getLastScriptReport: () => lastScriptReport,
     getLastScriptLintReport: () => lastScriptLintReport,
     getLastScriptRunBlockedReport: () => lastScriptRunBlockedReport,
