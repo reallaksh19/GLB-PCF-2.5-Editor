@@ -2,6 +2,12 @@ import { executeMacro, executeMacroScriptReport, lintMacroScript } from './macro
 import { formatMacroScriptSummary } from './macro-script-report.js';
 import { formatMacroScriptLintSummary } from './macro-script-lint.js';
 import {
+  createMacroScriptRunBlockedReport,
+  formatMacroScriptRunBlockedSummary,
+  normalizeMacroScriptRunOptions,
+  shouldRunMacroScriptAfterLint,
+} from './macro-script-run-policy.js';
+import {
   buildMacroScriptExample,
   createMacroScriptDownloadPayload,
   normalizeMacroScriptText,
@@ -94,6 +100,10 @@ export function initMacroTerminal(options) {
           <input id="macro-script-stop-on-error" type="checkbox" checked>
           Stop on error
         </label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;font-size:11px;">
+          <input id="macro-script-lint-before-run" type="checkbox" checked>
+          Lint before run
+        </label>
         <button id="macro-script-example" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Example</button>
         <button id="macro-script-lint" style="border:1px solid #3a4255;background:#273449;color:#bfdbfe;border-radius:4px;cursor:pointer;">Lint</button>
         <button id="macro-script-clear" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Clear</button>
@@ -151,6 +161,7 @@ export function initMacroTerminal(options) {
   const scriptPanel = host.querySelector('#macro-script-panel');
   const scriptTextarea = host.querySelector('#macro-script-textarea');
   const scriptStopOnError = host.querySelector('#macro-script-stop-on-error');
+  const scriptLintBeforeRun = host.querySelector('#macro-script-lint-before-run');
   const scriptExample = host.querySelector('#macro-script-example');
   const scriptLint = host.querySelector('#macro-script-lint');
   const scriptClear = host.querySelector('#macro-script-clear');
@@ -172,6 +183,7 @@ export function initMacroTerminal(options) {
   let hIdx = -1;
   let lastScriptReport = null;
   let lastScriptLintReport = null;
+  let lastScriptRunBlockedReport = null;
 
   const macroScriptStorage = typeof window !== 'undefined' ? window.localStorage : null;
   let scriptLibrary = loadMacroScriptLibraryFromStorage(macroScriptStorage);
@@ -341,6 +353,7 @@ export function initMacroTerminal(options) {
   runScriptBtn.addEventListener('click', () => {
     runScript(getScript(), {
       stopOnError: Boolean(scriptStopOnError.checked),
+      lintBeforeRun: Boolean(scriptLintBeforeRun.checked),
       sourceName: 'macro-terminal-panel',
     });
   });
@@ -675,12 +688,56 @@ export function initMacroTerminal(options) {
   });
 
   function runScript(script, options = {}) {
-    const report = executeMacroScriptReport(script, ctx, {
-      stopOnError: options.stopOnError !== false,
-      throwOnError: false,
+    const normalizedOptions = normalizeMacroScriptRunOptions({
+      ...options,
       sourceName: options.sourceName || 'macro-terminal-script',
     });
+
+    let lintReport = null;
+
+    if (normalizedOptions.lintBeforeRun) {
+      lintReport = lintScript(script, {
+        sourceName: `${normalizedOptions.sourceName}-preflight`,
+        enforceKnownCommands: true,
+      });
+    }
+
+    const runDecision = shouldRunMacroScriptAfterLint(lintReport, normalizedOptions);
+
+    if (!runDecision.ok) {
+      const blockedReport = createMacroScriptRunBlockedReport(script, lintReport, {
+        sourceName: normalizedOptions.sourceName,
+      });
+
+      lastScriptRunBlockedReport = blockedReport;
+
+      const summary = formatMacroScriptRunBlockedSummary(blockedReport);
+      log(summary, '#ef4444');
+      setStatus('error', summary);
+
+      emit('debug:trace', {
+        scope: 'macro-terminal',
+        event: 'SCRIPT_RUN_BLOCKED',
+        ok: false,
+        timestamp: Date.now(),
+        details: {
+          summary: blockedReport.summary,
+          sourceName: blockedReport.sourceName,
+        },
+      });
+
+      updateBadges();
+      return blockedReport;
+    }
+
+    const report = executeMacroScriptReport(script, ctx, {
+      stopOnError: normalizedOptions.stopOnError,
+      throwOnError: false,
+      sourceName: normalizedOptions.sourceName,
+    });
+
     lastScriptReport = report;
+    lastScriptRunBlockedReport = null;
 
     for (const entry of report.results) {
       log(`> [${entry.line}] ${entry.command}`, '#94a3b8');
@@ -704,6 +761,7 @@ export function initMacroTerminal(options) {
       details: {
         summary: report.summary,
         sourceName: report.sourceName,
+        lintBeforeRun: normalizedOptions.lintBeforeRun,
       },
     });
 
@@ -725,6 +783,7 @@ export function initMacroTerminal(options) {
     exportLastReport,
     getLastScriptReport: () => lastScriptReport,
     getLastScriptLintReport: () => lastScriptLintReport,
+    getLastScriptRunBlockedReport: () => lastScriptRunBlockedReport,
     getScriptLibrary,
     saveCurrentScriptToLibrary,
     loadScriptFromLibrary,
