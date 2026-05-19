@@ -9,6 +9,14 @@ import {
 } from './macro-script-run-policy.js';
 import { createMacroReportDownloadPayload } from './macro-report-io.js';
 import {
+  addMacroReportHistoryEntry,
+  clearMacroReportHistory as clearMacroReportHistoryEntries,
+  findMacroReportHistoryEntry,
+  loadMacroReportHistoryFromStorage,
+  saveMacroReportHistoryToStorage,
+  sortMacroReportHistory,
+} from './macro-report-history.js';
+import {
   buildMacroScriptExample,
   createMacroScriptDownloadPayload,
   normalizeMacroScriptText,
@@ -111,6 +119,9 @@ export function initMacroTerminal(options) {
         <button id="macro-script-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Run</button>
         <button id="macro-script-export-lint" style="border:1px solid #3a4255;background:#252a3a;color:#bfdbfe;border-radius:4px;cursor:pointer;">Export Lint</button>
         <button id="macro-script-export-blocked" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Export Blocked</button>
+        <select id="macro-report-history-select" style="max-width:260px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;"></select>
+        <button id="macro-report-history-export" style="border:1px solid #3a4255;background:#252a3a;color:#e8eaf0;border-radius:4px;cursor:pointer;">Export Selected</button>
+        <button id="macro-report-history-clear" style="border:1px solid #3a4255;background:#3a1f1f;color:#fecaca;border-radius:4px;cursor:pointer;">Clear Reports</button>
         <input id="macro-script-library-name" placeholder="Script name" style="min-width:160px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <input id="macro-script-library-tags" placeholder="Tags: route, edit" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
         <input id="macro-script-library-filter" placeholder="Filter scripts" style="min-width:150px;background:#070b14;border:1px solid #3a4255;border-radius:4px;color:#e8eaf0;font-family:monospace;font-size:11px;padding:4px 6px;">
@@ -171,6 +182,9 @@ export function initMacroTerminal(options) {
   const scriptExport = host.querySelector('#macro-script-export');
   const scriptExportLint = host.querySelector('#macro-script-export-lint');
   const scriptExportBlocked = host.querySelector('#macro-script-export-blocked');
+  const reportHistorySelect = host.querySelector('#macro-report-history-select');
+  const reportHistoryExport = host.querySelector('#macro-report-history-export');
+  const reportHistoryClear = host.querySelector('#macro-report-history-clear');
   const scriptLibraryName = host.querySelector('#macro-script-library-name');
   const scriptLibraryTags = host.querySelector('#macro-script-library-tags');
   const scriptLibraryFilter = host.querySelector('#macro-script-library-filter');
@@ -189,6 +203,9 @@ export function initMacroTerminal(options) {
   let lastScriptReport = null;
   let lastScriptLintReport = null;
   let lastScriptRunBlockedReport = null;
+
+  const macroReportHistoryStorage = typeof window !== 'undefined' ? window.localStorage : null;
+  let macroReportHistory = loadMacroReportHistoryFromStorage(macroReportHistoryStorage);
 
   const macroScriptStorage = typeof window !== 'undefined' ? window.localStorage : null;
   let scriptLibrary = loadMacroScriptLibraryFromStorage(macroScriptStorage);
@@ -349,6 +366,71 @@ export function initMacroTerminal(options) {
     return exportMacroReport(lastScriptRunBlockedReport, 'macro-script-run-blocked-report');
   }
 
+  function refreshMacroReportHistorySelect(selectedId = null) {
+    macroReportHistory = sortMacroReportHistory(macroReportHistory);
+    reportHistorySelect.innerHTML = '';
+
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = macroReportHistory.length ? 'Select report…' : 'No reports';
+    reportHistorySelect.appendChild(empty);
+
+    for (const entry of macroReportHistory) {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.label;
+      reportHistorySelect.appendChild(option);
+    }
+
+    if (selectedId && macroReportHistory.some((entry) => entry.id === selectedId)) {
+      reportHistorySelect.value = selectedId;
+    }
+
+    return macroReportHistory;
+  }
+
+  function persistMacroReportHistory(selectedId = null) {
+    macroReportHistory = saveMacroReportHistoryToStorage(macroReportHistoryStorage, macroReportHistory);
+    refreshMacroReportHistorySelect(selectedId);
+    return macroReportHistory;
+  }
+
+  function getMacroReportHistory() {
+    return sortMacroReportHistory(macroReportHistory);
+  }
+
+  function addMacroReportToHistory(report = null, label = '') {
+    if (!report) return null;
+
+    const result = addMacroReportHistoryEntry(macroReportHistory, report, {
+      label,
+    });
+
+    macroReportHistory = result.entries;
+    persistMacroReportHistory(result.entry.id);
+
+    return result.entry;
+  }
+
+  function clearMacroReportHistory() {
+    macroReportHistory = clearMacroReportHistoryEntries();
+    persistMacroReportHistory();
+
+    log('✓ Cleared macro report history', '#fbbf24');
+    return macroReportHistory;
+  }
+
+  function exportSelectedMacroReport() {
+    const entry = findMacroReportHistoryEntry(macroReportHistory, reportHistorySelect.value);
+
+    if (!entry) {
+      log('• Select a macro report to export', '#94a3b8');
+      return null;
+    }
+
+    return exportMacroReport(entry.report, 'macro-report-history');
+  }
+
   function lintScript(script = getScript(), options = {}) {
     const report = lintMacroScript(script, {
       sourceName: options.sourceName || 'macro-terminal-lint',
@@ -357,6 +439,7 @@ export function initMacroTerminal(options) {
     });
 
     lastScriptLintReport = report;
+    addMacroReportToHistory(report, 'Macro lint report');
 
     for (const entry of report.results) {
       const prefix = entry.ok ? '✓' : '✗';
@@ -607,6 +690,14 @@ export function initMacroTerminal(options) {
     exportLastRunBlockedReport();
   });
 
+  reportHistoryExport.addEventListener('click', () => {
+    exportSelectedMacroReport();
+  });
+
+  reportHistoryClear.addEventListener('click', () => {
+    clearMacroReportHistory();
+  });
+
   scriptLibrarySave.addEventListener('click', () => {
     saveCurrentScriptToLibrary();
   });
@@ -757,6 +848,7 @@ export function initMacroTerminal(options) {
       });
 
       lastScriptRunBlockedReport = blockedReport;
+      addMacroReportToHistory(blockedReport, 'Macro blocked-run report');
 
       const summary = formatMacroScriptRunBlockedSummary(blockedReport);
       log(summary, '#ef4444');
@@ -785,6 +877,7 @@ export function initMacroTerminal(options) {
 
     lastScriptReport = report;
     lastScriptRunBlockedReport = null;
+    addMacroReportToHistory(report, 'Macro execution report');
 
     for (const entry of report.results) {
       log(`> [${entry.line}] ${entry.command}`, '#94a3b8');
@@ -817,6 +910,7 @@ export function initMacroTerminal(options) {
   }
 
   refreshScriptLibrarySelect();
+  refreshMacroReportHistorySelect();
   printHelp();
   updateBadges();
   return {
@@ -831,6 +925,11 @@ export function initMacroTerminal(options) {
     exportMacroReport,
     exportLastLintReport,
     exportLastRunBlockedReport,
+    getMacroReportHistory,
+    addMacroReportToHistory,
+    clearMacroReportHistory,
+    refreshMacroReportHistorySelect,
+    exportSelectedMacroReport,
     getLastScriptReport: () => lastScriptReport,
     getLastScriptLintReport: () => lastScriptLintReport,
     getLastScriptRunBlockedReport: () => lastScriptRunBlockedReport,

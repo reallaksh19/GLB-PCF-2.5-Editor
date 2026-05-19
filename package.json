@@ -106,7 +106,11 @@
     "test:macro-report-io": "node tests/macro-report-io.smoke.mjs",
     "test:macro-terminal-report-export-contract": "node tests/macro-terminal-report-export-contract.smoke.mjs",
     "test:macro-report-export-api-contract": "node tests/macro-report-export-api-contract.smoke.mjs",
-    "test:slice22": "npm run test:macro-report-io && npm run test:macro-terminal-report-export-contract && npm run test:macro-report-export-api-contract && npm run test:slice21"
+    "test:slice22": "npm run test:macro-report-io && npm run test:macro-terminal-report-export-contract && npm run test:macro-report-export-api-contract && npm run test:slice21",
+    "test:macro-report-history": "node tests/macro-report-history.smoke.mjs",
+    "test:macro-terminal-report-history-contract": "node tests/macro-terminal-report-history-contract.smoke.mjs",
+    "test:macro-report-history-api-contract": "node tests/macro-report-history-api-contract.smoke.mjs",
+    "test:slice23": "npm run test:macro-report-history && npm run test:macro-terminal-report-history-contract && npm run test:macro-report-history-api-contract && npm run test:slice22"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
