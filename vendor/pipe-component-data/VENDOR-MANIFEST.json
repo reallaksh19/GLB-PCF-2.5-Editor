@@ -14,6 +14,12 @@
       "target": "src/parse/fromUxmlXml.js",
       "status": "applied-in-snapshot",
       "purpose": "fromUxmlXml reads plain-attribute UXML Header/Units/Adapter (phase-03 gate fix)"
+    },
+    {
+      "file": "item-regex-slash-payload.patch",
+      "target": "src/parse/fromUxmlXml.js",
+      "status": "applied-in-snapshot",
+      "purpose": "readArray/readLegacyComponents tolerate \"/\" inside escaped attribute payloads (Item drop fix)"
     }
   ],
   "fileHashes": {
@@ -64,7 +70,7 @@
     "src/parse/csvRows.js": "fffb86f47c031ede879f5658a250ab4c95f07624a4bc4035c6d7f188ac0c1ee0",
     "src/parse/fromCsv.js": "95f1768648b9b4779a33e07bee86aa5c40098fe4f9a4c2525785b9a577c538a4",
     "src/parse/fromRawText.js": "7eeae5a6d73eed351871a490fba03106b06bb97473cce44c6405db98ee804820",
-    "src/parse/fromUxmlXml.js": "f8055c41db264b26e76a3e69ee096be9f820033f3868f2dec21a5b9f0536abd1",
+    "src/parse/fromUxmlXml.js": "f8201e198b50e7760a7a9e89b542194fc2c77192e9240dc3aeda30d8fde01421",
     "src/parse/graphAttach.js": "46ed50f4d8d70f6cd6ad7abe9b3496a56c794d90c010d472d2e4e036d1be26a8",
     "src/parse/normalizers.js": "a5cf56a6c40f26c7dd34f182ca8b9be1e0b250fdfc68a5f2915b8d5504cbae3e",
     "src/parse/rowGeometry.js": "70bf7e24fe3b3bc2770c68441c83ddfdd94cf96c568d2b9fdf9d611f6624dea1",
@@ -83,7 +89,7 @@
     "src/validate/assertJsonSerializable.js": "0eeea996856cda537fe090cdcbb992f7d0e50696dc69f38a2c6c625cae0ffc28",
     "src/validate/assertUniversalInvariants.js": "6856f427499feca939b11feb0ebd545399f9734a8a79f339cf24036e9ce3f232"
   },
-  "treeSha256": "51a4e0680da2e98cd2ca4c2919b131095c01f7d69ca40a88c0f8c0cc2def22c7",
+  "treeSha256": "7015b2aac41f3eef7b54e497f0b228b4f98347b1e51f32076a53738974bb8b48",
   "packageTests": "node --test (53 passing at vendor time)",
   "constraints": {
     "node": ">=20",
