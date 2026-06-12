@@ -22,7 +22,8 @@
       "zustand":             "https://esm.sh/zustand@5.0.11",
       "zustand/vanilla":     "https://esm.sh/zustand@5.0.11/vanilla",
       "zustand/middleware":  "https://esm.sh/zustand@5.0.11/middleware",
-      "dxf-parser":          "https://esm.sh/dxf-parser@1.1.2"
+      "dxf-parser":          "https://esm.sh/dxf-parser@1.1.2",
+      "pipe-component-data": "./vendor/pipe-component-data/src/index.js"
     }
   }
   </script>
@@ -670,7 +671,7 @@
       <section id="hifi-panel-viewer" class="hifi-tab-panel active" role="tabpanel">
         <div id="hifi-viewer-toolbar">
           <div class="hifi-tool-group">
-            <input type="file" id="hifi-input-pcf" accept=".pcf,.pcfx,.dxf" style="display:none">
+            <input type="file" id="hifi-input-pcf" accept=".pcf,.pcfx,.dxf,.uxml,.xml" style="display:none">
             <button class="hifi-btn" id="hifi-btn-open-pcf">Open PCF/DXF</button>
             <input type="file" id="hifi-input-glb" accept=".glb,.gltf" style="display:none">
             <button class="hifi-btn" id="hifi-btn-open-glb">Open GLB</button>
@@ -704,6 +705,7 @@
           <div class="hifi-tool-group">
             <button class="hifi-btn" id="hifi-btn-export-glb">Export GLB</button>
             <button class="hifi-btn" id="hifi-btn-export-dxf">Export DXF</button>
+            <button class="hifi-btn" id="hifi-btn-export-uxml">Export UXML</button>
             <button class="hifi-btn" id="hifi-btn-masterdb">Master DB</button>
           </div>
 

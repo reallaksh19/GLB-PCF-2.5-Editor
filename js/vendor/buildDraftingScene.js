@@ -139,9 +139,15 @@ export function buildTeeDraft(comp, theme) {
 
 export function buildFlangeDraft(comp, theme) {
   const bore = comp.geometry.bore;
-  const OD = mmToScene(minBore(bore) * 1.8);
+  // Prefer real PipeData dimensions when the enrichment bridge resolved them;
+  // fall back to the bore-multiplier approximation otherwise.
+  const realOd = Number(comp.geometry.flangeOdMm);
+  const realThk = Number(comp.geometry.flangeThicknessMm);
+  const OD = mmToScene(Number.isFinite(realOd) && realOd > 0 ? realOd : minBore(bore) * 1.8);
   const ID = mmToScene(minBore(bore));
-  const thickness = mmToScene(minBore(bore) * 0.2);
+  const thickness = mmToScene(
+    Number.isFinite(realThk) && realThk > 0 ? realThk : minBore(bore) * 0.2
+  );
 
   // Outer flange body
   const geo1 = new THREE.CylinderGeometry(OD / 2, OD / 2, thickness, 24);
@@ -190,7 +196,11 @@ export function buildValveDraft(comp, theme) {
   }
 
   const radius = mmToScene(minBore(comp.geometry.bore) / 2);
-  const length = radius * 3;
+  // Prefer the real face-to-face length when PipeData enrichment resolved it.
+  const realF2f = Number(comp.geometry.faceToFaceMm);
+  const length = Number.isFinite(realF2f) && realF2f > 0
+    ? mmToScene(realF2f) / 2
+    : radius * 3;
 
   const geo1 = new THREE.ConeGeometry(radius * 1.5, length, 12);
   const geo2 = new THREE.ConeGeometry(radius * 1.5, length, 12);

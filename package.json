@@ -6,6 +6,7 @@
   "scripts": {
     "serve": "npx serve . -p 3000 --no-clipboard",
     "test": "cd tests && npx playwright test --config playwright.config.js",
+    "test:pcd": "node tests/pcd-vendor.smoke.mjs && node tests/pcd-ceg-enrichment.smoke.mjs && node tests/pcd-uxml-roundtrip.smoke.mjs && node tests/pcd-solid3d-dims.smoke.mjs",
     "test:phase1": "cd tests && npx playwright test phase1-pcf-parse.test.js --config playwright.config.js --headed",
     "test:phase2": "cd tests && npx playwright test phase2-scene-renderer.test.js --config playwright.config.js --headed",
     "test:phase3": "cd tests && npx playwright test phase3-drafting-geometry.test.js --config playwright.config.js --headed",

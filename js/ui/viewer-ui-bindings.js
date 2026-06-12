@@ -156,6 +156,7 @@ export function initViewerUiBindings(config) {
     onLabelsVisibleChange,
     onExportGlb,
     onExportDxf,
+    onExportUxml,
     onOpenMasterDb,
     onShowHudLineMode,
     onShowHudPolylineMode,
@@ -220,6 +221,7 @@ export function initViewerUiBindings(config) {
 
   bindClick(VIEWER_UI_IDS.exportGlb, () => onExportGlb?.(), unsubs);
   bindClick(VIEWER_UI_IDS.exportDxf, () => onExportDxf?.(), unsubs);
+  bindClick(VIEWER_UI_IDS.exportUxml, () => onExportUxml?.(), unsubs);
   bindClick(VIEWER_UI_IDS.openMasterDb, () => onOpenMasterDb?.(), unsubs);
 
   bindClick(VIEWER_UI_IDS.fitMain, () => onCameraAction?.('fit-all'), unsubs);
