@@ -14,6 +14,7 @@
 import { SceneRenderer } from '../renderer/scene-renderer.js';
 import { renderPanel, clearPanel } from '../ui/component-panel.js';
 import { exportToDXF, exportCegToDXF } from '../glb/exportToDXF.js';
+import { uxmlToCeg, looksLikeUxml, exportCegToUXML } from '../../formats/uxml/ceg-uxml-bridge.js';
 import { getActiveDomain } from '../../core/domain-registry.js';
 import { emit } from '../../core/event-bus.js';
 import { appLogger } from '../debug/logger.js';
@@ -237,10 +238,19 @@ async function openTextModel(text, sourceName = 'text-model') {
   appLogger.info('VIEWER_TAB_OPEN_TEXT_START', { sourceName });
 
   try {
-    const isDxf = String(sourceName || '').toLowerCase().endsWith('.dxf');
+    const lowerName = String(sourceName || '').toLowerCase();
+    const isDxf = lowerName.endsWith('.dxf');
+    const isUxml = lowerName.endsWith('.uxml') || (lowerName.endsWith('.xml') && looksLikeUxml(text));
     let components;
 
-    if (isDxf && typeof domain.parseDxfWithCeg === 'function') {
+    if (isUxml) {
+      // UXML path: AdapterGraph → CEG (+ PipeData enrichment) → generic components
+      const result = uxmlToCeg(text, { name: sourceName });
+      components = result.components;
+      _cegGraph  = result.ceg;
+      if (typeof window !== 'undefined') window.__cegGraph = _cegGraph;
+      appLogger.info('VIEWER_TAB_UXML_IMPORT', { sourceName, ...result.enrichment });
+    } else if (isDxf && typeof domain.parseDxfWithCeg === 'function') {
       // DXF path: build both the component array and the CEG
       const result = domain.parseDxfWithCeg(text, appLogger);
       components = result.components;
@@ -254,7 +264,7 @@ async function openTextModel(text, sourceName = 'text-model') {
 
     setComponents(components);
     setViewerMode(VIEWER_UI_MODES.draft2d);
-    refreshScene('file-import', { sourceName, sourceType: isDxf ? 'dxf' : 'text' });
+    refreshScene('file-import', { sourceName, sourceType: isUxml ? 'uxml' : (isDxf ? 'dxf' : 'text') });
     selectComponent(null, null, 'file-import');
     setViewerStatus(`${components.length} components loaded`, 'ok');
     appLogger.info('VIEWER_TAB_OPEN_TEXT_DONE', { sourceName, componentCount: components.length });
@@ -317,6 +327,13 @@ function buildViewerUiBindingsConfig() {
     onExportDxf: () => {
       if (_cegGraph) exportCegToDXF(_cegGraph, 'scene-ceg.dxf');
       else exportToDXF(getSceneComponents(), 'scene.dxf');
+    },
+    onExportUxml: () => {
+      if (_cegGraph) {
+        exportCegToUXML(_cegGraph, 'scene.uxml');
+      } else {
+        setViewerStatus('Export UXML needs a CEG model (open a DXF or UXML first)', 'error');
+      }
     },
     onOpenMasterDb: () => _masterDbPopup?.open?.(),
     onShowHudLineMode: () => _hudApi?.showLineMode?.(),

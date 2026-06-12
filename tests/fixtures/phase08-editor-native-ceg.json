@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "CEG-1.0",
+  "sourceFormat": "EDITOR_NATIVE",
+  "name": "Editor Native CEG Fixture",
+  "anchors": {
+    "P1:EP1": { "id": "P1:EP1", "role": "EP1", "point": { "x": 0, "y": 0, "z": 0 } },
+    "P1:EP2": { "id": "P1:EP2", "role": "EP2", "point": { "x": 1000, "y": 0, "z": 0 } },
+    "T1:EP1": { "id": "T1:EP1", "role": "EP1", "point": { "x": 1000, "y": 0, "z": 0 } },
+    "T1:EP2": { "id": "T1:EP2", "role": "EP2", "point": { "x": 1200, "y": 0, "z": 0 } },
+    "T1:BP": { "id": "T1:BP", "role": "BRANCH_OUT", "point": { "x": 1100, "y": 100, "z": 0 } },
+    "S1:ORIGIN": { "id": "S1:ORIGIN", "role": "SUPPORT_ORIGIN", "point": { "x": 500, "y": -150, "z": 0 } }
+  },
+  "components": {
+    "P1": {
+      "id": "P1",
+      "type": "PIPE",
+      "layerId": "LINE-A",
+      "anchorIds": ["P1:EP1", "P1:EP2"],
+      "geometryRole": "LINEAR",
+      "attributes": { "NPS": "4", "SCHEDULE": "40", "NAME": "Hand Drawn Pipe" },
+      "rawAttributes": {},
+      "derived": { "bore": 114.3 },
+      "diagnostics": []
+    },
+    "T1": {
+      "id": "T1",
+      "type": "TEE",
+      "layerId": "LINE-A",
+      "anchorIds": ["T1:EP1", "T1:EP2", "T1:BP"],
+      "geometryRole": "BRANCH",
+      "attributes": { "NPS": "4", "SUBTYPE": "EQUAL" },
+      "rawAttributes": {},
+      "derived": {},
+      "diagnostics": []
+    },
+    "S1": {
+      "id": "S1",
+      "type": "SUPPORT",
+      "layerId": "LINE-A",
+      "anchorIds": ["S1:ORIGIN"],
+      "geometryRole": "POINT",
+      "attributes": { "SUBTYPE": "GUIDE", "SUPPORT_KIND": "GUIDE" },
+      "rawAttributes": {},
+      "derived": {},
+      "diagnostics": []
+    }
+  },
+  "lossContract": {
+    "unsupportedEntities": [{ "id": "u1", "componentId": "", "message": "unsupported sample" }],
+    "downgradedEntities": [{ "id": "d1", "componentId": "P1", "message": "downgraded sample" }],
+    "proxyEntities": [{ "id": "p1", "sourceId": "blk1", "message": "proxy sample" }],
+    "exportWarnings": [{ "id": "w1", "message": "warning sample" }]
+  }
+}

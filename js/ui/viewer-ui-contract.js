@@ -45,6 +45,7 @@ export const VIEWER_UI_IDS = Object.freeze({
   openGlb: 'hifi-btn-open-glb',
   exportGlb: 'hifi-btn-export-glb',
   exportDxf: 'hifi-btn-export-dxf',
+  exportUxml: 'hifi-btn-export-uxml',
   openMasterDb: 'hifi-btn-masterdb',
 
   modeDraft2d: 'hifi-btn-mode-draft2d',
