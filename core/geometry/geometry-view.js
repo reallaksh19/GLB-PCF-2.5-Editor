@@ -157,6 +157,20 @@ function copyCurveDerivedFields(geometry, component) {
   if (derived.closed != null) geometry.closed = Boolean(derived.closed);
 }
 
+// Real dimensions resolved by the PipeData enrichment bridge. Renderers prefer
+// these over bore-multiplier approximations when present.
+const PIPE_DATA_DIMENSION_FIELDS = Object.freeze([
+  'flangeOdMm', 'flangeThicknessMm', 'faceToFaceMm', 'odMm', 'wallMm',
+]);
+
+function copyPipeDataDimensions(geometry, derived) {
+  const dimensions = safeObj(derived?.dimensions);
+  for (const field of PIPE_DATA_DIMENSION_FIELDS) {
+    const value = Number(dimensions[field]);
+    if (Number.isFinite(value) && value > 0) geometry[field] = value;
+  }
+}
+
 /**
  * Derive renderer-compatible geometry for one CEG component.
  */
@@ -182,6 +196,8 @@ export function componentToGeometryView(component, graph) {
   if (rawAttributes.dxfStyle) {
     geometry.dxfStyle = rawAttributes.dxfStyle;
   }
+
+  copyPipeDataDimensions(geometry, derived);
 
   if (['ARC', 'ELBOW', 'BEND'].includes(String(component?.type || '').toUpperCase())) {
     copyCurveDerivedFields(geometry, component);
