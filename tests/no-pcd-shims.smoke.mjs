@@ -15,6 +15,7 @@ const IGNORED_DIRS = new Set([
   'playwright-report',
   'test-results',
 ]);
+const IGNORED_FILES = new Set(['tests/no-pcd-shims.smoke.mjs']);
 const BLOCKED_PATH_PARTS = [
   'pipe-component-data-adapter',
   'pcd-adapter',
@@ -51,6 +52,7 @@ test('PipeComponentData is consumed directly through its public entrypoint', () 
   const violations = [];
   for (const path of walk(ROOT)) {
     const rel = relative(ROOT, path).replaceAll('\\', '/');
+    if (IGNORED_FILES.has(rel)) continue;
     const lower = rel.toLowerCase();
     if (BLOCKED_PATH_PARTS.some((part) => lower.includes(part))) {
       violations.push(`${rel}: blocked local adapter/wrapper/shim path`);
