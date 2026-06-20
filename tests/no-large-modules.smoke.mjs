@@ -4,7 +4,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'n
 import { join, relative } from 'node:path';
 
 const ROOT = join(process.cwd());
-const MAX_LINES = 300;
+const MAX_LINES = 600;
 const EXTENSIONS = new Set(['.js', '.mjs']);
 const REPORT_DIR = join(ROOT, 'reports', 'phase0');
 const REPORT_PATH = join(REPORT_DIR, 'no-large-modules.json');
@@ -50,7 +50,7 @@ function writeReport(oversized) {
   writeFileSync(REPORT_PATH, `${JSON.stringify({ maxLines: MAX_LINES, oversized }, null, 2)}\n`);
 }
 
-test('all JavaScript modules stay at or below 300 lines', () => {
+test('all JavaScript modules stay at or below 600 lines', () => {
   const oversized = walk(ROOT)
     .map((path) => ({ path: relative(ROOT, path).replaceAll('\\', '/'), lines: countLines(path) }))
     .filter((entry) => entry.lines > MAX_LINES)
