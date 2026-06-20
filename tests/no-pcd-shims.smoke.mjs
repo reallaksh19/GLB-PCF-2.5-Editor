@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = process.cwd();
+const REPORT_DIR = join(ROOT, 'reports', 'phase0');
+const REPORT_PATH = join(REPORT_DIR, 'no-pcd-shims.json');
 const CODE_EXTENSIONS = new Set(['.js', '.mjs']);
 const IGNORED_DIRS = new Set([
   '.git',
@@ -48,6 +50,11 @@ function isCode(path) {
   return CODE_EXTENSIONS.has(extname(path));
 }
 
+function writeReport(violations) {
+  mkdirSync(REPORT_DIR, { recursive: true });
+  writeFileSync(REPORT_PATH, `${JSON.stringify({ violations }, null, 2)}\n`);
+}
+
 test('PipeComponentData is consumed directly through its public entrypoint', () => {
   const violations = [];
   for (const path of walk(ROOT)) {
@@ -55,15 +62,16 @@ test('PipeComponentData is consumed directly through its public entrypoint', () 
     if (IGNORED_FILES.has(rel)) continue;
     const lower = rel.toLowerCase();
     if (BLOCKED_PATH_PARTS.some((part) => lower.includes(part))) {
-      violations.push(`${rel}: blocked local adapter/wrapper/shim path`);
+      violations.push({ path: rel, reason: 'blocked local adapter/wrapper/shim path' });
       continue;
     }
     if (!isCode(path)) continue;
     const text = readFileSync(path, 'utf8');
     if (INTERNAL_PCD_IMPORT.test(text) || RELATIVE_INTERNAL_PCD_IMPORT.test(text)) {
-      violations.push(`${rel}: imports PipeComponentData internals instead of public package exports`);
+      violations.push({ path: rel, reason: 'imports PipeComponentData internals instead of public package exports' });
     }
   }
 
-  assert.deepEqual(violations, [], violations.join('\n'));
+  writeReport(violations);
+  assert.deepEqual(violations, [], 'No PipeComponentData shim/wrapper/internal-import violations are allowed. See reports/phase0/no-pcd-shims.json');
 });
