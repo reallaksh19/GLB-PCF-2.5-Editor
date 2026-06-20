@@ -28,6 +28,9 @@ jobs:
       - name: Gate no PCD mutation
         run: npm run test:no-pcd-mutation
 
+      - name: Gate no legacy PCD DB runtime
+        run: node tests/no-legacy-pcd-db-runtime.smoke.mjs
+
       - name: Gate PCD public API
         run: npm run test:pcd-public-api
 
