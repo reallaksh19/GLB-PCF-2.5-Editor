@@ -21,3 +21,11 @@ jobs:
 
       - name: Run Phase 0 gates
         run: npm run test:phase0
+
+      - name: Upload Phase 0 reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-reports
+          path: reports/phase0
+          if-no-files-found: ignore
