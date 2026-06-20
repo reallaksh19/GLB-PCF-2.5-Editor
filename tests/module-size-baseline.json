@@ -1,0 +1,16 @@
+{
+  "maxLines": 600,
+  "policy": "No new JavaScript module may exceed maxLines. Baseline entries are existing technical debt and may not grow.",
+  "oversized": {
+    "editor/route-engine.js": 1337,
+    "hud/hud-orchestrator.js": 959,
+    "macro/macro-commands.js": 911,
+    "macro/macro-terminal.js": 851,
+    "js/renderer/scene-renderer.js": 748,
+    "tools/gen-benchmark-dxf.js": 726,
+    "js/tabs/viewer-tab.js": 723,
+    "js/tabs/design-canvas.js": 651,
+    "domains/piping/draft2d-renderer.js": 609,
+    "hud/hud-overlay.js": 606
+  }
+}
