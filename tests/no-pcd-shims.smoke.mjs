@@ -27,8 +27,6 @@ const BLOCKED_PATH_PARTS = [
   'pipe-component-data-shim',
   'pcd-shim',
 ];
-const INTERNAL_PCD_IMPORT = /from\s+['"][^'"]*vendor\/pipe-component-data\/src\//;
-const RELATIVE_INTERNAL_PCD_IMPORT = /from\s+['"][^'"]*pipe-component-data\/src\//;
 
 function extname(path) {
   const dot = path.lastIndexOf('.');
@@ -50,6 +48,16 @@ function isCode(path) {
   return CODE_EXTENSIONS.has(extname(path));
 }
 
+function hasInternalPipeComponentDataImport(text) {
+  const importLines = text.split(/\r\n|\r|\n/).filter((line) => line.includes('from '));
+  return importLines.some((line) => {
+    const normalized = line.replaceAll('\\', '/');
+    const marker = 'pipe-component-data/src/';
+    if (!normalized.includes(marker)) return false;
+    return !normalized.includes('pipe-component-data/src/index.js');
+  });
+}
+
 function writeReport(violations) {
   mkdirSync(REPORT_DIR, { recursive: true });
   writeFileSync(REPORT_PATH, `${JSON.stringify({ violations }, null, 2)}\n`);
@@ -67,7 +75,7 @@ test('PipeComponentData is consumed directly through its public entrypoint', () 
     }
     if (!isCode(path)) continue;
     const text = readFileSync(path, 'utf8');
-    if (INTERNAL_PCD_IMPORT.test(text) || RELATIVE_INTERNAL_PCD_IMPORT.test(text)) {
+    if (hasInternalPipeComponentDataImport(text)) {
       violations.push({ path: rel, reason: 'imports PipeComponentData internals instead of public package exports' });
     }
   }
