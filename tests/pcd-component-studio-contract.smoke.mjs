@@ -10,7 +10,7 @@ import {
 } from '../vendor/pipe-component-data/src/index.js';
 
 function buildValveRow() {
-  return makeNormalizedRow({
+  const normalized = makeNormalizedRow({
     id: 'VALVE|GATE|NPS8|CL150|RF',
     componentType: 'VALVE',
     subtype: 'GATE',
@@ -35,6 +35,13 @@ function buildValveRow() {
     },
     sourceRefs: [{ source: 'PipeData Vlfl/VLV1150.csv', rowNumber: 1 }],
   });
+  return {
+    ...normalized,
+    source: normalized.provenance.source,
+    datasetVersion: normalized.provenance.datasetVersion,
+    dataStatus: normalized.provenance.dataStatus,
+    sourceRowNumber: normalized.sourceRefs[0].rowNumber,
+  };
 }
 
 function buildStudioAssets(row = buildValveRow()) {
@@ -46,7 +53,7 @@ function buildStudioAssets(row = buildValveRow()) {
         id: row.id,
         family: 'VALVE',
         source: 'VALVE',
-        dataStatus: row.provenance.dataStatus,
+        dataStatus: row.dataStatus,
         description: 'Gate valve NPS 8 class 150 RF',
         aliases: [row.id, 'gate valve 8 class 150 rf'],
         filters: { componentType: 'VALVE', valveType: 'GATE', nps: '8', classRating: '150', facing: 'RF' },
