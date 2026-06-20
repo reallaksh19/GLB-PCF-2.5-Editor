@@ -18,6 +18,7 @@ const IGNORED_DIRS = new Set([
 const ALLOWED_PREFIXES = [
   'vendor/pipe-component-data/',
   'tests/no-legacy-pcd-db-runtime.smoke.mjs',
+  'tests/pcd-vendor.smoke.mjs',
 ];
 
 function extname(path) {
