@@ -37,6 +37,9 @@ jobs:
       - name: Gate PCD integration smoke
         run: npm run test:pcd
 
+      - name: Gate PCD Component Studio contract
+        run: node tests/pcd-component-studio-contract.smoke.mjs
+
       - name: Gate geometry view
         run: npm run test:geometry-view
 
