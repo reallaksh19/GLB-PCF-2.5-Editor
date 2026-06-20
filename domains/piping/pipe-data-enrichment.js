@@ -1,20 +1,19 @@
 /**
  * @file domains/piping/pipe-data-enrichment.js
- * @description CEG-native enrichment bridge for the vendored pipe-component-data
- *              package.  Derives dimension lookups from canonical component
- *              attributes and writes verified dimensional data onto
- *              component.derived — never fabricating values and never
- *              touching anchors or geometry.
- *
- * Imports the vendored package via a relative path so the module resolves
- * identically in the browser (no import map needed) and under plain node.
+ * @description CEG-native enrichment using PipeComponentData public exact lookup.
  */
 
-import { createPipeDataDb } from '../../vendor/pipe-component-data/src/index.js';
+import {
+  lookupComponentExact,
+  LOOKUP_STATUS,
+  PHASE4_DATASETS,
+} from '../../vendor/pipe-component-data/src/index.js';
 
 export const PIPE_DATA_DIAGNOSTIC_CODES = Object.freeze({
   insufficientKeys: 'PIPE_DATA_INSUFFICIENT_KEYS',
   lookupMiss: 'PIPE_DATA_LOOKUP_MISS',
+  catalogRowMissing: 'PIPE_DATA_CATALOG_ROW_MISSING',
+  invalidAssets: 'PIPE_DATA_INVALID_ASSETS',
 });
 
 const FITTING_TYPES = new Set(['ELBOW', 'BEND', 'TEE', 'REDUCER']);
@@ -41,14 +40,6 @@ function normalizeFacing(raw) {
   return facing;
 }
 
-/**
- * Derive a pipe-component-data lookup query from one CEG component.
- *
- * @param {Object} component Canonical component record.
- * @returns {{kind: string, query: Object}|null} Lookup descriptor, or null
- *          when the component lacks the keys needed for any lookup
- *          (e.g. a bore-only DXF component).
- */
 export function deriveQuery(component) {
   const attributes = component?.attributes || {};
   const type = String(component?.type || attrValue(attributes, 'COMPONENT', 'TYPE') || '').toUpperCase();
@@ -60,35 +51,104 @@ export function deriveQuery(component) {
 
   if (type === 'PIPE' || type === 'LINE') {
     if (!nps || !schedule) return null;
-    return { kind: 'pipe', query: { nps, schedule } };
+    return { kind: 'pipe', query: { componentType: 'PIPE', nps, schedule } };
   }
   if (type === 'FLANGE') {
     if (!nps || !classRating) return null;
-    return {
-      kind: 'flange',
-      query: { subtype: subtype || 'WN', nps, classRating, facing: facing || 'RF' },
-    };
+    return { kind: 'flange', query: { componentType: 'FLANGE', subtype: subtype || 'WN', nps, classRating, facing: facing || 'RF' } };
   }
   if (type === 'VALVE') {
     if (!subtype || !nps || !classRating) return null;
-    return {
-      kind: 'valve',
-      query: { valveType: subtype, nps, classRating, facing: facing || 'RF' },
-    };
+    return { kind: 'valve', query: { componentType: 'VALVE', valveType: subtype, nps, classRating, facing: facing || 'RF' } };
   }
   if (FITTING_TYPES.has(type)) {
     if (!subtype || !nps || !schedule) return null;
-    return { kind: 'fitting', query: { subtype, nps, schedule } };
+    return { kind: 'fitting', query: { componentType: 'FITTING', subtype, nps, schedule } };
   }
   return null;
 }
 
-function lookupFor(db, derived) {
-  if (derived.kind === 'pipe') return db.lookupPipe(derived.query);
-  if (derived.kind === 'flange') return db.lookupFlange(derived.query);
-  if (derived.kind === 'valve') return db.lookupValve(derived.query);
-  if (derived.kind === 'fitting') return db.lookupFitting(derived.query);
-  return { ok: false, code: 'PIPE_DATA_UNKNOWN_KIND', query: derived.query };
+export function createPipeDataExactLookupAssets(datasets = PHASE4_DATASETS) {
+  const catalogs = {
+    pipeSchedules: withIds(datasets.pipeSchedules, pipeId),
+    flanges: withIds(datasets.flanges, flangeId),
+    valves: withIds(datasets.valves, valveId),
+    fittings: withIds(datasets.fittings, fittingId),
+  };
+  return {
+    searchIndex: {
+      noFallbackPolicy: 'Exact component lookup only. No nearest size, class, schedule, family, or fabricated dimension fallback.',
+      entries: [
+        ...catalogEntries(catalogs.pipeSchedules, 'PIPE', 'pipeSchedules', pipeFilters),
+        ...catalogEntries(catalogs.flanges, 'FLANGE', 'flanges', flangeFilters),
+        ...catalogEntries(catalogs.valves, 'VALVE', 'valves', valveFilters),
+        ...catalogEntries(catalogs.fittings, 'FITTING', 'fittings', fittingFilters),
+      ],
+    },
+    aliases: [],
+    catalogs,
+  };
+}
+
+function withIds(rows = [], idFn) {
+  return rows.map((row) => ({ ...row, id: idFn(row) }));
+}
+
+function catalogEntries(rows, family, source, filtersFn) {
+  return rows.map((row) => ({
+    id: row.id,
+    family,
+    source,
+    dataStatus: row.dataStatus,
+    description: row.id,
+    aliases: [row.id],
+    filters: filtersFn(row),
+  }));
+}
+
+function pipeFilters(row) {
+  return { componentType: 'PIPE', nps: row.nps, schedule: row.schedule };
+}
+
+function flangeFilters(row) {
+  return { componentType: 'FLANGE', subtype: row.subtype, nps: row.nps, classRating: row.classRating, facing: row.facing };
+}
+
+function valveFilters(row) {
+  return { componentType: 'VALVE', valveType: row.valveType, nps: row.nps, classRating: row.classRating, facing: row.facing };
+}
+
+function fittingFilters(row) {
+  return { componentType: 'FITTING', subtype: row.subtype, nps: row.nps, schedule: row.schedule };
+}
+
+function pipeId(row) {
+  return `PIPE|NPS${row.nps}|SCH${row.schedule}`;
+}
+
+function flangeId(row) {
+  return `FLANGE|${row.subtype}|NPS${row.nps}|CL${row.classRating}|${row.facing}`;
+}
+
+function valveId(row) {
+  return `VALVE|${row.valveType}|NPS${row.nps}|CL${row.classRating}|${row.facing}`;
+}
+
+function fittingId(row) {
+  return `FITTING|${row.subtype}|NPS${row.nps}|SCH${row.schedule}`;
+}
+
+function lookupForExact(assets, derived) {
+  return lookupComponentExact(exactLookupText(derived), assets, { filters: derived.query });
+}
+
+function exactLookupText(derived) {
+  const query = derived.query;
+  if (derived.kind === 'pipe') return pipeId(query);
+  if (derived.kind === 'flange') return flangeId(query);
+  if (derived.kind === 'valve') return valveId(query);
+  if (derived.kind === 'fitting') return fittingId(query);
+  return String(derived.kind || 'UNKNOWN');
 }
 
 function pickValveFaceToFace(row, facing) {
@@ -99,76 +159,33 @@ function pickValveFaceToFace(row, facing) {
 
 function mapDimensions(derived, row) {
   if (derived.kind === 'pipe') {
-    return {
-      odMm: row.odMm,
-      wallMm: row.wallMm,
-      boreMm: row.idMm,
-      weightKgPerM: row.weightKgPerM,
-      materialDensityKgM3: row.materialDensityKgM3,
-    };
+    return { odMm: row.odMm, wallMm: row.wallMm, boreMm: row.idMm, weightKgPerM: row.weightKgPerM, materialDensityKgM3: row.materialDensityKgM3 };
   }
   if (derived.kind === 'flange') {
-    return {
-      flangeOdMm: row.flangeOdMm,
-      flangeThicknessMm: row.flangeThicknessMm,
-      hubDiaMm: row.hubDiaMm,
-      weldDiaMm: row.weldDiaMm,
-      hubLengthMm: row.hubLengthMm,
-      rfDiaMm: row.rfDiaMm,
-      rfHeightMm: row.rfHeightMm,
-      pcdMm: row.pcdMm,
-      boltCount: row.boltCount,
-      weightKg: row.weightKg,
-    };
+    return { flangeOdMm: row.flangeOdMm, flangeThicknessMm: row.flangeThicknessMm, hubDiaMm: row.hubDiaMm, weldDiaMm: row.weldDiaMm, hubLengthMm: row.hubLengthMm, rfDiaMm: row.rfDiaMm, rfHeightMm: row.rfHeightMm, pcdMm: row.pcdMm, boltCount: row.boltCount, weightKg: row.weightKg };
   }
   if (derived.kind === 'valve') {
-    return {
-      faceToFaceMm: pickValveFaceToFace(row, derived.query.facing),
-      ffRfMm: row.ffRfMm,
-      ffRtjMm: row.ffRtjMm,
-      ffBwMm: row.ffBwMm,
-      boreMm: row.boreMm,
-      heightMm: row.heightMm,
-      handwheelDiaMm: row.handwheelDiaMm,
-      weightKg: row.weightKg,
-    };
+    return { faceToFaceMm: pickValveFaceToFace(row, derived.query.facing), ffRfMm: row.ffRfMm, ffRtjMm: row.ffRtjMm, ffBwMm: row.ffBwMm, boreMm: row.boreMm, heightMm: row.heightMm, handwheelDiaMm: row.handwheelDiaMm, weightKg: row.weightKg };
   }
-  return {
-    centerlineRadiusMm: row.centerlineRadiusMm,
-    angleDeg: row.angleDeg,
-    developedLengthMm: row.developedLengthMm,
-    weightKg: row.weightKg,
-  };
+  return { centerlineRadiusMm: row.centerlineRadiusMm, angleDeg: row.angleDeg, developedLengthMm: row.developedLengthMm, weightKg: row.weightKg };
 }
 
 function withoutEmptyValues(values) {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== '')
-  );
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+}
+
+function diagnosticCodeForStatus(status) {
+  if (status === LOOKUP_STATUS.CATALOG_ROW_MISSING) return PIPE_DATA_DIAGNOSTIC_CODES.catalogRowMissing;
+  if (status === LOOKUP_STATUS.INVALID_ASSETS) return PIPE_DATA_DIAGNOSTIC_CODES.invalidAssets;
+  return PIPE_DATA_DIAGNOSTIC_CODES.lookupMiss;
 }
 
 function pushDiagnostic(component, code, details) {
   component.diagnostics = Array.isArray(component.diagnostics) ? component.diagnostics : [];
-  component.diagnostics.push({
-    severity: 'WARNING',
-    code,
-    message: code,
-    componentId: component.id,
-    details: details || {},
-  });
+  component.diagnostics.push({ severity: 'WARNING', code, message: code, componentId: component.id, details: details || {} });
 }
 
-/**
- * Enrich a Canonical Edit Graph with verified dimensional data from the
- * pipe-component-data datasets.  The input graph is never mutated; a deep
- * clone is returned.  Anchors and geometry are never touched, and values
- * are never fabricated — misses only add non-fatal diagnostics.
- *
- * @param {Object} ceg Canonical Edit Graph.
- * @param {Object} [db] pipe-component-data db (injectable for tests).
- * @returns {{ceg: Object, enriched: number, missed: number}}
- */
-export function enrichCegWithPipeData(ceg, db = createPipeDataDb()) {
+export function enrichCegWithPipeData(ceg, assets = createPipeDataExactLookupAssets()) {
   const clone = structuredClone(ceg);
   let enriched = 0;
   let missed = 0;
@@ -176,19 +193,19 @@ export function enrichCegWithPipeData(ceg, db = createPipeDataDb()) {
   for (const component of Object.values(clone?.components || {})) {
     const derived = deriveQuery(component);
     if (!derived) {
-      pushDiagnostic(component, PIPE_DATA_DIAGNOSTIC_CODES.insufficientKeys, {
-        componentType: component?.type || null,
-      });
+      pushDiagnostic(component, PIPE_DATA_DIAGNOSTIC_CODES.insufficientKeys, { componentType: component?.type || null });
       continue;
     }
 
-    const hit = lookupFor(db, derived);
-    if (!hit.ok) {
+    const hit = lookupForExact(assets, derived);
+    if (hit.status !== LOOKUP_STATUS.FOUND) {
       missed += 1;
-      pushDiagnostic(component, PIPE_DATA_DIAGNOSTIC_CODES.lookupMiss, {
+      pushDiagnostic(component, diagnosticCodeForStatus(hit.status), {
         kind: derived.kind,
-        query: hit.query || derived.query,
-        code: hit.code || null,
+        query: derived.query,
+        status: hit.status,
+        diagnostics: hit.diagnostics || [],
+        noFallbackPolicy: hit.noFallbackPolicy || null,
       });
       continue;
     }
@@ -197,14 +214,8 @@ export function enrichCegWithPipeData(ceg, db = createPipeDataDb()) {
     const dimensions = withoutEmptyValues(mapDimensions(derived, hit.row));
     component.derived = {
       ...(component.derived || {}),
-      dimensions: {
-        ...(component.derived?.dimensions || {}),
-        ...dimensions,
-      },
-      pipeData: {
-        matchKey: hit.matchKey,
-        ...(hit.provenance || {}),
-      },
+      dimensions: { ...(component.derived?.dimensions || {}), ...dimensions },
+      pipeData: { matchKey: hit.id, ...(hit.provenance || {}) },
     };
   }
 
