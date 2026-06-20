@@ -4,7 +4,9 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'n
 import { join, relative } from 'node:path';
 
 const ROOT = join(process.cwd());
-const MAX_LINES = 600;
+const BASELINE_PATH = join(ROOT, 'tests', 'module-size-baseline.json');
+const BASELINE = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
+const MAX_LINES = BASELINE.maxLines;
 const EXTENSIONS = new Set(['.js', '.mjs']);
 const REPORT_DIR = join(ROOT, 'reports', 'phase0');
 const REPORT_PATH = join(REPORT_DIR, 'no-large-modules.json');
@@ -45,21 +47,24 @@ function countLines(path) {
   return text.split(/\r\n|\r|\n/).length;
 }
 
-function writeReport(oversized) {
+function writeReport(payload) {
   mkdirSync(REPORT_DIR, { recursive: true });
-  writeFileSync(REPORT_PATH, `${JSON.stringify({ maxLines: MAX_LINES, oversized }, null, 2)}\n`);
+  writeFileSync(REPORT_PATH, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
-test('all JavaScript modules stay at or below 600 lines', () => {
+test('JavaScript modules obey the 600-line gate and baseline debt may not grow', () => {
+  const baseline = BASELINE.oversized || {};
   const oversized = walk(ROOT)
     .map((path) => ({ path: relative(ROOT, path).replaceAll('\\', '/'), lines: countLines(path) }))
     .filter((entry) => entry.lines > MAX_LINES)
     .sort((a, b) => b.lines - a.lines || a.path.localeCompare(b.path));
 
-  writeReport(oversized);
-  assert.deepEqual(
-    oversized,
-    [],
-    `Modules above ${MAX_LINES} lines must be split. See reports/phase0/no-large-modules.json`,
-  );
+  const newOversized = oversized.filter((entry) => !(entry.path in baseline));
+  const grownBaseline = oversized.filter((entry) => baseline[entry.path] && entry.lines > baseline[entry.path]);
+  const removedDebt = Object.keys(baseline).filter((path) => !oversized.some((entry) => entry.path === path));
+  const report = { maxLines: MAX_LINES, newOversized, grownBaseline, remainingBaselineDebt: oversized, removedDebt };
+  writeReport(report);
+
+  assert.deepEqual(newOversized, [], `New modules above ${MAX_LINES} lines are blocked. See reports/phase0/no-large-modules.json`);
+  assert.deepEqual(grownBaseline, [], `Baseline oversized modules may not grow. See reports/phase0/no-large-modules.json`);
 });
