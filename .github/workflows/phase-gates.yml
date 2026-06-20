@@ -19,8 +19,23 @@ jobs:
         with:
           node-version: 24
 
-      - name: Run Phase 0 gates
-        run: npm run test:phase0
+      - name: Gate no large modules
+        run: npm run test:no-large-modules
+
+      - name: Gate no PCD shims
+        run: npm run test:no-pcd-shims
+
+      - name: Gate no PCD mutation
+        run: npm run test:no-pcd-mutation
+
+      - name: Gate PCD public API
+        run: npm run test:pcd-public-api
+
+      - name: Gate PCD integration smoke
+        run: npm run test:pcd
+
+      - name: Gate geometry view
+        run: npm run test:geometry-view
 
       - name: Upload Phase 0 reports
         if: failure()
