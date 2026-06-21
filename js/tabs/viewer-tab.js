@@ -1,16 +1,3 @@
-/**
- * @file js/tabs/viewer-tab.js
- * @description Phase 1 shell owner for the 2.5D viewer tab.
- *              Owns renderer lifecycle, runtime component state, selection,
- *              scene refresh, and public shell callbacks for later phases.
- *
- * This phase provides the stable viewer shell and adapter surface for editor modules.
- *
- * Exports:
- *   function initViewerTab(): void
- *   function getViewerShellApi(): object
- */
-
 import { SceneRenderer } from '../renderer/scene-renderer.js';
 import { renderPanel, clearPanel } from '../ui/component-panel.js';
 import { exportToDXF, exportCegToDXF } from '../glb/exportToDXF.js';
@@ -28,11 +15,7 @@ import { initMacroTerminal } from '../../macro/macro-terminal.js';
 import { initViewerUiBindings } from '../ui/viewer-ui-bindings.js';
 import { createViewerUiStore, VIEWER_UI_ACTIONS, VIEWER_UI_MODES } from '../ui/viewer-ui-state.js';
 import { VIEWER_UI_IDS, byId } from '../ui/viewer-ui-contract.js';
-import {
-  buildRouteRenderSnapshot,
-  diffRouteRenderSnapshot,
-  summarizeRouteRenderDiff,
-} from '../renderer/route-render-reconciler.js';
+import { buildRouteRenderSnapshot, diffRouteRenderSnapshot, summarizeRouteRenderDiff } from '../renderer/route-render-reconciler.js';
 
 let _sceneRenderer = null;
 let _components = [];
@@ -48,49 +31,23 @@ let _masterDbStore = null;
 let _masterDbResolver = null;
 let _masterDbPopup = null;
 let _macroTerminalApi = null;
-let _cegGraph = null;   // Canonical Edit Graph — set when a DXF is imported
-let _knownRouteCompIds = new Set(); // legacy compatibility/debug mirror
-let _routeRenderSnapshot = new Map(); // id -> deterministic route-derived component fingerprint
-let _autoFitEnabled = false; // Controls if scene should zoom/fit when new geometry is added
+let _cegGraph = null;
+let _knownRouteCompIds = new Set();
+let _routeRenderSnapshot = new Map();
+let _autoFitEnabled = false;
 
-function _exposeSceneRenderer(renderer) {
-  if (typeof window !== 'undefined') window._sceneRenderer = renderer;
-}
-
-function getDomain() {
-  return getActiveDomain();
-}
-
-function getComponents() {
-  return _components;
-}
-
-function getSelectedComponent() {
-  return _selectedComponent;
-}
-
-function getLastLoadMeta() {
-  return _lastLoadMeta;
-}
-
-function getRouteEngine() {
-  return _routeEngine;
-}
-
-function getSceneComponents() {
-  const routeDerived = _routeEngine?.getDerivedComponents?.() || [];
-  return [..._components, ...routeDerived];
-}
-
-function getEditorState() {
-  return _routeEngine?.getState?.() || null;
-}
-
+function _exposeSceneRenderer(renderer) { if (typeof window !== 'undefined') window._sceneRenderer = renderer; }
+function getDomain() { return getActiveDomain(); }
+function getComponents() { return _components; }
+function getSelectedComponent() { return _selectedComponent; }
+function getLastLoadMeta() { return _lastLoadMeta; }
+function getRouteEngine() { return _routeEngine; }
+function getSceneComponents() { return [..._components, ...(_routeEngine?.getDerivedComponents?.() || [])]; }
+function getEditorState() { return _routeEngine?.getState?.() || null; }
 function setViewerStatus(text, tone = 'idle') {
   const viewerStatus = byId(VIEWER_UI_IDS.statusInline);
   const statusDot = byId(VIEWER_UI_IDS.statusDot);
   const statusText = byId(VIEWER_UI_IDS.statusText);
-
   const msg = text || 'Ready';
   if (viewerStatus) viewerStatus.textContent = msg;
   if (statusText) statusText.textContent = msg;
@@ -99,25 +56,21 @@ function setViewerStatus(text, tone = 'idle') {
     statusDot.classList.add('hifi-status-dot', tone || 'idle');
   }
 }
-
 function setComponents(next) {
   _components = Array.isArray(next) ? next : [];
   return _components;
 }
-
 function appendComponent(comp) {
   if (!comp) return _components;
   _components = [..._components, comp];
   return _components;
 }
-
 function appendComponents(comps) {
   const add = Array.isArray(comps) ? comps.filter(Boolean) : [];
   if (!add.length) return _components;
   _components = [..._components, ...add];
   return _components;
 }
-
 function getMasterDbSummary() {
   const state = _masterDbStore?.getState?.() || null;
   return state ? {
@@ -127,7 +80,6 @@ function getMasterDbSummary() {
     lastResolution: state.lastResolution || null,
   } : null;
 }
-
 function buildLoadMeta(reason = 'refresh-scene', meta = {}) {
   const routeMetrics = _routeEngine?.getMetrics?.() || { routeCount: 0, totalLength: 0, perRoute: [] };
   return {
@@ -145,113 +97,69 @@ function buildLoadMeta(reason = 'refresh-scene', meta = {}) {
     masterDb: getMasterDbSummary(),
   };
 }
-
 function refreshScene(reason = 'refresh-scene', meta = {}) {
   const domain = getDomain();
   if (!_sceneRenderer || !domain) return;
-
   _sceneRenderer.loadComponents(getSceneComponents(), domain, _autoFitEnabled);
-    // After a full reload, rebuild route render state so incremental sync stays consistent.
-    const routeDerived = _routeEngine?.getDerivedComponents?.() || [];
-    _knownRouteCompIds = new Set(routeDerived.map(c => c.id));
-    _routeRenderSnapshot = buildRouteRenderSnapshot(routeDerived);
+  const routeDerived = _routeEngine?.getDerivedComponents?.() || [];
+  _knownRouteCompIds = new Set(routeDerived.map(c => c.id));
+  _routeRenderSnapshot = buildRouteRenderSnapshot(routeDerived);
   _lastLoadMeta = buildLoadMeta(reason, meta);
   emit('model-loaded', _lastLoadMeta);
 }
-
 function setViewerMode(mode) {
   if (!_viewerUiStore) return;
-  if (mode !== VIEWER_UI_MODES.draft2d && mode !== VIEWER_UI_MODES.stick && mode !== VIEWER_UI_MODES.mode3d) {
-    throw new Error(`Unsupported viewer mode: ${mode}`);
-  }
+  if (mode !== VIEWER_UI_MODES.draft2d && mode !== VIEWER_UI_MODES.stick && mode !== VIEWER_UI_MODES.mode3d) throw new Error(`Unsupported viewer mode: ${mode}`);
   _viewerUiStore.dispatch({ type: VIEWER_UI_ACTIONS.setActiveMode, mode });
   _sceneRenderer?.applyVisualProfile?.(mode);
 }
-
 function openComponentPanel(component) {
   const sidePanel = byId(VIEWER_UI_IDS.inspector);
   if (!sidePanel) return;
-
-  if (!component) {
-    clearPanel(sidePanel);
-    return;
-  }
-
+  if (!component) { clearPanel(sidePanel); return; }
   const domain = getDomain();
-  const sections = domain?.getInfoPanelSections?.(component) || [];
-  renderPanel(sections, sidePanel);
+  renderPanel(domain?.getInfoPanelSections?.(component) || [], sidePanel);
 }
-
 function selectComponent(component, mesh = null, reason = 'select-component') {
   _selectedComponent = component || null;
   _selectedComponentId = component?.id || null;
-  _viewerUiStore?.dispatch({
-    type: VIEWER_UI_ACTIONS.setSelectedComponentId,
-    componentId: _selectedComponentId,
-  });
-
+  _viewerUiStore?.dispatch({ type: VIEWER_UI_ACTIONS.setSelectedComponentId, componentId: _selectedComponentId });
   _sceneRenderer?.highlight(mesh || null);
   openComponentPanel(component || null);
-
-  emit('component-selected', {
-    id: _selectedComponentId,
-    comp: _selectedComponent,
-    component: _selectedComponent,
-    mesh: mesh || null,
-    reason,
-    at: Date.now(),
-  });
+  emit('component-selected', { id: _selectedComponentId, comp: _selectedComponent, component: _selectedComponent, mesh: mesh || null, reason, at: Date.now() });
 }
-
 function handleScenePick(ev) {
   if (!_sceneRenderer) return;
   if (ev.target?.closest?.('.hud-overlay')) return;
-
-  // Don't steal clicks when HUD is in an active draw/insert/modify mode —
-  // the HUD orchestrator handles those clicks itself.
   const hudMode = _hudApi?.getState?.()?.mode;
   if (hudMode && hudMode !== 'idle') return;
-
   const container = byId(VIEWER_UI_IDS.canvas);
   if (!container) return;
-
   const rect = container.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
-
   const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
   const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
   const hit = _sceneRenderer.pick(ndcX, ndcY);
-
-  if (!hit?.comp) {
-    selectComponent(null, null, 'pick-empty');
-    return;
-  }
-
+  if (!hit?.comp) { selectComponent(null, null, 'pick-empty'); return; }
   selectComponent(hit.comp, hit.mesh, 'pick');
 }
-
 async function openTextModel(text, sourceName = 'text-model') {
   const domain = getDomain();
   if (!domain) throw new Error('No active domain registered');
-
   setViewerStatus(`Loading ${sourceName}...`, 'active');
   appLogger.info('VIEWER_TAB_OPEN_TEXT_START', { sourceName });
-
   try {
     const lowerName = String(sourceName || '').toLowerCase();
     const isDxf = lowerName.endsWith('.dxf');
     const isUxml = lowerName.endsWith('.uxml') || (lowerName.endsWith('.xml') && looksLikeUxml(text));
     let components;
-
     if (isUxml) {
-      // UXML path: AdapterGraph → CEG (+ PipeData enrichment) → generic components
       const result = uxmlToCeg(text, { name: sourceName });
       components = result.components;
       _cegGraph  = result.ceg;
       if (typeof window !== 'undefined') window.__cegGraph = _cegGraph;
       appLogger.info('VIEWER_TAB_UXML_IMPORT', { sourceName, ...result.enrichment });
     } else if (isDxf && typeof domain.parseDxfWithCeg === 'function') {
-      // DXF path: build both the component array and the CEG
       const result = domain.parseDxfWithCeg(text, appLogger);
       components = result.components;
       _cegGraph  = result.ceg;
@@ -261,7 +169,6 @@ async function openTextModel(text, sourceName = 'text-model') {
       _cegGraph  = null;
       if (typeof window !== 'undefined') window.__cegGraph = null;
     }
-
     setComponents(components);
     setViewerMode(VIEWER_UI_MODES.draft2d);
     refreshScene('file-import', { sourceName, sourceType: isUxml ? 'uxml' : (isDxf ? 'dxf' : 'text') });
@@ -275,40 +182,29 @@ async function openTextModel(text, sourceName = 'text-model') {
     throw err;
   }
 }
-
 async function openGLBFile(file) {
   if (!_sceneRenderer) throw new Error('SceneRenderer not initialized');
   if (!file) throw new Error('No GLB file provided');
-
   const url = URL.createObjectURL(file);
   setViewerStatus(`Loading ${file.name}...`, 'active');
   appLogger.info('VIEWER_TAB_OPEN_GLB_START', { sourceName: file.name });
-
   try {
     await _sceneRenderer.loadGLB(url);
     setViewerMode(VIEWER_UI_MODES.mode3d);
     setComponents([]);
     selectComponent(null, null, 'glb-import');
-
-    _lastLoadMeta = buildLoadMeta('glb-import', {
-      sourceName: file.name,
-      sourceType: 'glb',
-    });
+    _lastLoadMeta = buildLoadMeta('glb-import', { sourceName: file.name, sourceType: 'glb' });
     emit('model-loaded', _lastLoadMeta);
     setViewerStatus(`GLB loaded: ${file.name}`, 'ok');
     appLogger.info('VIEWER_TAB_OPEN_GLB_DONE', { sourceName: file.name });
   } catch (err) {
     setViewerStatus(`GLB load failed: ${file.name}`, 'error');
-    appLogger.error('VIEWER_TAB_OPEN_GLB_FAIL', {
-      sourceName: file.name,
-      message: String(err?.message || err),
-    });
+    appLogger.error('VIEWER_TAB_OPEN_GLB_FAIL', { sourceName: file.name, message: String(err?.message || err) });
     throw err;
   } finally {
     URL.revokeObjectURL(url);
   }
 }
-
 function buildViewerUiBindingsConfig() {
   return {
     store: _viewerUiStore,
@@ -324,17 +220,8 @@ function buildViewerUiBindingsConfig() {
     onLabelsVisibleChange: (visible) => _sceneRenderer?.setLabelsVisible?.(Boolean(visible)),
     onThemeChange: (theme) => _sceneRenderer?.setTheme?.(theme || 'NavisDark'),
     onExportGlb: async () => _sceneRenderer?.exportGLB?.(),
-    onExportDxf: () => {
-      if (_cegGraph) exportCegToDXF(_cegGraph, 'scene-ceg.dxf');
-      else exportToDXF(getSceneComponents(), 'scene.dxf');
-    },
-    onExportUxml: () => {
-      if (_cegGraph) {
-        exportCegToUXML(_cegGraph, 'scene.uxml');
-      } else {
-        setViewerStatus('Export UXML needs a CEG model (open a DXF or UXML first)', 'error');
-      }
-    },
+    onExportDxf: () => { if (_cegGraph) exportCegToDXF(_cegGraph, 'scene-ceg.dxf'); else exportToDXF(getSceneComponents(), 'scene.dxf'); },
+    onExportUxml: () => { if (_cegGraph) exportCegToUXML(_cegGraph, 'scene.uxml'); else setViewerStatus('Export UXML needs a CEG model (open a DXF or UXML first)', 'error'); },
     onOpenMasterDb: () => _masterDbPopup?.open?.(),
     onShowHudLineMode: () => _hudApi?.showLineMode?.(),
     onShowHudPolylineMode: () => _hudApi?.showPolylineMode?.(),
@@ -347,33 +234,17 @@ function buildViewerUiBindingsConfig() {
     onAutoTee: () => autoTeeRoute({ source: 'toolbar-auto-tee' }),
     onPanelChange: (panelKey, open) => {
       const tone = open ? 'active' : 'idle';
-      if (panelKey === 'macro') {
-        setViewerStatus(open ? 'Macro tray open' : 'Macro tray closed', tone);
-        return;
-      }
-      if (panelKey === 'inspector') {
-        setViewerStatus(open ? 'Inspector open' : 'Inspector collapsed', tone);
-        return;
-      }
-      if (panelKey === 'leftPalette') {
-        setViewerStatus(open ? 'Left tools expanded' : 'Left tools collapsed', tone);
-        return;
-      }
-      if (panelKey === 'rightViewbar') {
-        setViewerStatus(open ? 'View bar expanded' : 'View bar collapsed', tone);
-      }
+      if (panelKey === 'macro') { setViewerStatus(open ? 'Macro tray open' : 'Macro tray closed', tone); return; }
+      if (panelKey === 'inspector') { setViewerStatus(open ? 'Inspector open' : 'Inspector collapsed', tone); return; }
+      if (panelKey === 'leftPalette') { setViewerStatus(open ? 'Left tools expanded' : 'Left tools collapsed', tone); return; }
+      if (panelKey === 'rightViewbar') setViewerStatus(open ? 'View bar expanded' : 'View bar collapsed', tone);
     },
     onSelect: (componentId) => {
       if (_selectedComponentId === componentId) return;
-      _viewerUiStore?.dispatch({
-        type: VIEWER_UI_ACTIONS.setSelectedComponentId,
-        componentId: componentId || null,
-      });
+      _viewerUiStore?.dispatch({ type: VIEWER_UI_ACTIONS.setSelectedComponentId, componentId: componentId || null });
     },
   };
 }
-
-
 function getSelectedRouteRef() {
   const attrs = _selectedComponent?.attributes || {};
   return {
@@ -381,7 +252,6 @@ function getSelectedRouteRef() {
     segmentId: attrs.SEGMENT_ID || attrs['SEGMENT_ID'] || null,
   };
 }
-
 function resolveAutoBendCandidate() {
   if (!_routeEngine) return null;
   const ref = getSelectedRouteRef();
@@ -397,19 +267,12 @@ function resolveAutoBendCandidate() {
   }
   return _routeEngine.getAutoBendCandidate?.(route.id, null);
 }
-
 function autoBendRoute(meta = {}) {
   if (!_routeEngine) throw new Error('Route engine not initialized');
   const candidate = resolveAutoBendCandidate();
   if (!candidate) throw new Error('No bend conversion candidate found');
   const route = _routeEngine.getRoutes?.().find((item) => item.id === candidate.routeId) || _routeEngine.getActiveRoute?.() || null;
-  const query = {
-    component: 'ELBOW',
-    subtype: 'LR',
-    size: candidate.size || route?.spec?.size || '',
-    rating: candidate.rating || route?.spec?.rating || '',
-    angle: candidate.angle,
-  };
+  const query = { component: 'ELBOW', subtype: 'LR', size: candidate.size || route?.spec?.size || '', rating: candidate.rating || route?.spec?.rating || '', angle: candidate.angle };
   const result = _masterDbResolver?.resolveComponent?.(query) || null;
   const list = _routeEngine.autoBend({
     routeId: candidate.routeId,
@@ -425,19 +288,12 @@ function autoBendRoute(meta = {}) {
   setViewerStatus('Auto Bend converted', 'ok');
   return inserted;
 }
-
 function autoTeeRoute(meta = {}) {
   if (!_routeEngine) throw new Error('Route engine not initialized');
   const ref = getSelectedRouteRef();
   const candidate = _routeEngine.getAutoTeeCandidate?.(ref.routeId, null) || _routeEngine.getAutoTeeCandidate?.(null, null);
   if (!candidate) throw new Error('No tee conversion candidate found');
-  const query = {
-    component: 'TEE',
-    subtype: candidate.subtype || 'EQUAL',
-    size: candidate.runSize || '',
-    branchSize: candidate.branchSize || candidate.runSize || '',
-    rating: candidate.rating || '',
-  };
+  const query = { component: 'TEE', subtype: candidate.subtype || 'EQUAL', size: candidate.runSize || '', branchSize: candidate.branchSize || candidate.runSize || '', rating: candidate.rating || '' };
   const result = _masterDbResolver?.resolveComponent?.(query) || null;
   const list = _routeEngine.autoTee({
     routeId: candidate.routeId,
@@ -454,8 +310,6 @@ function autoTeeRoute(meta = {}) {
   setViewerStatus('Auto Tee converted', 'ok');
   return inserted;
 }
-
-
 function destroyViewerTab() {
   const container = byId(VIEWER_UI_IDS.canvas);
   if (container) container.removeEventListener('click', handleScenePick);
@@ -476,7 +330,6 @@ function destroyViewerTab() {
   _routeEngine = null;
   _sceneRenderer?.dispose?.();
   _sceneRenderer = null;
-
   _cegGraph = null;
   _autoFitEnabled = false;
   _knownRouteCompIds = new Set();
@@ -490,7 +343,6 @@ function destroyViewerTab() {
     window.__cegGraph     = null;
   }
 }
-
 export function getViewerShellApi() {
   return {
     get renderer() { return _sceneRenderer; },
@@ -561,16 +413,10 @@ export function getViewerShellApi() {
     destroy: destroyViewerTab,
   };
 }
-
 export function initViewerTab() {
   const container = byId(VIEWER_UI_IDS.canvas);
   const sidePanel = byId(VIEWER_UI_IDS.inspector);
-
-  if (!container) {
-    console.warn('[viewer-tab] Missing viewer canvas container');
-    return;
-  }
-
+  if (!container) { console.warn('[viewer-tab] Missing viewer canvas container'); return; }
   _sceneRenderer = new SceneRenderer(container);
   _routeEngine = createRouteEngine();
   _masterDbStore = createMasterDbStore();
@@ -582,92 +428,49 @@ export function initViewerTab() {
   _routeEngine.subscribe(() => {
     const domain = getDomain();
     if (!_sceneRenderer || !domain) return;
-
     const allDerived = _routeEngine?.getDerivedComponents?.() || [];
     const diff = diffRouteRenderSnapshot(_routeRenderSnapshot, allDerived);
-
     _routeRenderSnapshot = diff.nextSnapshot;
     _knownRouteCompIds = new Set(allDerived.map((comp) => comp.id));
-
     if (diff.changed) {
-      const result = _sceneRenderer.reconcileComponents?.(diff, domain, {
-        allComponents: getSceneComponents(),
-        autoFit: _autoFitEnabled,
-      });
-
+      const result = _sceneRenderer.reconcileComponents?.(diff, domain, { allComponents: getSceneComponents(), autoFit: _autoFitEnabled });
       if (!result) {
-        refreshScene('route-engine-reconcile-fallback', {
-          sourceName: 'route-engine',
-          sourceType: 'route',
-        });
+        refreshScene('route-engine-reconcile-fallback', { sourceName: 'route-engine', sourceType: 'route' });
         return;
       }
-
-      emit('debug:trace', {
-        scope: 'viewer',
-        event: 'ROUTE_RENDER_RECONCILE',
-        ok: true,
-        timestamp: Date.now(),
-        details: {
-          diff: summarizeRouteRenderDiff(diff),
-          result,
-        },
-      });
+      emit('debug:trace', { scope: 'viewer', event: 'ROUTE_RENDER_RECONCILE', ok: true, timestamp: Date.now(), details: { diff: summarizeRouteRenderDiff(diff), result } });
     }
-
-    _lastLoadMeta = buildLoadMeta('route-engine-reconcile', {
-      sourceName: 'route-engine',
-      sourceType: 'route',
-      reconcile: summarizeRouteRenderDiff(diff),
-    });
-
+    _lastLoadMeta = buildLoadMeta('route-engine-reconcile', { sourceName: 'route-engine', sourceType: 'route', reconcile: summarizeRouteRenderDiff(diff) });
     emit('model-loaded', _lastLoadMeta);
   });
   _exposeSceneRenderer(_sceneRenderer);
   if (sidePanel) clearPanel(sidePanel);
   setViewerStatus('Viewer ready', 'idle');
-
   container.addEventListener('click', handleScenePick);
   _viewerUiStore = createViewerUiStore({
     activeMode: VIEWER_UI_MODES.draft2d,
     lineDiagramEnabled: false,
-    panelVisibility: {
-      leftPalette: true,
-      rightViewbar: true,
-      inspector: true,
-      macro: false,
-      hud: true,
-    },
+    panelVisibility: { leftPalette: true, rightViewbar: true, inspector: true, macro: false, hud: true },
     inspectorSection: 'component',
     selectedComponentId: null,
     theme: 'DraftLight',
   });
-
   _resizeObserver = new ResizeObserver(() => _sceneRenderer?.onResize());
   _resizeObserver.observe(container);
-
-  _lastLoadMeta = buildLoadMeta('viewer-init', {
-    sourceName: 'viewer-init',
-    sourceType: 'shell',
-  });
+  _lastLoadMeta = buildLoadMeta('viewer-init', { sourceName: 'viewer-init', sourceType: 'shell' });
   emit('model-loaded', _lastLoadMeta);
-
   if (typeof window !== 'undefined') {
     window.__viewerShell = getViewerShellApi();
     window.__viewerTab = getViewerShellApi();
     window.__routeEngine = _routeEngine;
     window.__masterDbStore = _masterDbStore;
   }
-
   try {
     _hudApi = createHudOrchestrator({ container, shellApi: getViewerShellApi() });
     if (typeof window !== 'undefined') window.__hudApi = _hudApi;
   } catch (err) {
-    appLogger.warn('VIEWER_TAB_HUD_INIT_WARN', {
-      message: String(err?.message || err),
-    });
+    appLogger.warn('VIEWER_TAB_HUD_INIT_WARN', { message: String(err?.message || err) });
   }
-
   try {
     _macroTerminalApi = initMacroTerminal({
       container: byId(VIEWER_UI_IDS.macroTray) || container,
@@ -681,42 +484,31 @@ export function initViewerTab() {
     });
     if (typeof window !== 'undefined') window.__macroTerminal = _macroTerminalApi;
   } catch (err) {
-    appLogger.warn('VIEWER_TAB_MACRO_INIT_WARN', {
-      message: String(err?.message || err),
-    });
+    appLogger.warn('VIEWER_TAB_MACRO_INIT_WARN', { message: String(err?.message || err) });
   }
-
   try {
     _viewerUiBindings = initViewerUiBindings(buildViewerUiBindingsConfig());
   } catch (err) {
-    appLogger.warn('VIEWER_TAB_UI_BINDINGS_INIT_WARN', {
-      message: String(err?.message || err),
-    });
+    appLogger.warn('VIEWER_TAB_UI_BINDINGS_INIT_WARN', { message: String(err?.message || err) });
   }
-
   const themeSelect = byId(VIEWER_UI_IDS.theme);
   if (themeSelect?.value) {
     _sceneRenderer?.setTheme?.(themeSelect.value);
     _viewerUiStore?.dispatch({ type: VIEWER_UI_ACTIONS.setTheme, theme: themeSelect.value });
   }
   setViewerMode(VIEWER_UI_MODES.draft2d);
-
-  // ⟳ button: toggle auto-fit behavior
   const syncBtn = byId(VIEWER_UI_IDS.incrementalSync);
   if (syncBtn) {
     syncBtn.title = _autoFitEnabled
-        ? 'Auto-Fit ON: View will automatically zoom to fit when geometry updates'
-        : 'Auto-Fit OFF: View will not zoom when geometry updates';
+      ? 'Auto-Fit ON: View will automatically zoom to fit when geometry updates'
+      : 'Auto-Fit OFF: View will not zoom when geometry updates';
     syncBtn.addEventListener('click', () => {
       _autoFitEnabled = !_autoFitEnabled;
       syncBtn.classList.toggle('active', _autoFitEnabled);
       syncBtn.title = _autoFitEnabled
         ? 'Auto-Fit ON: View will automatically zoom to fit when geometry updates'
         : 'Auto-Fit OFF: View will not zoom when geometry updates';
-      setViewerStatus(
-        _autoFitEnabled ? 'Auto-Fit enabled' : 'Auto-Fit disabled',
-        _autoFitEnabled ? 'ok' : 'idle'
-      );
+      setViewerStatus(_autoFitEnabled ? 'Auto-Fit enabled' : 'Auto-Fit disabled', _autoFitEnabled ? 'ok' : 'idle');
     });
   }
 }
