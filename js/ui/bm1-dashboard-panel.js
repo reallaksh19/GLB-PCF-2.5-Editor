@@ -24,9 +24,28 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
     },
   };
 
+  const setCollapsed = (collapsed) => {
+    panel.classList.toggle('collapsed', Boolean(collapsed));
+    panel.querySelector('[data-bm1-panel-toggle]')?.setAttribute('aria-expanded', String(!collapsed));
+    setStatus?.(collapsed ? 'idle' : 'active', collapsed ? 'BM1 dashboard collapsed' : 'BM1 dashboard expanded');
+  };
+
   const onClick = (event) => {
+    const closeButton = event.target?.closest?.('[data-bm1-panel-close]');
+    if (closeButton) {
+      panel.classList.add('hidden');
+      setStatus?.('idle', 'BM1 dashboard hidden');
+      return;
+    }
+
+    const toggleButton = event.target?.closest?.('[data-bm1-panel-toggle]');
+    if (toggleButton) {
+      setCollapsed(!panel.classList.contains('collapsed'));
+      return;
+    }
+
     const button = event.target?.closest?.('[data-bm1-action]');
-    if (!button) return;
+    if (!button || panel.classList.contains('collapsed')) return;
     const actionId = button.getAttribute('data-bm1-action');
     try {
       const result = executeBm1UiHudAction(actionId, context);
@@ -43,6 +62,10 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
   return {
     panel,
     surface,
+    collapse: () => setCollapsed(true),
+    expand: () => setCollapsed(false),
+    show: () => panel.classList.remove('hidden'),
+    hide: () => panel.classList.add('hidden'),
     destroy() {
       panel.removeEventListener('click', onClick);
       panel.remove();
@@ -73,6 +96,13 @@ function ensureBm1DashboardStyles() {
       font-family: var(--font-code, 'JetBrains Mono', monospace);
       font-size: 11px;
     }
+    .${BM1_DASHBOARD_PANEL_CLASS}.hidden { display: none; }
+    .${BM1_DASHBOARD_PANEL_CLASS}.collapsed { width: 260px; max-height: 46px; overflow: hidden; }
+    .${BM1_DASHBOARD_PANEL_CLASS}.collapsed .hifi-bm1-body { display: none; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-header { display: flex; align-items: start; gap: 8px; margin-bottom: 8px; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-title { flex: 1; min-width: 0; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-panel-controls { display: inline-flex; gap: 4px; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-panel-control { width: 22px; height: 20px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #1f2937; cursor: pointer; font-size: 11px; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-section { margin-bottom: 10px; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-section-title { color: #92400e; font-weight: 800; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-value { color: #111827; white-space: pre-wrap; }
@@ -86,14 +116,22 @@ function ensureBm1DashboardStyles() {
 
 function renderSurface(surface) {
   return `
-    <div class="panel-section">
-      <div class="panel-section-title">${escapeHtml(surface.title)}</div>
-      <div class="panel-value">${escapeHtml(surface.version)} · ${escapeHtml(surface.mode)}</div>
+    <div class="hifi-bm1-header">
+      <div class="hifi-bm1-title">
+        <div class="panel-section-title">${escapeHtml(surface.title)}</div>
+        <div class="panel-value">${escapeHtml(surface.version)} · ${escapeHtml(surface.mode)}</div>
+      </div>
+      <div class="hifi-bm1-panel-controls">
+        <button class="hifi-bm1-panel-control" data-bm1-panel-toggle aria-expanded="true" title="Collapse/expand BM1 dashboard">–</button>
+        <button class="hifi-bm1-panel-control" data-bm1-panel-close title="Hide BM1 dashboard">×</button>
+      </div>
     </div>
-    ${surface.cards.map(renderCard).join('')}
-    <div class="panel-section">
-      <div class="panel-section-title">BM1 Result</div>
-      <pre class="panel-value" data-bm1-output>Ready</pre>
+    <div class="hifi-bm1-body">
+      ${surface.cards.map(renderCard).join('')}
+      <div class="panel-section">
+        <div class="panel-section-title">BM1 Result</div>
+        <pre class="panel-value" data-bm1-output>Ready</pre>
+      </div>
     </div>
   `;
 }
