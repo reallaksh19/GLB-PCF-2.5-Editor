@@ -2,7 +2,6 @@
   "maxLines": 600,
   "policy": "No new JavaScript module may exceed maxLines. Baseline entries are existing technical debt and may not grow.",
   "oversized": {
-    "editor/route-engine.js": 1337,
-    "hud/hud-orchestrator.js": 959
+    "editor/route-engine.js": 1337
   }
 }
