@@ -8,7 +8,7 @@ import {
 
 const CSV_FIXTURE = `id,type,name,nps,1x,1y,1z,2x,2y,2z,x,y,z
 P1,PIPE,Pipe 1,4,0,0,0,1000,0,0,,,
-S1,SUPPORT,Guide support,,,,,,,500,0,0
+S1,SUPPORT,Guide support,,,,,,,,500,0,0
 `;
 
 function assertWorkbenchCounts(model) {
