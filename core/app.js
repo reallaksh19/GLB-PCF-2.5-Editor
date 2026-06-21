@@ -69,6 +69,10 @@ function initTheme() {
   });
 }
 
+function syncBm1DashboardToggle(visible) {
+  document.getElementById(BM1_DASHBOARD_TOGGLE_ID)?.classList.toggle('active', Boolean(visible));
+}
+
 function initBm1Dashboard() {
   const host = document.getElementById('hifi-viewer-stage');
   const shellApi = window.__viewerShell || null;
@@ -77,9 +81,11 @@ function initBm1Dashboard() {
     host,
     shellApi,
     setStatus: (tone, text) => shellApi?.setViewerStatus?.(text, tone),
+    onVisibilityChange: (visible) => syncBm1DashboardToggle(visible),
   });
   if (_bm1DashboardApi && typeof window !== 'undefined') window.__bm1Dashboard = _bm1DashboardApi;
   initBm1DashboardToolbarToggle(shellApi);
+  syncBm1DashboardToggle(!(_bm1DashboardApi?.isHidden?.()));
 }
 
 function initBm1DashboardToolbarToggle(shellApi) {
@@ -94,7 +100,7 @@ function initBm1DashboardToolbarToggle(shellApi) {
   button.title = 'Show or hide BM1 benchmark dashboard';
   button.addEventListener('click', () => {
     const visible = _bm1DashboardApi?.toggle?.();
-    button.classList.toggle('active', Boolean(visible));
+    syncBm1DashboardToggle(visible);
     shellApi?.setViewerStatus?.(visible ? 'BM1 dashboard shown' : 'BM1 dashboard hidden', visible ? 'active' : 'idle');
   });
   if (anchor?.parentNode === toolbar) anchor.insertAdjacentElement('afterend', button);
