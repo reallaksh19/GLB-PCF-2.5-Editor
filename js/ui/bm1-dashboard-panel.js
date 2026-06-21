@@ -7,6 +7,7 @@ export const BM1_DASHBOARD_PANEL_CLASS = 'hifi-bm1-dashboard-panel';
 
 export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
   if (!host || typeof host.appendChild !== 'function') return null;
+  ensureBm1DashboardStyles();
   const surface = createBm1UiHudSurface();
   const panel = document.createElement('section');
   panel.className = BM1_DASHBOARD_PANEL_CLASS;
@@ -47,6 +48,40 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
       panel.remove();
     },
   };
+}
+
+function ensureBm1DashboardStyles() {
+  if (document.getElementById('hifi-bm1-dashboard-style')) return;
+  const style = document.createElement('style');
+  style.id = 'hifi-bm1-dashboard-style';
+  style.textContent = `
+    .${BM1_DASHBOARD_PANEL_CLASS} {
+      position: absolute;
+      left: 12px;
+      top: 48px;
+      z-index: 22;
+      width: min(360px, calc(100% - 24px));
+      max-height: calc(100% - 92px);
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid rgba(15, 23, 42, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #1f2937;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+      backdrop-filter: blur(8px);
+      font-family: var(--font-code, 'JetBrains Mono', monospace);
+      font-size: 11px;
+    }
+    .${BM1_DASHBOARD_PANEL_CLASS} .panel-section { margin-bottom: 10px; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .panel-section-title { color: #92400e; font-weight: 800; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .panel-value { color: #111827; white-space: pre-wrap; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .panel-label { color: #64748b; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-btn { height: 22px; font-size: 10px; color: #1f2937; background: #f8fafc; }
+    .${BM1_DASHBOARD_PANEL_CLASS} pre { max-height: 160px; overflow: auto; margin: 4px 0 0; }
+  `;
+  document.head.appendChild(style);
 }
 
 function renderSurface(surface) {
