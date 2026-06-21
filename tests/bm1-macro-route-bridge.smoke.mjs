@@ -6,6 +6,7 @@ import { executeMacro, lintMacroScript, listMacroCommands } from '../macro/macro
 import './bm1-break-support.smoke.mjs';
 import './bm1-flange-pair.smoke.mjs';
 import './bm1-csv-replay.smoke.mjs';
+import './bm1-ui-hud-command-parity.smoke.mjs';
 
 function componentTypes(routeEngine) {
   return (routeEngine.getState().model?.components || []).map((component) => component.type).sort();
