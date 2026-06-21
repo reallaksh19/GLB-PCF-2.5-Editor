@@ -4,6 +4,7 @@ import { executeMacro } from '../../macro/macro-engine.js';
 
 export const BM1_DASHBOARD_PANEL_VERSION = 'bm1-dashboard-panel/v1';
 export const BM1_DASHBOARD_PANEL_CLASS = 'hifi-bm1-dashboard-panel';
+export const BM1_DASHBOARD_TITLE_ID = 'hifi-bm1-dashboard-title';
 
 export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityChange } = {}) {
   if (!host || typeof host.appendChild !== 'function') return null;
@@ -12,6 +13,9 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
   const panel = document.createElement('section');
   panel.className = BM1_DASHBOARD_PANEL_CLASS;
   panel.dataset.version = BM1_DASHBOARD_PANEL_VERSION;
+  panel.setAttribute('role', 'region');
+  panel.setAttribute('aria-labelledby', BM1_DASHBOARD_TITLE_ID);
+  panel.setAttribute('tabindex', '-1');
   panel.innerHTML = renderSurface(surface);
   host.appendChild(panel);
 
@@ -59,7 +63,14 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
     }
   };
 
+  const onKeyDown = (event) => {
+    if (event.key !== 'Escape' || isHidden()) return;
+    event.preventDefault?.();
+    hide();
+  };
+
   panel.addEventListener('click', onClick);
+  panel.addEventListener('keydown', onKeyDown);
   notifyVisibility();
 
   return {
@@ -73,6 +84,7 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
     isHidden,
     destroy() {
       panel.removeEventListener('click', onClick);
+      panel.removeEventListener('keydown', onKeyDown);
       panel.remove();
     },
   };
@@ -123,19 +135,19 @@ function renderSurface(surface) {
   return `
     <div class="hifi-bm1-header">
       <div class="hifi-bm1-title">
-        <div class="panel-section-title">${escapeHtml(surface.title)}</div>
+        <div id="${BM1_DASHBOARD_TITLE_ID}" class="panel-section-title">${escapeHtml(surface.title)}</div>
         <div class="panel-value">${escapeHtml(surface.version)} · ${escapeHtml(surface.mode)}</div>
       </div>
       <div class="hifi-bm1-panel-controls">
-        <button class="hifi-bm1-panel-control" data-bm1-panel-toggle aria-expanded="true" title="Collapse/expand BM1 dashboard">–</button>
-        <button class="hifi-bm1-panel-control" data-bm1-panel-close title="Hide BM1 dashboard">×</button>
+        <button class="hifi-bm1-panel-control" data-bm1-panel-toggle aria-expanded="true" aria-label="Collapse or expand BM1 dashboard" title="Collapse/expand BM1 dashboard">–</button>
+        <button class="hifi-bm1-panel-control" data-bm1-panel-close aria-label="Hide BM1 dashboard" title="Hide BM1 dashboard">×</button>
       </div>
     </div>
     <div class="hifi-bm1-body">
       ${surface.cards.map(renderCard).join('')}
       <div class="panel-section">
         <div class="panel-section-title">BM1 Result</div>
-        <pre class="panel-value" data-bm1-output>Ready</pre>
+        <pre class="panel-value" data-bm1-output aria-live="polite">Ready</pre>
       </div>
     </div>
   `;
