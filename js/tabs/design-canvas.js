@@ -1,26 +1,7 @@
-/**
- * js/tabs/design-canvas.js
- *
- * Figma-style design canvas: infinite pan/zoom viewport, sections,
- * artboards (reorderable, deletable, focus-overlay), inline rename,
- * sticky notes.
- *
- * Adapted from design-canvas.jsx (2.5 D design Tool UI upgrade).
- * JSX converted to React.createElement so no build step is required.
- * State persists to localStorage (viewport) and window.omelette bridge
- * (section/artboard order). The omelette bridge is optional; without
- * it the canvas still functions — state just won't persist across loads.
- *
- * Exports:
- *   DesignCanvas, DCSection, DCArtboard, DCPostIt
- */
-
 import React     from 'react';
 import ReactDOM  from 'react-dom';
 
 const e = React.createElement;
-
-// ── Design token palette ──────────────────────────────────────────────────
 const DC = {
   bg:        '#f0eee9',
   grid:      'rgba(0,0,0,0.06)',
@@ -32,7 +13,6 @@ const DC = {
   font:      '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
 };
 
-// ── One-time CSS injection ────────────────────────────────────────────────
 if (typeof document !== 'undefined' && !document.getElementById('dc-styles')) {
   const s = document.createElement('style');
   s.id = 'dc-styles';
@@ -68,11 +48,9 @@ if (typeof document !== 'undefined' && !document.getElementById('dc-styles')) {
   document.head.appendChild(s);
 }
 
-// ── Context ───────────────────────────────────────────────────────────────
 const DCCtx = React.createContext(null);
 const DC_STATE_FILE = 'design-canvas.state.json';
 
-// ── DesignCanvas ──────────────────────────────────────────────────────────
 export function DesignCanvas({ children, minScale, maxScale, style }) {
   const [state,    setState]  = React.useState({ sections: {}, focus: null });
   const [ready,    setReady]  = React.useState(false);
@@ -106,7 +84,6 @@ export function DesignCanvas({ children, minScale, maxScale, style }) {
     return () => clearTimeout(t);
   }, [state.sections]);
 
-  // Build section/artboard registries from children
   const registry    = {};
   const sectionMeta = {};
   const sectionOrder = [];
@@ -169,7 +146,6 @@ export function DesignCanvas({ children, minScale, maxScale, style }) {
   );
 }
 
-// ── DCViewport ────────────────────────────────────────────────────────────
 function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   const vpRef    = React.useRef(null);
   const worldRef = React.useRef(null);
@@ -213,7 +189,6 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   React.useEffect(() => {
     const vp = vpRef.current;
     if (!vp) return;
-
     const zoomAt = (cx, cy, factor) => {
       const r  = vp.getBoundingClientRect();
       const px = cx - r.left, py = cy - r.top;
@@ -223,13 +198,10 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
       t.x = px - (px - t.x) * k; t.y = py - (py - t.y) * k; t.scale = next;
       apply();
     };
-
     const isMouseWheel = ev =>
       ev.deltaMode !== 0 || (ev.deltaX === 0 && Number.isInteger(ev.deltaY) && Math.abs(ev.deltaY) >= 40);
-
     let isGesturing = false;
     let gsBase = 1;
-
     const onWheel = ev => {
       ev.preventDefault();
       if (isGesturing) return;
@@ -240,7 +212,6 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
     const onGestureStart  = ev => { ev.preventDefault(); isGesturing = true; gsBase = tf.current.scale; };
     const onGestureChange = ev => { ev.preventDefault(); zoomAt(ev.clientX, ev.clientY, (gsBase * ev.scale) / tf.current.scale); };
     const onGestureEnd    = ev => { ev.preventDefault(); isGesturing = false; };
-
     let drag = null;
     const onPointerDown = ev => {
       const onBg = !ev.target.closest('[data-dc-slot], .dc-editable');
@@ -260,7 +231,6 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
       if (!drag || ev.pointerId !== drag.id) return;
       vp.releasePointerCapture(ev.pointerId); drag = null; vp.style.cursor = '';
     };
-
     const onHostMsg = ev => {
       const d = ev.data;
       if (d && d.type === '__dc_set_zoom' && typeof d.scale === 'number') {
@@ -272,12 +242,10 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
         apply();
       }
     };
-
     window.addEventListener('message', onHostMsg);
     window.parent.postMessage({ type: '__dc_present' }, '*');
     lastPostedScale.current = undefined;
     apply();
-
     vp.addEventListener('wheel',          onWheel,          { passive: false });
     vp.addEventListener('gesturestart',   onGestureStart,   { passive: false });
     vp.addEventListener('gesturechange',  onGestureChange,  { passive: false });
@@ -300,7 +268,6 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   }, [apply, minScale, maxScale]);
 
   const gridSvg = `url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M120 0H0v120' fill='none' stroke='${encodeURIComponent(DC.grid)}' stroke-width='1'/%3E%3C/svg%3E")`;
-
   return e('div', {
     ref: vpRef,
     className: 'design-canvas',
@@ -326,7 +293,6 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
   );
 }
 
-// ── DCSection ─────────────────────────────────────────────────────────────
 export function DCSection({ id, title, subtitle, children, gap = 48 }) {
   const ctx = React.useContext(DCCtx);
   const sid = id ?? title;
@@ -334,19 +300,15 @@ export function DCSection({ id, title, subtitle, children, gap = 48 }) {
   const artboards = all.filter(c => c && c.type === DCArtboard);
   const rest      = all.filter(c => !(c && c.type === DCArtboard));
   const sec       = (ctx && sid && ctx.section(sid)) || {};
-
   const allIds = artboards.map(a => a.props.id ?? a.props.label).filter(Boolean);
   const srcKey = allIds.join('\x1f');
   const hidden = sec.srcKey === srcKey ? (sec.hidden || []) : [];
   const srcOrder = allIds.filter(k => !hidden.includes(k));
-
   const order = React.useMemo(() => {
     const kept = (sec.order || []).filter(k => srcOrder.includes(k));
     return [...kept, ...srcOrder.filter(k => !kept.includes(k))];
   }, [sec.order, srcOrder.join('|')]);
-
   const byId = Object.fromEntries(artboards.map(a => [a.props.id ?? a.props.label, a]));
-
   return e('div', { 'data-dc-section': sid, style: { marginBottom: 'calc(80px * var(--dc-inv-zoom, 1))', position: 'relative' } },
     e('div', { style: { padding: '0 60px' } },
       e('div', { className: 'dc-sectionhead', style: { paddingBottom: 36 } },
@@ -377,10 +339,8 @@ export function DCSection({ id, title, subtitle, children, gap = 48 }) {
   );
 }
 
-// ── DCArtboard — marker only; rendered by DCArtboardFrame ─────────────────
 export function DCArtboard() { return null; }
 
-// ── DCArtboardFrame ───────────────────────────────────────────────────────
 function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorder, onFocus, onDelete }) {
   const { id: rawId, label: rawLabel, width = 260, height = 480, children, style = {} } = artboard.props;
   const id     = rawId ?? rawLabel;
@@ -406,7 +366,6 @@ function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorde
     const startX    = ev.clientX;
     let liveOrder   = order.slice();
     me.classList.add('dc-dragging');
-
     const layout = () => {
       for (const h of homes) {
         if (h.id === id) continue;
@@ -444,7 +403,6 @@ function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorde
     document.addEventListener('pointerup', up);
   };
 
-  // SVG icons (inline to avoid asset loading)
   const GripSvg = e('svg', { width: 9, height: 13, viewBox: '0 0 9 13', fill: 'currentColor' },
     e('circle', { cx: 2, cy: 2, r: 1.1 }), e('circle', { cx: 7, cy: 2, r: 1.1 }),
     e('circle', { cx: 2, cy: 6.5, r: 1.1 }), e('circle', { cx: 7, cy: 6.5, r: 1.1 }),
@@ -487,7 +445,6 @@ function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorde
   );
 }
 
-// ── DCEditable — inline rename ─────────────────────────────────────────────
 function DCEditable({ value, onChange, style, tag = 'span', onClick }) {
   return e(tag, {
     className: 'dc-editable',
@@ -502,7 +459,6 @@ function DCEditable({ value, onChange, style, tag = 'span', onClick }) {
   });
 }
 
-// ── DCFocusOverlay ─────────────────────────────────────────────────────────
 function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
   const ctx = React.useContext(DCCtx);
   const { sectionId, artboard } = entry;
@@ -512,7 +468,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
   const aid    = artboard.props.id ?? artboard.props.label;
   const idx    = peers.indexOf(aid);
   const secIdx = sectionOrder.indexOf(sectionId);
-
   const go = d => { const n = peers[(idx + d + peers.length) % peers.length]; if (n) ctx.setFocus(`${sectionId}/${n}`); };
   const goSection = d => {
     const n = sectionOrder.length;
@@ -543,7 +498,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
   }, []);
   const scale   = Math.max(0.1, Math.min((vp.w - 200) / width, (vp.h - 260) / height, 2));
   const [ddOpen, setDd] = React.useState(false);
-
   const Arrow = ({ dir, onClick: oc }) =>
     e('button', {
       onClick: ev => { ev.stopPropagation(); oc(); },
@@ -562,7 +516,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
       onWheel: ev => ev.preventDefault(),
       style: { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(24,20,16,.6)', backdropFilter: 'blur(14px)', fontFamily: DC.font, color: '#fff' },
     },
-      // Top bar
       e('div', {
         onClick: ev => ev.stopPropagation(),
         style: { position: 'absolute', top: 0, left: 0, right: 0, height: 72, display: 'flex', alignItems: 'flex-start', padding: '16px 20px 0', gap: 16 },
@@ -600,7 +553,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
           style: { border: 'none', background: 'transparent', color: 'rgba(255,255,255,.7)', width: 32, height: 32, borderRadius: 16, fontSize: 20, cursor: 'pointer', lineHeight: 1, transition: 'background .12s' },
         }, '×')
       ),
-      // Centered card
       e('div', {
         style: { position: 'absolute', top: 64, bottom: 56, left: 100, right: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 },
       },
@@ -619,7 +571,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
       ),
       e(Arrow, { dir: 'left',  onClick: () => go(-1) }),
       e(Arrow, { dir: 'right', onClick: () => go(1)  }),
-      // Dot navigation
       e('div', {
         onClick: ev => ev.stopPropagation(),
         style: { position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 8 },
@@ -635,7 +586,6 @@ function DCFocusOverlay({ entry, sectionMeta, sectionOrder }) {
   );
 }
 
-// ── DCPostIt — absolute-positioned sticky note ────────────────────────────
 export function DCPostIt({ children, top, left, right, bottom, rotate = -2, width = 180 }) {
   return e('div', {
     style: {
