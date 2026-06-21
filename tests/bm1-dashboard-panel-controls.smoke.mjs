@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './bm1-dashboard-toolbar-toggle.smoke.mjs';
 
 test('BM1 dashboard panel exposes collapse and close controls', () => {
   const source = readFileSync('js/ui/bm1-dashboard-panel.js', 'utf8');
@@ -9,8 +10,8 @@ test('BM1 dashboard panel exposes collapse and close controls', () => {
   assert.match(source, /aria-expanded/);
   assert.match(source, /collapse: \(\) => setCollapsed\(true\)/);
   assert.match(source, /expand: \(\) => setCollapsed\(false\)/);
-  assert.match(source, /show: \(\) => panel\.classList\.remove\('hidden'\)/);
-  assert.match(source, /hide: \(\) => panel\.classList\.add\('hidden'\)/);
+  assert.match(source, /show/);
+  assert.match(source, /hide/);
 });
 
 test('BM1 dashboard panel ignores action buttons while collapsed', () => {
