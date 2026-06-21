@@ -6,7 +6,6 @@
     "hud/hud-orchestrator.js": 959,
     "macro/macro-commands.js": 911,
     "macro/macro-terminal.js": 851,
-    "js/renderer/scene-renderer.js": 748,
-    "tools/gen-benchmark-dxf.js": 726
+    "js/renderer/scene-renderer.js": 748
   }
 }
