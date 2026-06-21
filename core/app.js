@@ -9,6 +9,7 @@ import { capabilities } from '../js/capabilities/capability-registry.js';
 import { domain as pipingDomain } from '../domains/piping/index.js';
 import { initViewerTab } from '../js/tabs/viewer-tab.js';
 import { initDebugTab } from '../js/tabs/debug-tab.js';
+import { initBm1DashboardPanel } from '../js/ui/bm1-dashboard-panel.js';
 import { TAB_IDS, PANEL_IDS } from '../js/ui/viewer-ui-contract.js';
 
 window.capabilities = capabilities;
@@ -17,6 +18,7 @@ const TABS = ['viewer', 'debug', 'design'];
 
 let _activeTab = null;
 let _destroyFn = null;
+let _bm1DashboardApi = null;
 
 function switchTab(target) {
   if (target === 'design') return;
@@ -66,6 +68,18 @@ function initTheme() {
   });
 }
 
+function initBm1Dashboard() {
+  const host = document.getElementById('hifi-viewer-stage');
+  const shellApi = window.__viewerShell || null;
+  _bm1DashboardApi?.destroy?.();
+  _bm1DashboardApi = initBm1DashboardPanel({
+    host,
+    shellApi,
+    setStatus: (tone, text) => shellApi?.setViewerStatus?.(text, tone),
+  });
+  if (_bm1DashboardApi && typeof window !== 'undefined') window.__bm1Dashboard = _bm1DashboardApi;
+}
+
 async function boot() {
   try {
     if (typeof window !== 'undefined' && window.__GLB_PCF_DEV__) {
@@ -80,6 +94,7 @@ async function boot() {
     switchTab('viewer');
 
     initViewerTab();
+    initBm1Dashboard();
     initDebugTab();
 
     appLogger.info('APP_BOOT_COMPLETE');
