@@ -46,6 +46,9 @@ jobs:
       - name: Gate PCD Workbench model contract
         run: node tests/pcd-workbench-model-contract.smoke.mjs
 
+      - name: Gate PCD graph validation contract
+        run: node tests/pcd-graph-validation-contract.smoke.mjs
+
       - name: Gate geometry view
         run: npm run test:geometry-view
 
