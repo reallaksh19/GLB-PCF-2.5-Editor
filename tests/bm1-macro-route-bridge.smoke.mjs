@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { BM1_MACRO_ROUTE_FIXTURE } from '../benchmarks/bm1-macro-route.fixture.js';
 import { createRouteEngine } from '../editor/route-engine.js';
 import { executeMacro, lintMacroScript, listMacroCommands } from '../macro/macro-engine.js';
+import './bm1-break-support.smoke.mjs';
 
 function componentTypes(routeEngine) {
   return (routeEngine.getState().model?.components || []).map((component) => component.type).sort();
