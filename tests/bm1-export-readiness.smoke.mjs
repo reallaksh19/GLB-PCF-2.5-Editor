@@ -7,6 +7,7 @@ import {
   assertBm1ExportReadiness,
   createBm1ExportReadinessReport,
 } from '../benchmarks/bm1-export-readiness-report.js';
+import './bm1-real-port-prerequisites.smoke.mjs';
 
 test('BM1 export readiness report classifies centerline export targets', () => {
   const report = createBm1ExportReadinessReport();
