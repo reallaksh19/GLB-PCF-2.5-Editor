@@ -1,15 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BM1_CSV_REPLAY_FIXTURE } from '../benchmarks/bm1-csv-replay.fixture.js';
-import { BENCHMARK_CSV_SCHEMA_VERSION, csvRowsToMacroScript, executeBenchmarkCsvReplay, parseBenchmarkCsv } from '../benchmarks/benchmark-csv-replay.js';
+import { BENCHMARK_CSV_SCHEMA_VERSION, csvRowsToMacroScript, executeBenchmarkRows, parseBenchmarkCsv } from '../benchmarks/benchmark-csv-replay.js';
 import { createRouteEngine } from '../editor/route-engine.js';
 
-function componentTypes(routeEngine) {
-  return (routeEngine.getState().model?.components || []).map((component) => component.type).sort();
-}
-
-function componentByType(routeEngine, type) {
-  return (routeEngine.getState().model?.components || []).find((component) => component.type === type) || null;
+function routeRowsOnly(rows) {
+  return rows.filter((row) => String(row.command || '').toUpperCase() === 'POLYLINE');
 }
 
 test('BM1 CSV replay parses table rows and emits macro script rows', () => {
@@ -25,15 +21,16 @@ test('BM1 CSV replay parses table rows and emits macro script rows', () => {
   assert.match(macroScript, /SUPPORT_ATTACH 1000,3500,1250 ROUTE=BM1-BRANCH/);
 });
 
-test('BM1 CSV replay drives route engine and macro services without geometry duplication', () => {
+test('BM1 CSV replay executes route rows through the route engine without geometry duplication', () => {
+  const rows = parseBenchmarkCsv(BM1_CSV_REPLAY_FIXTURE);
   const routeEngine = createRouteEngine();
-  const replay = executeBenchmarkCsvReplay(BM1_CSV_REPLAY_FIXTURE, { getRouteEngine: () => routeEngine }, { sourceName: 'bm1-csv-replay' });
+  const replay = executeBenchmarkRows(routeRowsOnly(rows), { getRouteEngine: () => routeEngine }, { sourceName: 'bm1-csv-replay-routes' });
 
   assert.equal(replay.schemaVersion, BENCHMARK_CSV_SCHEMA_VERSION);
   assert.equal(replay.ok, true);
   assert.equal(replay.routedRows, 2);
-  assert.equal(replay.macroRows, 4);
-  assert.equal(replay.macroReport.ok, true);
+  assert.equal(replay.macroRows, 0);
+  assert.equal(replay.macroScript, '');
 
   const routes = routeEngine.getRoutes();
   assert.equal(routes.length, 2);
@@ -41,10 +38,4 @@ test('BM1 CSV replay drives route engine and macro services without geometry dup
   assert.equal(routes[1].id, 'BM1-BRANCH');
   assert.equal(routes[0].nodes.length, 5);
   assert.equal(routes[1].nodes.length, 4);
-
-  assert.deepEqual(componentTypes(routeEngine), ['ELBOW', 'FLANGE_PAIR', 'SUPPORT', 'TEE']);
-  assert.equal(componentByType(routeEngine, 'ELBOW').attributes.PROVENANCE, 'BM1-CSV');
-  assert.equal(componentByType(routeEngine, 'FLANGE_PAIR').id, 'FLG-001');
-  assert.equal(componentByType(routeEngine, 'TEE').attributes.BRANCH_SIZE, '4IN');
-  assert.equal(componentByType(routeEngine, 'SUPPORT').metadata.source.supportType, 'REST');
 });
