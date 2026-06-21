@@ -11,16 +11,31 @@ export const BENCHMARK_PCD_DIAGNOSTIC_CODES = Object.freeze({
 export function collectBenchmarkPcdDiagnostics(canonical, datasets = PHASE4_DATASETS) {
   const assets = createLookupAssets(datasets);
   const targets = collectLookupTargets(canonical);
-  const diagnostics = [];
-  const resolved = [];
+  const lookupResults = targets.map((target) => lookupTarget(target, assets));
+  const diagnostics = lookupResults.flatMap((result) => result.diagnostic ? [result.diagnostic] : []);
+  const resolved = lookupResults.flatMap((result) => result.resolved ? [result.resolved] : []);
 
-  for (const target of targets) {
-    const hit = lookupComponentExact(target.key, assets, { filters: target.query });
-    if (hit.status === LOOKUP_STATUS.FOUND) {
-      resolved.push({ targetId: target.id, kind: target.kind, status: hit.status, matchKey: hit.id, dataStatus: hit.dataStatus ?? null, provenance: hit.provenance ?? null });
-      continue;
-    }
-    diagnostics.push({
+  return {
+    diagnostics,
+    resolved,
+    summary: {
+      lookupCount: targets.length,
+      resolvedCount: resolved.length,
+      missingCount: diagnostics.length,
+      catalogComplete: diagnostics.length === 0,
+    },
+  };
+}
+
+function lookupTarget(target, assets) {
+  const hit = lookupComponentExact(target.key, assets, { filters: target.query });
+  if (hit.status === LOOKUP_STATUS.FOUND) {
+    return {
+      resolved: { targetId: target.id, kind: target.kind, status: hit.status, matchKey: hit.id, dataStatus: hit.dataStatus ?? null, provenance: hit.provenance ?? null },
+    };
+  }
+  return {
+    diagnostic: {
       severity: 'WARNING',
       code: BENCHMARK_PCD_DIAGNOSTIC_CODES.catalogRowMissing,
       message: `${target.label} not found in current PCD dataset.`,
@@ -31,17 +46,6 @@ export function collectBenchmarkPcdDiagnostics(canonical, datasets = PHASE4_DATA
       lookupStatus: hit.status,
       pcdDiagnostics: hit.diagnostics || [],
       noFallbackPolicy: hit.noFallbackPolicy || assets.searchIndex.noFallbackPolicy,
-    });
-  }
-
-  return {
-    diagnostics,
-    resolved,
-    summary: {
-      lookupCount: targets.length,
-      resolvedCount: resolved.length,
-      missingCount: diagnostics.length,
-      catalogComplete: diagnostics.length === 0,
     },
   };
 }
