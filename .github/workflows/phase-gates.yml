@@ -52,6 +52,9 @@ jobs:
       - name: Gate BM1 benchmark
         run: npm run test:bm1-benchmark
 
+      - name: Gate BM1 pipe-list normalization
+        run: npm run test:bm1-pipe-list
+
       - name: Gate Phase 0 parity
         run: npm run test:phase0-parity
 
