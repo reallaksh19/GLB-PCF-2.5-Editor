@@ -49,6 +49,9 @@ jobs:
       - name: Gate PCD graph validation contract
         run: npm run test:pcd-graph-validation-contract
 
+      - name: Gate BM1 benchmark
+        run: npm run test:bm1-benchmark
+
       - name: Gate Phase 0 parity
         run: npm run test:phase0-parity
 
