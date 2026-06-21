@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './bm1-dashboard-panel-controls.smoke.mjs';
 
 test('BM1 UI panel renderer dispatches through BM1 contract and macro engine', () => {
   const source = readFileSync('js/ui/bm1-dashboard-panel.js', 'utf8');
