@@ -39,13 +39,16 @@ function autoFit(kind, args, ctx, apply) {
   });
   const result = apply(routeEngine, payload);
   const components = Array.isArray(result) ? result : (routeEngine.getInlineComponents?.() || routeEngine.getState?.()?.model?.components || []);
-  return routeEditResult(kind, {
-    message: `${kind} applied${nodeId ? ` at node ${nodeId}` : ''}`,
-    routeId,
-    nodeId,
-    routeSnapshot: routeSnapshot(routeById(routeEngine, routeId)),
+  return {
+    ...routeEditResult(kind, {
+      message: `${kind} applied${nodeId ? ` at node ${nodeId}` : ''}`,
+      routeId,
+      nodeId,
+      routeSnapshot: routeSnapshot(routeById(routeEngine, routeId)),
+    }),
     components,
-  });
+    componentCount: components.length,
+  };
 }
 
 function applyAutoBend(routeEngine, payload) {
