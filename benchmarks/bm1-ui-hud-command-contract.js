@@ -72,7 +72,7 @@ function runService(service, context) {
 function runRouteAction(payload, context) {
   const routeEngine = context.getRouteEngine?.();
   if (!routeEngine) throw new Error('BM1 route action requires context.getRouteEngine');
-  if (payload.method === 'startRoute') return routeEngine.startRoute(payload.point, { source: 'bm1-hud', routeId: payload.routeId });
+  if (payload.method === 'startRoute') return routeEngine.startRoute(payload.point, {}, { source: 'bm1-hud', routeId: payload.routeId });
   if (payload.method === 'addToPoint') return routeEngine.addToPoint(payload.routeId, payload.point, { source: 'bm1-hud' });
   if (payload.method === 'breakSegment') return routeEngine.breakSegment(payload.routeId, resolveSegmentId(routeEngine, payload), payload.point, { source: 'bm1-hud' });
   throw new Error(`Unsupported BM1 route method: ${payload.method}`);
