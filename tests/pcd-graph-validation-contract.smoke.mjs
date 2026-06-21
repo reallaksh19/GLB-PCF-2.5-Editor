@@ -27,7 +27,7 @@ test('public fromCsv graph satisfies exported graph validation contract', () => 
   validatePublicGraph(graph);
 
   assert.deepEqual(Object.keys(graph).sort(), [...ADAPTER_GRAPH_KEYS].sort());
-  assert.equal(graph.schemaVersion, 'piping-adapter-graph/v1');
+  assert.equal(graph.schemaVersion, 'uxml-topology-v1');
   assert.equal(graph.components.length, 2);
   assert.equal(graph.anchors.length, 3);
   assert.equal(graph.ports.length, 3);
