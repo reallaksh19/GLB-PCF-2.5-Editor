@@ -29,14 +29,14 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
     panel.querySelector('[data-bm1-panel-toggle]')?.setAttribute('aria-expanded', String(!collapsed));
     setStatus?.(collapsed ? 'idle' : 'active', collapsed ? 'BM1 dashboard collapsed' : 'BM1 dashboard expanded');
   };
+  const isHidden = () => panel.classList.contains('hidden');
+  const show = () => { panel.classList.remove('hidden'); setStatus?.('active', 'BM1 dashboard shown'); };
+  const hide = () => { panel.classList.add('hidden'); setStatus?.('idle', 'BM1 dashboard hidden'); };
+  const toggleVisible = () => { if (isHidden()) show(); else hide(); return !isHidden(); };
 
   const onClick = (event) => {
     const closeButton = event.target?.closest?.('[data-bm1-panel-close]');
-    if (closeButton) {
-      panel.classList.add('hidden');
-      setStatus?.('idle', 'BM1 dashboard hidden');
-      return;
-    }
+    if (closeButton) { hide(); return; }
 
     const toggleButton = event.target?.closest?.('[data-bm1-panel-toggle]');
     if (toggleButton) {
@@ -64,8 +64,10 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
     surface,
     collapse: () => setCollapsed(true),
     expand: () => setCollapsed(false),
-    show: () => panel.classList.remove('hidden'),
-    hide: () => panel.classList.add('hidden'),
+    show,
+    hide,
+    toggle: toggleVisible,
+    isHidden,
     destroy() {
       panel.removeEventListener('click', onClick);
       panel.remove();
