@@ -5,7 +5,7 @@ import { executeMacro } from '../../macro/macro-engine.js';
 export const BM1_DASHBOARD_PANEL_VERSION = 'bm1-dashboard-panel/v1';
 export const BM1_DASHBOARD_PANEL_CLASS = 'hifi-bm1-dashboard-panel';
 
-export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
+export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityChange } = {}) {
   if (!host || typeof host.appendChild !== 'function') return null;
   ensureBm1DashboardStyles();
   const surface = createBm1UiHudSurface();
@@ -24,14 +24,16 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
     },
   };
 
+  const notifyVisibility = () => onVisibilityChange?.(!isHidden(), { collapsed: panel.classList.contains('collapsed') });
   const setCollapsed = (collapsed) => {
     panel.classList.toggle('collapsed', Boolean(collapsed));
     panel.querySelector('[data-bm1-panel-toggle]')?.setAttribute('aria-expanded', String(!collapsed));
     setStatus?.(collapsed ? 'idle' : 'active', collapsed ? 'BM1 dashboard collapsed' : 'BM1 dashboard expanded');
+    notifyVisibility();
   };
   const isHidden = () => panel.classList.contains('hidden');
-  const show = () => { panel.classList.remove('hidden'); setStatus?.('active', 'BM1 dashboard shown'); };
-  const hide = () => { panel.classList.add('hidden'); setStatus?.('idle', 'BM1 dashboard hidden'); };
+  const show = () => { panel.classList.remove('hidden'); setStatus?.('active', 'BM1 dashboard shown'); notifyVisibility(); };
+  const hide = () => { panel.classList.add('hidden'); setStatus?.('idle', 'BM1 dashboard hidden'); notifyVisibility(); };
   const toggleVisible = () => { if (isHidden()) show(); else hide(); return !isHidden(); };
 
   const onClick = (event) => {
@@ -58,6 +60,7 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus } = {}) {
   };
 
   panel.addEventListener('click', onClick);
+  notifyVisibility();
 
   return {
     panel,
