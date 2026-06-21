@@ -7,6 +7,7 @@ import {
   REQUIRED_BM1_MACRO_INTENTS,
   createBm1AcceptanceReport,
 } from '../benchmarks/bm1-acceptance-report.js';
+import './bm1-export-readiness.smoke.mjs';
 
 test('BM1 final acceptance report covers all BM1 phase gates', () => {
   const report = createBm1AcceptanceReport();
