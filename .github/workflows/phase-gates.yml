@@ -55,6 +55,9 @@ jobs:
       - name: Gate BM1 pipe-list normalization
         run: npm run test:bm1-pipe-list
 
+      - name: Gate BM1 macro route bridge
+        run: npm run test:bm1-macro-route
+
       - name: Gate Phase 0 parity
         run: npm run test:phase0-parity
 
