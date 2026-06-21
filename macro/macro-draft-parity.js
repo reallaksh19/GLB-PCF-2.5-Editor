@@ -194,12 +194,24 @@ export function routeEngineOrThrow(ctx = {}) {
 }
 
 export function buildPipelineSpec(opts = {}, ctx = {}) {
-  return {
+  return withoutEmptyValues({
     pipelineRef: opts.PIPELINE || opts.PIPELINE_REF || ctx.pipeline || '',
-  };
+    pipeline: opts.PIPELINE || ctx.pipeline || '',
+    size: opts.SIZE || opts.NPS || opts.NOMINAL_SIZE,
+    nominalSize: opts.NOMINAL_SIZE || opts.SIZE || opts.NPS,
+    sch: opts.SCH || opts.SCHEDULE,
+    schedule: opts.SCHEDULE || opts.SCH,
+    rating: opts.RATING || opts.CLASS,
+    class: opts.CLASS || opts.RATING,
+    material: opts.MAT || opts.MATERIAL || ctx.defaultMat || '',
+  });
 }
 
 export function summarizePoint(point) {
   const p = clonePoint(point);
   return `${p.x},${p.y},${p.z}`;
+}
+
+function withoutEmptyValues(values) {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ''));
 }
