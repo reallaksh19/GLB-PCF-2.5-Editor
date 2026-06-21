@@ -7,6 +7,7 @@ import {
   executeBm1UiHudAction,
   getBm1UiHudContract,
 } from '../benchmarks/bm1-ui-hud-command-contract.js';
+import './bm1-ui-hud-surface.smoke.mjs';
 
 function makeRouteEngineSpy() {
   const calls = [];
