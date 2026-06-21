@@ -16,6 +16,7 @@ const PHASE0_SCRIPT_ORDER = Object.freeze([
   'test:pcd-canonical-geometry-contract',
   'test:pcd-workbench-model-contract',
   'test:pcd-graph-validation-contract',
+  'test:bm1-benchmark',
   'test:phase0-parity',
   'test:geometry-view',
 ]);
@@ -30,6 +31,7 @@ const EXPECTED_DIRECT_SCRIPT_COMMANDS = Object.freeze({
   'test:pcd-canonical-geometry-contract': 'node tests/pcd-canonical-geometry-contract.smoke.mjs',
   'test:pcd-workbench-model-contract': 'node tests/pcd-workbench-model-contract.smoke.mjs',
   'test:pcd-graph-validation-contract': 'node tests/pcd-graph-validation-contract.smoke.mjs',
+  'test:bm1-benchmark': 'node tests/bm1-centerline-benchmark.smoke.mjs',
   'test:phase0-parity': 'node tests/phase0-local-ci-parity.smoke.mjs',
   'test:geometry-view': 'node tests/geometry-view.smoke.mjs',
 });
