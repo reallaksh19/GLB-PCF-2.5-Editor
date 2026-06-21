@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { BM1_CSV_REPLAY_FIXTURE } from '../benchmarks/bm1-csv-replay.fixture.js';
 import { BENCHMARK_CSV_SCHEMA_VERSION, csvRowsToMacroScript, executeBenchmarkRows, parseBenchmarkCsv } from '../benchmarks/benchmark-csv-replay.js';
 import { createRouteEngine } from '../editor/route-engine.js';
+import './bm1-final-acceptance-parity.smoke.mjs';
 
 function routeRowsOnly(rows) {
   return rows.filter((row) => String(row.command || '').toUpperCase() === 'POLYLINE');
