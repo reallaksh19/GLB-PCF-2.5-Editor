@@ -44,7 +44,8 @@ function walk(dir, out = []) {
 function countLines(path) {
   const text = readFileSync(path, 'utf8');
   if (!text) return 0;
-  return text.split(/\r\n|\r|\n/).length;
+  const normalized = text.replace(/\r\n$|\r$|\n$/, '');
+  return normalized ? normalized.split(/\r\n|\r|\n/).length : 0;
 }
 
 function writeReport(payload) {
