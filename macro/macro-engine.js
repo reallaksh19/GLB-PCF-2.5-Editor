@@ -4,6 +4,7 @@ import {
   listRegisteredCommandNames,
 } from './macro-commands.js';
 import { registerMacroRouteAutoFitCommands } from './macro-route-auto-fit-commands.js';
+import { registerMacroRouteBreakSupportCommands } from './macro-route-break-support-commands.js';
 import {
   appendMacroScriptResult,
   createMacroScriptReport,
@@ -20,6 +21,7 @@ function ensureBuiltins() {
   if (_bootstrapped) return;
   registerBuiltinCommands();
   registerMacroRouteAutoFitCommands(getCommandHandler.register);
+  registerMacroRouteBreakSupportCommands(getCommandHandler.register);
   _bootstrapped = true;
 }
 
