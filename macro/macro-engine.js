@@ -5,6 +5,7 @@ import {
 } from './macro-commands.js';
 import { registerMacroRouteAutoFitCommands } from './macro-route-auto-fit-commands.js';
 import { registerMacroRouteBreakSupportCommands } from './macro-route-break-support-commands.js';
+import { registerMacroRouteFlangeCommands } from './macro-route-flange-commands.js';
 import {
   appendMacroScriptResult,
   createMacroScriptReport,
@@ -22,6 +23,7 @@ function ensureBuiltins() {
   registerBuiltinCommands();
   registerMacroRouteAutoFitCommands(getCommandHandler.register);
   registerMacroRouteBreakSupportCommands(getCommandHandler.register);
+  registerMacroRouteFlangeCommands(getCommandHandler.register);
   _bootstrapped = true;
 }
 
