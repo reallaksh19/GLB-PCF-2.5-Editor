@@ -9,7 +9,6 @@
     "js/renderer/scene-renderer.js": 748,
     "tools/gen-benchmark-dxf.js": 726,
     "js/tabs/viewer-tab.js": 723,
-    "js/tabs/design-canvas.js": 651,
-    "domains/piping/draft2d-renderer.js": 609
+    "js/tabs/design-canvas.js": 651
   }
 }
