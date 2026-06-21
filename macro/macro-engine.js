@@ -3,6 +3,7 @@ import {
   getCommandHandler,
   listRegisteredCommandNames,
 } from './macro-commands.js';
+import { registerMacroRouteAutoFitCommands } from './macro-route-auto-fit-commands.js';
 import {
   appendMacroScriptResult,
   createMacroScriptReport,
@@ -18,6 +19,7 @@ let _bootstrapped = false;
 function ensureBuiltins() {
   if (_bootstrapped) return;
   registerBuiltinCommands();
+  registerMacroRouteAutoFitCommands(getCommandHandler.register);
   _bootstrapped = true;
 }
 
