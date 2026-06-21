@@ -29,7 +29,7 @@ jobs:
         run: npm run test:no-pcd-mutation
 
       - name: Gate no legacy PCD DB runtime
-        run: node tests/no-legacy-pcd-db-runtime.smoke.mjs
+        run: npm run test:no-legacy-pcd-db-runtime
 
       - name: Gate PCD public API
         run: npm run test:pcd-public-api
@@ -38,16 +38,19 @@ jobs:
         run: npm run test:pcd
 
       - name: Gate PCD Component Studio contract
-        run: node tests/pcd-component-studio-contract.smoke.mjs
+        run: npm run test:pcd-component-studio-contract
 
       - name: Gate PCD canonical geometry contract
-        run: node tests/pcd-canonical-geometry-contract.smoke.mjs
+        run: npm run test:pcd-canonical-geometry-contract
 
       - name: Gate PCD Workbench model contract
-        run: node tests/pcd-workbench-model-contract.smoke.mjs
+        run: npm run test:pcd-workbench-model-contract
 
       - name: Gate PCD graph validation contract
-        run: node tests/pcd-graph-validation-contract.smoke.mjs
+        run: npm run test:pcd-graph-validation-contract
+
+      - name: Gate Phase 0 parity
+        run: npm run test:phase0-parity
 
       - name: Gate geometry view
         run: npm run test:geometry-view
