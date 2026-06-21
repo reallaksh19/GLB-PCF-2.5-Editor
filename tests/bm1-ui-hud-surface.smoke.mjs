@@ -6,6 +6,7 @@ import {
   assertBm1UiHudSurfaceReady,
   createBm1UiHudSurface,
 } from '../benchmarks/bm1-ui-hud-surface.js';
+import './bm1-ui-panel-wiring.smoke.mjs';
 
 test('BM1 UI/HUD surface exposes compact action and status cards', () => {
   const surface = createBm1UiHudSurface();
