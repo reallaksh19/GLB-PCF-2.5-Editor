@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './bm1-dashboard-accessibility.smoke.mjs';
 
 test('BM1 dashboard panel emits visibility changes for show hide and collapse', () => {
   const panelSource = readFileSync('js/ui/bm1-dashboard-panel.js', 'utf8');
