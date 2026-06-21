@@ -10,7 +10,6 @@ function esc(value) {
     .replaceAll('"', '&quot;');
 }
 
-/* ── Per-mode colour, title, icon ── */
 const TOOL_COLOR = {
   'line-draw':        '#3b82f6',
   'polyline-draw':    '#3b82f6',
@@ -32,11 +31,8 @@ const TOOL_TITLE = {
   'modify-tool':      'MODIFY',
   'idle':             'HUD',
 };
-
 const INSERT_TITLE  = { VALVE:'VALVE', FLANGE:'FLANGE', ELBOW:'ELBOW', TEE:'TEE', REDUCER:'REDUCER', SUPPORT:'SUPPORT' };
 const MODIFY_TITLE  = { MOVE:'MOVE', STRETCH:'STRETCH', ROTATE:'ROTATE', BREAK:'BREAK', DELETE:'DELETE' };
-
-/* Unicode stand-ins for SVG icons */
 const TOOL_ICON = {
   'line-draw':        '╱',
   'polyline-draw':    '⌇',
@@ -50,7 +46,6 @@ const TOOL_ICON = {
 const INSERT_ICON  = { VALVE:'⊗', FLANGE:'⊞', ELBOW:'⌐', TEE:'⊤', REDUCER:'⊳', SUPPORT:'⊥' };
 const MODIFY_ICON  = { MOVE:'✛', STRETCH:'↔', ROTATE:'↻', BREAK:'✂', DELETE:'✕' };
 
-/* ── Header ── */
 function headerHtml(state) {
   const mode = state.mode || 'idle';
   const ac   = TOOL_COLOR[mode] || '#64748b';
@@ -71,7 +66,6 @@ function headerHtml(state) {
     </div>`;
 }
 
-/* ── Field row builder ── */
 function fieldRow(fields) {
   const cells = fields.map(f => {
     let ctrl;
@@ -96,7 +90,6 @@ function fieldRow(fields) {
   return `<div class="hud-field-row">${cells.join('')}</div>`;
 }
 
-/* ── Info strip (2-col grid, pairs: key, value, key, value …) ── */
 function infoStrip(pairs) {
   if (!pairs.length) return '';
   const rows = [];
@@ -146,7 +139,6 @@ function pointTable(rows) {
   </div>`;
 }
 
-/* ── Actions bar ── */
 function actionsBar(actions, ac) {
   return `<div class="hud-actions-bar">${actions.map(a => {
     let bg, bdr, clr;
@@ -162,14 +154,10 @@ function actionsBar(actions, ac) {
   }).join('')}</div>`;
 }
 
-/* ═══════════════ Mode bodies ═══════════════ */
-
 function lineDraftHtml(state) {
   const draft   = state.draft || {};
   const ac      = TOOL_COLOR['line-draw'];
   const waiting = state.awaitingAnchorClick || !draft.anchorPoint;
-
-  /* While waiting for a canvas click, show a prompt instead of full fields */
   if (waiting) {
     return [
       infoStrip(['Start', 'Click canvas to set start point']),
@@ -213,8 +201,6 @@ function insertDraftHtml(state) {
   const ctx  = state.insertContext || {};
   const ac   = TOOL_COLOR['insert-component'];
   const comp = ctx.component || 'VALVE';
-
-  /* If no insertion point set yet, prompt user to click canvas */
   if (!ctx.point) {
     return [
       infoStrip(['At', 'Click canvas to place ' + comp]),
@@ -488,7 +474,6 @@ function modifyToolHtml(state) {
   ].join('');
 }
 
-/* ═══════════════ Public factory ═══════════════ */
 export function createHudOverlay(container, handlers = {}) {
   const root = document.createElement('section');
   root.className = 'hud-overlay';
@@ -498,7 +483,6 @@ export function createHudOverlay(container, handlers = {}) {
   root.style.bottom = 'auto';
   container.appendChild(root);
 
-  /* ── drag ── */
   let drag = null;
   const onPointerMove = ev => {
     if (!drag) return;
@@ -517,7 +501,6 @@ export function createHudOverlay(container, handlers = {}) {
     drag = { offsetX: ev.clientX - r.left, offsetY: ev.clientY - r.top };
   });
 
-  /* ── click dispatch ── */
   root.addEventListener('click', ev => {
     const el     = ev.target.closest('[data-action]');
     if (!el) return;
@@ -541,7 +524,6 @@ export function createHudOverlay(container, handlers = {}) {
     if (action === 'drop')          return handlers.commitDrop?.();
     if (action === 'modify-apply')  return handlers.commitModify?.();
 
-    /* seg buttons */
     if (action?.startsWith('seg-')) {
       const field = action.slice(4);
       const val   = el.dataset.val;
@@ -556,7 +538,6 @@ export function createHudOverlay(container, handlers = {}) {
     if (field) handlers.updateField?.(field, ev.target.value);
   });
 
-  /* ── render ── */
   function render(state) {
     const mode    = state.mode || 'idle';
     const visible = state.visible !== false;
