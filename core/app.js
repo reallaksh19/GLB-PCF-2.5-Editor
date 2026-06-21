@@ -15,6 +15,7 @@ import { TAB_IDS, PANEL_IDS } from '../js/ui/viewer-ui-contract.js';
 window.capabilities = capabilities;
 
 const TABS = ['viewer', 'debug', 'design'];
+const BM1_DASHBOARD_TOGGLE_ID = 'hifi-btn-bm1-dashboard';
 
 let _activeTab = null;
 let _destroyFn = null;
@@ -78,6 +79,26 @@ function initBm1Dashboard() {
     setStatus: (tone, text) => shellApi?.setViewerStatus?.(text, tone),
   });
   if (_bm1DashboardApi && typeof window !== 'undefined') window.__bm1Dashboard = _bm1DashboardApi;
+  initBm1DashboardToolbarToggle(shellApi);
+}
+
+function initBm1DashboardToolbarToggle(shellApi) {
+  const toolbar = document.getElementById('hifi-viewer-toolbar');
+  if (!toolbar || document.getElementById(BM1_DASHBOARD_TOGGLE_ID)) return;
+  const anchor = document.getElementById('hifi-btn-macro-toggle') || document.getElementById('hifi-btn-fit-main');
+  const button = document.createElement('button');
+  button.id = BM1_DASHBOARD_TOGGLE_ID;
+  button.className = 'hifi-btn active';
+  button.type = 'button';
+  button.textContent = 'BM1';
+  button.title = 'Show or hide BM1 benchmark dashboard';
+  button.addEventListener('click', () => {
+    const visible = _bm1DashboardApi?.toggle?.();
+    button.classList.toggle('active', Boolean(visible));
+    shellApi?.setViewerStatus?.(visible ? 'BM1 dashboard shown' : 'BM1 dashboard hidden', visible ? 'active' : 'idle');
+  });
+  if (anchor?.parentNode === toolbar) anchor.insertAdjacentElement('afterend', button);
+  else toolbar.appendChild(button);
 }
 
 async function boot() {
