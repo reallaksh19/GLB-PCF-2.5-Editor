@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BM1_CENTERLINE_FIXTURE } from '../benchmarks/bm1-centerline.fixture.js';
 import {
   BM1_UI_HUD_CONTRACT_VERSION,
   assertBm1UiHudNoGeometryBuilders,
   executeBm1UiHudAction,
   getBm1UiHudContract,
 } from '../benchmarks/bm1-ui-hud-command-contract.js';
+import { loadBm1FixtureIntoRouteEngine } from '../benchmarks/bm1-runtime-loader.js';
 import { createRouteEngine } from '../editor/route-engine.js';
 import { executeMacro, listMacroCommands } from '../macro/macro-engine.js';
 import './bm1-ui-hud-surface.smoke.mjs';
@@ -46,63 +46,22 @@ function macroName(macro) {
   return String(macro || '').trim().split(/\s+/)[0].toUpperCase();
 }
 
-function fixtureNode(id) {
-  const node = BM1_CENTERLINE_FIXTURE.nodes.find((item) => item.id === id);
-  if (!node) throw new Error(`Unknown BM1 fixture node ${id}`);
-  return { id: node.id, x: node.x, y: node.y, z: node.z };
-}
-
-function routeFromFixture(id, nodeIds, segments, spec) {
-  return {
-    contractVersion: '1.0.0-wave0',
-    id,
-    nodes: nodeIds.map(fixtureNode),
-    segments: segments.map(([segmentId, from, to]) => ({
-      id: segmentId,
-      from,
-      to,
-      kind: 'PIPE',
-      orientation: from === to ? 'POINT' : 'AXIAL',
-    })),
-    spec,
-  };
-}
-
 function createBm1RuntimeRouteEngine() {
-  return createRouteEngine({
-    initialState: {
-      model: {
-        components: [],
-        routes: [
-          routeFromFixture('BM1-MAIN-ROUTE', ['A', 'B', 'C', 'M', 'D', 'E'], [
-            ['P1', 'A', 'B'],
-            ['P2', 'B', 'C'],
-            ['P3', 'C', 'M'],
-            ['P3b', 'M', 'D'],
-            ['P4', 'D', 'E'],
-          ], { pipelineRef: 'BM1-MAIN', size: '150NB', nominalSize: '150NB', class: '300', rating: '300', material: 'CS' }),
-          routeFromFixture('BM1-BRANCH-ROUTE', ['E', 'F', 'S', 'G'], [
-            ['P5', 'E', 'F'],
-            ['P6', 'F', 'S'],
-            ['P6b', 'S', 'G'],
-          ], { pipelineRef: 'BM1-BRANCH', size: '4IN', nominalSize: '4IN', material: 'CS' }),
-        ],
-      },
-      selection: { ids: [], activeRouteId: 'BM1-MAIN-ROUTE' },
-      hud: { mode: 'idle', draft: null },
-      intelligence: { lastResolution: null },
-      macro: { lastRun: null },
-      diagnostics: { traces: [], metrics: {} },
-    },
-  });
+  const routeEngine = createRouteEngine();
+  loadBm1FixtureIntoRouteEngine(routeEngine);
+  return routeEngine;
+}
+
+function bm1RuntimeContext(routeEngine) {
+  return {
+    getRouteEngine: () => routeEngine,
+    executeMacro: (line) => executeMacro(line, { getRouteEngine: () => routeEngine }),
+  };
 }
 
 function executeBm1MacroDescriptor(descriptor) {
   const routeEngine = createBm1RuntimeRouteEngine();
-  const ctx = {
-    getRouteEngine: () => routeEngine,
-    executeMacro: (line) => executeMacro(line, { getRouteEngine: () => routeEngine }),
-  };
+  const ctx = bm1RuntimeContext(routeEngine);
   return { routeEngine, result: executeBm1UiHudAction(descriptor, ctx) };
 }
 
@@ -122,6 +81,7 @@ test('BM1 UI/HUD contract exposes dashboard and HUD action groups without geomet
 test('BM1 UI/HUD service actions call benchmark services, not UI state or geometry builders', () => {
   const loaded = executeBm1UiHudAction('bm1.load');
   assert.equal(loaded.id, 'BM1');
+  assert.equal(loaded.runtimeLoaded, false);
 
   const canonical = executeBm1UiHudAction('bm1.validate');
   assert.equal(canonical.schemaVersion, 'bm-centerline-topology/v1');
@@ -130,6 +90,21 @@ test('BM1 UI/HUD service actions call benchmark services, not UI state or geomet
   const topology = executeBm1UiHudAction('bm1.topology');
   assert.match(topology, /A--P1--B/);
   assert.match(topology, /REST PS-001/);
+});
+
+test('BM1 UI/HUD load service creates runtime routes when a route engine is available', () => {
+  const routeEngine = createRouteEngine();
+  let refreshed = 0;
+  const result = executeBm1UiHudAction('bm1.load', {
+    getRouteEngine: () => routeEngine,
+    refreshScene: () => { refreshed += 1; },
+  });
+
+  assert.equal(result.runtimeLoaded, true);
+  assert.equal(result.mode, 'created');
+  assert.equal(refreshed, 1);
+  assert.ok(routeEngine.getRoutes().some((route) => route.id === 'BM1-MAIN-ROUTE'));
+  assert.ok(routeEngine.getRoutes().some((route) => route.id === 'BM1-BRANCH-ROUTE'));
 });
 
 test('BM1 UI/HUD macro actions delegate to macro execution payloads', () => {
@@ -164,6 +139,22 @@ test('BM1 UI/HUD macro actions execute through runtime commands without Unknown 
       `${descriptor.id} should execute without Unknown command or routing failures`,
     );
   }
+});
+
+test('BM1 dashboard runtime sequence loads routes before executing macro actions', () => {
+  const routeEngine = createRouteEngine();
+  const ctx = bm1RuntimeContext(routeEngine);
+
+  assert.doesNotThrow(() => executeBm1UiHudAction('bm1.load', ctx));
+  for (const actionId of ['bm1.auto-bend', 'bm1.flange-pair', 'bm1.auto-tee', 'bm1.break-support']) {
+    assert.doesNotThrow(() => executeBm1UiHudAction(actionId, ctx), `${actionId} should execute after BM1 load`);
+  }
+
+  const componentTypes = routeEngine.getInlineComponents().map((component) => component.type).sort();
+  assert.ok(componentTypes.includes('ELBOW'));
+  assert.ok(componentTypes.includes('TEE'));
+  assert.ok(componentTypes.includes('FLANGE_PAIR'));
+  assert.ok(componentTypes.includes('SUPPORT'));
 });
 
 test('BM1 FLANGE_PAIR and SUPPORT_ATTACH preserve UI/HUD topology metadata', () => {
