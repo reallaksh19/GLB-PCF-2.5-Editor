@@ -5,6 +5,13 @@ import { executeMacro } from '../../macro/macro-engine.js';
 export const BM1_DASHBOARD_PANEL_VERSION = 'bm1-dashboard-panel/v1';
 export const BM1_DASHBOARD_PANEL_CLASS = 'hifi-bm1-dashboard-panel';
 export const BM1_DASHBOARD_TITLE_ID = 'hifi-bm1-dashboard-title';
+export const BM1_DASHBOARD_HELP_ID = 'hifi-bm1-inline-help';
+
+const BM1_ACTION_HELP = Object.freeze({
+  service: 'Runs a read-only BM1 benchmark service action and prints the compact result below.',
+  macro: 'Runs the existing macro command path, then refreshes the viewer through the shell API.',
+  route: 'Calls the existing route-engine service path for the selected BM1 route step.',
+});
 
 export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityChange } = {}) {
   if (!host || typeof host.appendChild !== 'function') return null;
@@ -63,6 +70,12 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
     }
   };
 
+  const onPreview = (event) => {
+    const button = event.target?.closest?.('[data-bm1-action]');
+    if (!button) return;
+    writeHelp(panel, button.getAttribute('data-bm1-action'), button.getAttribute('data-bm1-help'));
+  };
+
   const onKeyDown = (event) => {
     if (event.key !== 'Escape' || isHidden()) return;
     event.preventDefault?.();
@@ -70,6 +83,8 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
   };
 
   panel.addEventListener('click', onClick);
+  panel.addEventListener('focusin', onPreview);
+  panel.addEventListener('pointerover', onPreview);
   panel.addEventListener('keydown', onKeyDown);
   notifyVisibility();
 
@@ -84,6 +99,8 @@ export function initBm1DashboardPanel({ host, shellApi, setStatus, onVisibilityC
     isHidden,
     destroy() {
       panel.removeEventListener('click', onClick);
+      panel.removeEventListener('focusin', onPreview);
+      panel.removeEventListener('pointerover', onPreview);
       panel.removeEventListener('keydown', onKeyDown);
       panel.remove();
     },
@@ -120,6 +137,7 @@ function ensureBm1DashboardStyles() {
     .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-title { flex: 1; min-width: 0; }
     .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-panel-controls { display: inline-flex; gap: 4px; }
     .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-panel-control { width: 22px; height: 20px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #1f2937; cursor: pointer; font-size: 11px; }
+    .${BM1_DASHBOARD_PANEL_CLASS} .hifi-bm1-help { border: 1px dashed #cbd5e1; border-radius: 6px; padding: 6px; background: #f8fafc; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-section { margin-bottom: 10px; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-section-title { color: #92400e; font-weight: 800; }
     .${BM1_DASHBOARD_PANEL_CLASS} .panel-value { color: #111827; white-space: pre-wrap; }
@@ -144,6 +162,7 @@ function renderSurface(surface) {
       </div>
     </div>
     <div class="hifi-bm1-body">
+      <div id="${BM1_DASHBOARD_HELP_ID}" class="panel-section hifi-bm1-help" data-bm1-inline-help aria-live="polite">Focus or hover a BM1 action to preview its path.</div>
       ${surface.cards.map(renderCard).join('')}
       <div class="panel-section">
         <div class="panel-section-title">BM1 Result</div>
@@ -160,7 +179,7 @@ function renderCard(card) {
       <div class="panel-section-title">${escapeHtml(card.title)}</div>
       <div class="panel-value">${escapeHtml(card.description || '')}</div>
       <div class="hifi-bm1-actions">
-        ${(card.actions || []).map((action) => `<button class="hifi-btn" data-bm1-action="${escapeHtml(action.id)}" title="${escapeHtml(action.kind)}">${escapeHtml(action.label || action.id)}</button>`).join('')}
+        ${(card.actions || []).map((action) => `<button class="hifi-btn" data-bm1-action="${escapeHtml(action.id)}" data-bm1-help="${escapeHtml(helpForAction(action))}" aria-describedby="${BM1_DASHBOARD_HELP_ID}" title="${escapeHtml(action.kind)}">${escapeHtml(action.label || action.id)}</button>`).join('')}
       </div>
     </div>
   `;
@@ -183,6 +202,16 @@ function writeOutput(panel, actionId, result) {
   if (!out) return;
   const compact = compactResult(result);
   out.textContent = `${actionId}\n${JSON.stringify(compact, null, 2)}`;
+}
+
+function writeHelp(panel, actionId, help) {
+  const out = panel.querySelector?.('[data-bm1-inline-help]');
+  if (!out) return;
+  out.textContent = `${actionId}: ${help || 'BM1 dashboard action'}`;
+}
+
+function helpForAction(action) {
+  return BM1_ACTION_HELP[action?.kind] || 'BM1 dashboard action';
 }
 
 function compactResult(value) {
