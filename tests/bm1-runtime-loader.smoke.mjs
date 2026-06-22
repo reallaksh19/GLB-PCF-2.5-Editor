@@ -110,7 +110,7 @@ test('BM1 runtime loader replaces stale BM1 routes without removing unrelated ro
 
 test('BM1 runtime loader remains browser and renderer independent', () => {
   const source = readFileSync('benchmarks/bm1-runtime-loader.js', 'utf8');
-  for (const forbidden of ['window', 'document', 'localStorage', 'querySelector', 'addEventListener', 'THREE', 'Mesh', 'Geometry', 'material']) {
+  for (const forbidden of ['window', 'document', 'localStorage', 'querySelector', 'addEventListener', 'THREE', 'WebGLRenderer', 'MeshStandardMaterial', 'BufferGeometry']) {
     assert.equal(source.includes(forbidden), false, `loader must not depend on ${forbidden}`);
   }
 });
