@@ -145,12 +145,63 @@ export function buildAutoTeePayload(routes, route, candidate, resolved = {}, pay
   }
   return { id: `route:${route.id}:auto-tee:${candidate.nodeId}`, routeId: route.id, component: 'TEE', point, origin: point, ep1: runFrom, ep2: runTo, bp, subtype: resolved.subtype || payload.subtype || candidate.subtype || 'EQUAL', size: resolved.size || payload.size || candidate.runSize || route.spec?.size || '', branchSize: resolved.branchSize || payload.branchSize || candidate.branchSize || '', rating: resolved.rating || payload.rating || candidate.rating || route.spec?.rating || '', length: resolved.runCenterToEnd || resolved.length || payload.length || '', branchLength: resolved.branchCenterToEnd || payload.branchLength || '', weight: resolved.weight || payload.weight || '', provenance: payload.provenance || 'manual', matchKey: payload.matchKey || '', pipelineRef: route.spec?.pipelineRef || route.spec?.pipeline || 'ROUTE-AUTHORED', branchRouteId: candidate.branchRouteId || '' };
 }
+const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== '') ?? '';
+function normalizeInlineAttributes(payload, routeId) {
+  const componentKind = payload.component || payload.type || 'COMPONENT';
+  const type = firstValue(payload.flangeType, payload.supportType, payload.kind, payload.type, payload.subtype);
+  const rating = firstValue(payload.rating, payload.class, payload.className);
+  const routeRef = firstValue(payload.route, routeId);
+  const name = firstValue(payload.name, payload.supportName, payload.id);
+  const supportKind = firstValue(payload.kind, payload.supportType);
+  const segment = firstValue(payload.segment, payload.segmentId);
+  return {
+    SOURCE: 'route-engine-inline',
+    ROUTE_ID: routeId || '',
+    ROUTE: routeRef,
+    SUBTYPE: payload.subtype || type || '',
+    TYPE: type || componentKind,
+    CLASS: rating,
+    RATING: rating,
+    SIZE: payload.size || '',
+    FACING: payload.facing || '',
+    ENDTYPE: payload.endType || '',
+    LENGTH: payload.length || '',
+    BRANCH_LENGTH: payload.branchLength || '',
+    WEIGHT: payload.weight || '',
+    PROVENANCE: payload.provenance || 'manual',
+    ANGLE: payload.angle || '',
+    MATCHKEY: payload.matchKey || '',
+    BRANCH_SIZE: payload.branchSize || '',
+    BRANCH_ROUTE_ID: payload.branchRouteId || '',
+    NAME: name,
+    KIND: supportKind,
+    SEGMENT: segment,
+    ATTACH: firstValue(payload.attach, payload.attachment),
+    'PIPELINE-REFERENCE': payload.pipeline || payload.pipelineRef || 'ROUTE-AUTHORED',
+  };
+}
 export function normalizeInlineComponent(payload = {}, state) {
   const routeId = payload.routeId || state.selection?.activeRouteId || null;
   let point = normalizePoint(payload.point || payload.origin || { x: 0, y: 0, z: 0 });
   const route = routeId ? (state.model?.routes || []).find((item) => item.id === routeId) : null;
   if (route?.nodes?.length && (!payload.point && !payload.origin)) point = clonePoint(route.nodes[route.nodes.length - 1]);
-  return { id: payload.id || uid('inline-comp'), type: payload.component || payload.type || 'VALVE', label: `${payload.component || payload.type || 'COMPONENT'} ${payload.id || ''}`.trim(), geometry: { origin: point, ep1: payload.ep1 ? normalizePoint(payload.ep1) : null, ep2: payload.ep2 ? normalizePoint(payload.ep2) : null, cp: payload.cp ? normalizePoint(payload.cp) : null, bp: payload.bp ? normalizePoint(payload.bp) : null, bore: parseBore(payload), size: null }, attributes: { SOURCE: 'route-engine-inline', ROUTE_ID: routeId || '', SUBTYPE: payload.subtype || '', RATING: payload.rating || '', SIZE: payload.size || '', FACING: payload.facing || '', ENDTYPE: payload.endType || '', LENGTH: payload.length || '', BRANCH_LENGTH: payload.branchLength || '', WEIGHT: payload.weight || '', PROVENANCE: payload.provenance || 'manual', ANGLE: payload.angle || '', MATCHKEY: payload.matchKey || '', BRANCH_SIZE: payload.branchSize || '', BRANCH_ROUTE_ID: payload.branchRouteId || '', 'PIPELINE-REFERENCE': payload.pipeline || payload.pipelineRef || 'ROUTE-AUTHORED' }, metadata: { source: payload, squareText: null, squarePos: null, circleText: null, circleCoord: null, warnings: [] } };
+  const componentKind = payload.component || payload.type || 'COMPONENT';
+  return {
+    id: payload.id || uid('inline-comp'),
+    type: componentKind,
+    label: `${componentKind} ${payload.id || ''}`.trim(),
+    geometry: {
+      origin: point,
+      ep1: payload.ep1 ? normalizePoint(payload.ep1) : null,
+      ep2: payload.ep2 ? normalizePoint(payload.ep2) : null,
+      cp: payload.cp ? normalizePoint(payload.cp) : null,
+      bp: payload.bp ? normalizePoint(payload.bp) : null,
+      bore: parseBore(payload),
+      size: null,
+    },
+    attributes: normalizeInlineAttributes(payload, routeId),
+    metadata: { source: payload, squareText: null, squarePos: null, circleText: null, circleCoord: null, warnings: [] },
+  };
 }
 function routeSegmentToComponent(route, segment, nodeIndex) {
   const ep1 = clonePoint(nodeIndex[segment.from]), ep2 = clonePoint(nodeIndex[segment.to]), bore = parseBore(route.spec);
