@@ -1,13 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { BM1_CENTERLINE_FIXTURE } from '../benchmarks/bm1-centerline.fixture.js';
 import {
   BM1_UI_HUD_CONTRACT_VERSION,
   assertBm1UiHudNoGeometryBuilders,
   executeBm1UiHudAction,
   getBm1UiHudContract,
 } from '../benchmarks/bm1-ui-hud-command-contract.js';
+import { createRouteEngine } from '../editor/route-engine.js';
+import { executeMacro, listMacroCommands } from '../macro/macro-engine.js';
 import './bm1-ui-hud-surface.smoke.mjs';
+
+const BM1_COMMAND_SOURCES = Object.freeze([
+  'macro/macro-route-auto-fit-commands.js',
+  'macro/macro-route-flange-commands.js',
+  'macro/macro-route-break-support-commands.js',
+]);
 
 function makeRouteEngineSpy() {
   const calls = [];
@@ -26,6 +35,75 @@ function makeRouteEngineSpy() {
     breakSegment(routeId, segmentId, point, meta) { calls.push({ method: 'breakSegment', routeId, segmentId, point, meta }); return null; },
     getRoutes: () => routes,
   };
+}
+
+function bm1MacroDescriptors() {
+  const contract = getBm1UiHudContract();
+  return [...contract.dashboardActions, ...contract.hudSteps].filter((item) => item.kind === 'macro');
+}
+
+function macroName(macro) {
+  return String(macro || '').trim().split(/\s+/)[0].toUpperCase();
+}
+
+function fixtureNode(id) {
+  const node = BM1_CENTERLINE_FIXTURE.nodes.find((item) => item.id === id);
+  if (!node) throw new Error(`Unknown BM1 fixture node ${id}`);
+  return { id: node.id, x: node.x, y: node.y, z: node.z };
+}
+
+function routeFromFixture(id, nodeIds, segments, spec) {
+  return {
+    contractVersion: '1.0.0-wave0',
+    id,
+    nodes: nodeIds.map(fixtureNode),
+    segments: segments.map(([segmentId, from, to]) => ({
+      id: segmentId,
+      from,
+      to,
+      kind: 'PIPE',
+      orientation: from === to ? 'POINT' : 'AXIAL',
+    })),
+    spec,
+  };
+}
+
+function createBm1RuntimeRouteEngine() {
+  return createRouteEngine({
+    initialState: {
+      model: {
+        components: [],
+        routes: [
+          routeFromFixture('BM1-MAIN-ROUTE', ['A', 'B', 'C', 'M', 'D', 'E'], [
+            ['P1', 'A', 'B'],
+            ['P2', 'B', 'C'],
+            ['P3', 'C', 'M'],
+            ['P3b', 'M', 'D'],
+            ['P4', 'D', 'E'],
+          ], { pipelineRef: 'BM1-MAIN', size: '150NB', nominalSize: '150NB', class: '300', rating: '300', material: 'CS' }),
+          routeFromFixture('BM1-BRANCH-ROUTE', ['E', 'F', 'S', 'G'], [
+            ['P5', 'E', 'F'],
+            ['P6', 'F', 'S'],
+            ['P6b', 'S', 'G'],
+          ], { pipelineRef: 'BM1-BRANCH', size: '4IN', nominalSize: '4IN', material: 'CS' }),
+        ],
+      },
+      selection: { ids: [], activeRouteId: 'BM1-MAIN-ROUTE' },
+      hud: { mode: 'idle', draft: null },
+      intelligence: { lastResolution: null },
+      macro: { lastRun: null },
+      diagnostics: { traces: [], metrics: {} },
+    },
+  });
+}
+
+function executeBm1MacroDescriptor(descriptor) {
+  const routeEngine = createBm1RuntimeRouteEngine();
+  const ctx = {
+    getRouteEngine: () => routeEngine,
+    executeMacro: (line) => executeMacro(line, { getRouteEngine: () => routeEngine }),
+  };
+  return { routeEngine, result: executeBm1UiHudAction(descriptor, ctx) };
 }
 
 test('BM1 UI/HUD contract exposes dashboard and HUD action groups without geometry builders', () => {
@@ -69,6 +147,72 @@ test('BM1 UI/HUD macro actions delegate to macro execution payloads', () => {
     'FLANGE_PAIR 1000,1000,0 ROUTE=BM1-MAIN-ROUTE TYPE=WN FACING=RF CLASS=300 SIZE=150NB NAME=FLG-001 PROVENANCE=BM1-HUD',
     'SUPPORT_ATTACH 1000,3500,1250 ROUTE=BM1-BRANCH-ROUTE SEGMENT=P6 KIND=REST NAME=PS-001 ATTACH=BRANCH PROVENANCE=BM1-HUD',
   ]);
+});
+
+test('every BM1 UI/HUD macro string has a registered runtime command', () => {
+  const registered = new Set(listMacroCommands());
+  for (const descriptor of bm1MacroDescriptors()) {
+    const name = macroName(descriptor.payload?.macro);
+    assert.ok(registered.has(name), `${descriptor.id} macro command ${name} should be registered`);
+  }
+});
+
+test('BM1 UI/HUD macro actions execute through runtime commands without Unknown command failures', () => {
+  for (const descriptor of bm1MacroDescriptors()) {
+    assert.doesNotThrow(
+      () => executeBm1MacroDescriptor(descriptor),
+      `${descriptor.id} should execute without Unknown command or routing failures`,
+    );
+  }
+});
+
+test('BM1 FLANGE_PAIR and SUPPORT_ATTACH preserve UI/HUD topology metadata', () => {
+  const flangeRun = executeBm1MacroDescriptor(getBm1UiHudContract().dashboardActions.find((item) => item.id === 'bm1.flange-pair'));
+  const flange = flangeRun.routeEngine.getInlineComponents().find((item) => item.type === 'FLANGE_PAIR');
+  assert.ok(flange, 'FLANGE_PAIR should create an inline topology component');
+  assert.equal(flange.attributes.TYPE, 'WN');
+  assert.equal(flange.attributes.FACING, 'RF');
+  assert.equal(flange.attributes.CLASS, '300');
+  assert.equal(flange.attributes.SIZE, '150NB');
+  assert.equal(flange.attributes.ROUTE, 'BM1-MAIN-ROUTE');
+  assert.equal(flange.attributes.NAME, 'FLG-001');
+  assert.equal(flange.attributes.PROVENANCE, 'BM1-HUD');
+
+  const supportRun = executeBm1MacroDescriptor(getBm1UiHudContract().dashboardActions.find((item) => item.id === 'bm1.break-support'));
+  const support = supportRun.routeEngine.getInlineComponents().find((item) => item.type === 'SUPPORT');
+  assert.ok(support, 'SUPPORT_ATTACH should create an inline topology component');
+  assert.equal(support.attributes.ROUTE, 'BM1-BRANCH-ROUTE');
+  assert.equal(support.attributes.SEGMENT, 'P6');
+  assert.equal(support.attributes.ATTACH, 'BRANCH');
+  assert.equal(support.attributes.NAME, 'PS-001');
+  assert.equal(support.attributes.KIND, 'REST');
+  assert.equal(support.attributes.PROVENANCE, 'BM1-HUD');
+});
+
+test('BM1 UI/HUD macro actions do not inject fabricated dimensional fields', () => {
+  for (const descriptor of bm1MacroDescriptors()) {
+    const macro = descriptor.payload?.macro || '';
+    assert.doesNotMatch(macro, /\b(?:LENGTH|WEIGHT|OD|BORE|THK|GASKET|BOLT)=/i, `${descriptor.id} should not inject fabricated dimensions`);
+  }
+
+  for (const id of ['bm1.flange-pair', 'bm1.break-support']) {
+    const descriptor = [...getBm1UiHudContract().dashboardActions, ...getBm1UiHudContract().hudSteps].find((item) => item.id === id);
+    const { routeEngine } = executeBm1MacroDescriptor(descriptor);
+    for (const component of routeEngine.getInlineComponents()) {
+      assert.equal(component.attributes.LENGTH, '', `${id} should not synthesize component length`);
+      assert.equal(component.attributes.WEIGHT, '', `${id} should not synthesize component weight`);
+      assert.equal(component.attributes.BRANCH_LENGTH, '', `${id} should not synthesize branch length`);
+    }
+  }
+});
+
+test('BM1 macro route command sources do not import private or mutable PCD runtime paths', () => {
+  for (const path of BM1_COMMAND_SOURCES) {
+    const source = readFileSync(path, 'utf8');
+    for (const forbidden of ['vendor/pipe-component-data', 'PipeComponentData', 'pcd-shim', 'private-pcd', 'patchPipeComponentData']) {
+      assert.equal(source.includes(forbidden), false, `${path} must not use ${forbidden}`);
+    }
+  }
 });
 
 test('BM1 HUD route actions dispatch to route engine services only', () => {
