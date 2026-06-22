@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './bm1-dashboard-help.smoke.mjs';
 
 test('BM1 dashboard panel exposes accessible region metadata', () => {
   const source = readFileSync('js/ui/bm1-dashboard-panel.js', 'utf8');
