@@ -21,6 +21,7 @@ export class DxfTable {
     this.name = String(name).trim().toUpperCase();
     this.handle = params.handle ? String(params.handle).trim().toUpperCase() : null;
     this.ownerHandle = params.ownerHandle ? String(params.ownerHandle).trim().toUpperCase() : null;
+    this.orderedRecords = [];
     this.records = new Map(); // recordName -> DxfTableRecord or specialized class
     this.source = {
       headerRawTags: Array.isArray(params.source?.headerRawTags) ? params.source.headerRawTags : [],
@@ -29,7 +30,9 @@ export class DxfTable {
   }
 
   addRecord(name, record) {
-    this.records.set(String(name).trim().toUpperCase(), record);
+    this.orderedRecords.push(record);
+    const key = String(name).trim().toUpperCase();
+    if (!this.records.has(key)) this.records.set(key, record);
   }
 
   getRecord(name) {
@@ -41,6 +44,6 @@ export class DxfTable {
   }
 
   [Symbol.iterator]() {
-    return this.records.values();
+    return this.orderedRecords.values();
   }
 }

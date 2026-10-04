@@ -94,6 +94,9 @@ export const PolylineCodec = {
       ...common,
       type: 'POLYLINE',
       geometry: {
+        elevation: parseNumber(tags.find(t => t.code === 30)?.value ?? '0'),
+        startWidth: parseNumber(tags.find(t => t.code === 40)?.value ?? '0'),
+        endWidth: parseNumber(tags.find(t => t.code === 41)?.value ?? '0'),
         vertices,
         closed,
         extrusion: { x: ex, y: ey, z: ez },

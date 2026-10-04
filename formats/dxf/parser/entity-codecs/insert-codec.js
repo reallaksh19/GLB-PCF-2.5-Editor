@@ -38,6 +38,10 @@ export const InsertCodec = {
       },
       attributes: {
         blockName,
+        columns: Number(tags.find(t => t.code === 70)?.value ?? 1),
+        rows: Number(tags.find(t => t.code === 71)?.value ?? 1),
+        columnSpacing: Number(tags.find(t => t.code === 44)?.value ?? 0),
+        rowSpacing: Number(tags.find(t => t.code === 45)?.value ?? 0),
         attribs: subEntities,
       },
       source: { order, rawTags: tags },

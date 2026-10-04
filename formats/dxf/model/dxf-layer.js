@@ -6,7 +6,7 @@
 
 export class DxfLayer {
   constructor(params = {}) {
-    this.name = params.name ? String(params.name).trim() : '0';
+    this.name = params.name ? String(params.name) : '0';
     this.handle = params.handle ? String(params.handle).trim().toUpperCase() : null;
     this.ownerHandle = params.ownerHandle ? String(params.ownerHandle).trim().toUpperCase() : null;
     this.colorIndex = params.colorIndex ?? 7; // standard AutoCAD default: 7 (white/black)

@@ -16,7 +16,7 @@ export function parseHeaderSection(stream, doc) {
   while (stream.hasNext()) {
     const token = stream.peek();
     if (token.code === 0) {
-      if (token.value === 'ENDSEC') {
+      if (token.value.trim().toUpperCase() === 'ENDSEC') {
         stream.next();
         break;
       }
@@ -56,11 +56,11 @@ export function parseTablesSection(stream, doc) {
   while (stream.hasNext()) {
     const token = stream.peek();
     if (token.code === 0) {
-      if (token.value === 'ENDSEC') {
+      if (token.value.trim().toUpperCase() === 'ENDSEC') {
         stream.next();
         break;
       }
-      if (token.value === 'TABLE') {
+      if (token.value.trim().toUpperCase() === 'TABLE') {
         parseSingleTable(stream, doc);
         continue;
       }
@@ -72,6 +72,7 @@ export function parseTablesSection(stream, doc) {
 function getTableInstance(doc, tableName) {
   const upper = tableName.toUpperCase();
   switch (upper) {
+    case 'LAYER': return doc.tables.layerTable;
     case 'LTYPE': return doc.tables.lineTypes;
     case 'STYLE': return doc.tables.textStyles;
     case 'DIMSTYLE': return doc.tables.dimStyles;
@@ -89,9 +90,9 @@ function getTableInstance(doc, tableName) {
 }
 
 function parseSingleTable(stream, doc) {
-  stream.next(); // consume 0 TABLE
+  const tableToken = stream.next(); // retain original marker/span
   let tableName = 'UNKNOWN';
-  const headerTags = [{ code: 0, value: 'TABLE' }];
+  const headerTags = [tableToken];
 
   while (stream.hasNext()) {
     const t = stream.peek();
@@ -113,12 +114,19 @@ function parseSingleTable(stream, doc) {
 
   const tableInstance = getTableInstance(doc, tableName);
   tableInstance.source.headerRawTags = headerTags;
+  doc.adoptRecord(tableInstance, headerTags);
+  tableInstance.handle = headerTags.find(t => t.code === 5)?.value?.trim().toUpperCase() || null;
+  tableInstance.ownerHandle = headerTags.find(t => t.code === 330)?.value?.trim().toUpperCase() || null;
 
   // Read table records
   while (stream.hasNext()) {
     const t = stream.peek();
     if (t.code === 0) {
-      if (t.value === 'ENDTAB') {
+      if (t.value.trim().toUpperCase() === 'ENDSEC') {
+        doc.diagnostics.push({ code: 'ENDTAB_MISSING', severity: 'error', tableName });
+        break;
+      }
+      if (t.value.trim().toUpperCase() === 'ENDTAB') {
         tableInstance.source.endTabRawTags = [stream.next()];
         break;
       }
@@ -149,7 +157,7 @@ function parseTableRecord(stream, tableName, doc, tableInstance) {
     tags.push(cur);
 
     switch (cur.code) {
-      case 2: recordName = cur.value.trim(); break;
+      case 2: recordName = cur.value; break;
       case 5:
       case 105:
         handle = cur.value.trim().toUpperCase();
@@ -183,6 +191,7 @@ function parseTableRecord(stream, tableName, doc, tableInstance) {
       ownerHandle,
       source: { rawTags: tags },
     });
+    doc.adoptRecord(rec, tags);
     tableInstance.addRecord(recordName, rec);
   }
 }
@@ -191,11 +200,11 @@ export function parseBlocksSection(stream, doc) {
   while (stream.hasNext()) {
     const token = stream.peek();
     if (token.code === 0) {
-      if (token.value === 'ENDSEC') {
+      if (token.value.trim().toUpperCase() === 'ENDSEC') {
         stream.next();
         break;
       }
-      if (token.value === 'BLOCK') {
+      if (token.value.trim().toUpperCase() === 'BLOCK') {
         parseSingleBlock(stream, doc);
         continue;
       }
@@ -221,14 +230,14 @@ function parseSingleBlock(stream, doc) {
     headerTags.push(cur);
 
     switch (cur.code) {
-      case 2: blockName = cur.value.trim(); break;
+      case 2: blockName = cur.value; break;
       case 5:
       case 105:
         handle = cur.value.trim().toUpperCase();
         doc.handles.register(handle);
         break;
       case 330: ownerHandle = cur.value.trim().toUpperCase(); break;
-      case 8: layerId = cur.value.trim(); break;
+      case 8: layerId = cur.value; break;
       case 10: bx = parseFloat(cur.value) || 0; break;
       case 20: by = parseFloat(cur.value) || 0; break;
       case 30: bz = parseFloat(cur.value) || 0; break;
@@ -251,7 +260,11 @@ function parseSingleBlock(stream, doc) {
   while (stream.hasNext()) {
     const t = stream.peek();
     if (t.code === 0) {
-      if (t.value === 'ENDBLK') {
+      if (t.value.trim().toUpperCase() === 'ENDSEC') {
+        doc.diagnostics.push({ code: 'ENDBLK_MISSING', severity: 'error', blockName });
+        break;
+      }
+      if (t.value.trim().toUpperCase() === 'ENDBLK') {
         const endTags = [stream.next()];
         while (stream.hasNext() && stream.peek().code !== 0) {
           endTags.push(stream.next());
@@ -270,11 +283,11 @@ function parseSingleBlock(stream, doc) {
 }
 
 export function parseEntitiesSection(stream, doc) {
-  let order = 0;
+  let order = doc.entities.length;
   while (stream.hasNext()) {
     const token = stream.peek();
     if (token.code === 0) {
-      if (token.value === 'ENDSEC') {
+      if (token.value.trim().toUpperCase() === 'ENDSEC') {
         stream.next();
         break;
       }
@@ -305,7 +318,7 @@ function parseEntityRecord(stream, order, doc) {
     while (stream.hasNext()) {
       const t = stream.peek();
       if (t.code === 0) {
-        if (t.value === 'SEQEND') {
+        if (t.value.trim().toUpperCase() === 'SEQEND') {
           seqendTags = [stream.next()];
           while (stream.hasNext() && stream.peek().code !== 0) {
             seqendTags.push(stream.next());
@@ -317,7 +330,7 @@ function parseEntityRecord(stream, order, doc) {
           }
           break;
         }
-        if (t.value === 'VERTEX') {
+        if (t.value.trim().toUpperCase() === 'VERTEX') {
           const v = parseEntityRecord(stream, order, doc);
           if (v) subEntities.push(v);
           continue;
@@ -332,7 +345,7 @@ function parseEntityRecord(stream, order, doc) {
       while (stream.hasNext()) {
         const t = stream.peek();
         if (t.code === 0) {
-          if (t.value === 'SEQEND') {
+          if (t.value.trim().toUpperCase() === 'SEQEND') {
             seqendTags = [stream.next()];
             while (stream.hasNext() && stream.peek().code !== 0) {
               seqendTags.push(stream.next());
@@ -344,7 +357,7 @@ function parseEntityRecord(stream, order, doc) {
             }
             break;
           }
-          if (t.value === 'ATTRIB') {
+          if (t.value.trim().toUpperCase() === 'ATTRIB') {
             const a = parseEntityRecord(stream, order, doc);
             if (a) subEntities.push(a);
             continue;
@@ -356,6 +369,8 @@ function parseEntityRecord(stream, order, doc) {
     }
   }
 
+  const compound = type === 'POLYLINE' || (type === 'INSERT' && tags.some(t => t.code === 66 && t.value.trim() === '1'));
+  if (compound && !seqendTags) doc.diagnostics.push({ code: 'SEQEND_MISSING', severity: 'error', line: typeToken.line });
   const entity = decodeEntity(type, tags, order, subEntities);
   if (seqendTags) {
     entity.source.seqendRawTags = seqendTags;

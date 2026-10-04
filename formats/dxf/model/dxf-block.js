@@ -7,7 +7,7 @@
 
 export class DxfBlock {
   constructor(params = {}) {
-    this.name = params.name ? String(params.name).trim() : '*UNNAMED';
+    this.name = params.name ? String(params.name) : '*UNNAMED';
     this.handle = params.handle ? String(params.handle).trim().toUpperCase() : null;
     this.ownerHandle = params.ownerHandle ? String(params.ownerHandle).trim().toUpperCase() : null;
     this.layerId = params.layerId || '0';

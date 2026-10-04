@@ -1,101 +1,97 @@
-/**
- * formats/dxf/model/dxf-document.js
- *
- * Authoritative DXF Document Model.
- * Represents the complete, un-collapsed CAD drawing structure with full section
- * preservation, tables, block definitions, and stable handle tracking.
- */
-
 import { DxfHandleRegistry } from './dxf-handle-registry.js';
 import { DxfTable } from './dxf-table.js';
 
+let nextDocument = 0;
 export class DxfDocument {
   constructor(params = {}) {
-    this.source = {
-      fileName: params.source?.fileName || 'untitled.dxf',
-      acadVersion: params.source?.acadVersion || 'AC1015', // Default AutoCAD 2000
-      encoding: params.source?.encoding || 'utf8',
-      newline: params.source?.newline || '\r\n',
-    };
-
-    this.units = {
-      insunits: params.units?.insunits ?? 0, // 0 = Unspecified, 1 = Inches, 4 = Millimeters, 6 = Meters
-      measurement: params.units?.measurement ?? 1, // 0 = English, 1 = Metric
-      sourceUnit: params.units?.sourceUnit || 'UNSPECIFIED',
-      displayUnit: params.units?.displayUnit || 'mm',
-    };
-
-    // Header variables map (e.g. $ACADVER -> 'AC1015', $EXTMIN -> {x, y, z})
+    this.id = params.id || 'dxf:document:' + (globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + '-' + (++nextDocument) + '-' + Math.random().toString(36).slice(2));
+    this.source = { fileName: params.source?.fileName || 'untitled.dxf', acadVersion: null, encoding: 'utf-8', newline: null, ...params.source };
+    this.units = { insunits: 0, measurement: null, sourceUnit: 'UNSPECIFIED', displayUnit: null, ...params.units };
     this.header = new Map();
-
-    // Classes section records
     this.classes = [];
-
-    // Tables section
     this.tables = {
-      layers: new Map(), // layerName (upper) -> DxfLayer
-      lineTypes: new DxfTable('LTYPE'),
-      textStyles: new DxfTable('STYLE'),
-      dimStyles: new DxfTable('DIMSTYLE'),
-      appIds: new DxfTable('APPID'),
-      blockRecords: new DxfTable('BLOCK_RECORD'),
-      viewPorts: new DxfTable('VPORT'),
-      ucs: new DxfTable('UCS'),
-      other: new Map(), // tableName -> DxfTable
+      layers: new Map(), layerTable: new DxfTable('LAYER'),
+      lineTypes: new DxfTable('LTYPE'), textStyles: new DxfTable('STYLE'),
+      dimStyles: new DxfTable('DIMSTYLE'), appIds: new DxfTable('APPID'),
+      blockRecords: new DxfTable('BLOCK_RECORD'), viewPorts: new DxfTable('VPORT'),
+      ucs: new DxfTable('UCS'), other: new Map(),
     };
-
-    // Blocks section: blockName (upper) -> DxfBlock
     this.blocks = new Map();
-
-    // Model space & Paper space entities (ordered)
+    this.blockRecords = [];
+    this.layerRecords = [];
     this.entities = [];
-
-    // Objects section
+    this.entityIndex = new Map();
+    this.modelSpace = [];
+    this.paperSpaces = new Map();
     this.objects = [];
-
-    // Raw preservation for uninterpreted or passthrough sections
-    this.raw = {
-      sections: new Map(),
-    };
-
-    // Handle allocator and tracker
+    this.raw = { sections: new Map(), sectionRecords: [], records: [], tokens: [] };
+    this.recordByStart = new Map();
+    this.diagnostics = [];
     this.handles = new DxfHandleRegistry(params.handles?.seed || '1');
+    this.tokenStream = params.tokenStream || null;
   }
-
+  get originalBytes() { return this.tokenStream?.originalBytes || new Uint8Array(); }
+  get readOnly() { return this.diagnostics.some(d => d.severity === 'error'); }
+  get capabilities() {
+    return { preservation: this.source.byteFidelity || 'exact-input-bytes', nativeEditing: false, nativeSave: false, recoveredBytes: true, parseStatus: this.readOnly ? 'incomplete' : 'complete' };
+  }
+  recordFor(tags) { return tags?.[0] ? this.recordByStart.get(tags[0].start) || null : null; }
+  adoptRecord(value, tags) {
+    const record = this.recordFor(tags);
+    if (record) {
+      value.id = record.id;
+      value.source.recordId = record.recordId;
+      value.source.recordOrdinal = record.ordinal;
+      value.source.span = record.span;
+      value.source.typeLexeme = record.rawTags[0].value;
+      value.source.handleLexeme = record.handleLexeme;
+    }
+    return record;
+  }
+  adoptEntity(entity, definitionId = null) {
+    if (!entity) return;
+    this.adoptRecord(entity, entity.source.rawTags);
+    if (!entity.id) entity.id = this.id + ':generated-view:' + this.entityIndex.size;
+    entity.documentId = this.id;
+    entity.definitionId = definitionId;
+    entity.spaceId = definitionId || entity.layoutId || entity.ownerHandle || entity.space;
+    this.entityIndex.set(entity.id, entity);
+    const children = entity.attributes.subEntities || entity.attributes.attribs || [];
+    children.forEach(e => this.adoptEntity(e, definitionId));
+    if (entity.type === 'POLYLINE') entity.geometry.vertices.forEach((v, i) => { v.sourceEntityId = children[i]?.id || null; });
+    if (entity.source.seqendRawTags) {
+      const record = this.recordFor(entity.source.seqendRawTags);
+      entity.source.seqendRecordId = record?.recordId || null;
+      entity.source.sequenceSpan = { start: entity.source.span.start, end: record?.span.end || entity.source.span.end };
+    }
+  }
   addEntity(entity) {
     if (!entity) return;
-    if (entity.handle) {
-      this.handles.register(entity.handle);
-    } else {
-      entity.handle = this.handles.allocate();
-      entity.id = `dxf:entity:${entity.handle}`;
-    }
+    this.adoptEntity(entity);
     this.entities.push(entity);
+    if (entity.space === 'paper') {
+      const key = entity.layoutId || entity.ownerHandle || 'paper';
+      if (!this.paperSpaces.has(key)) this.paperSpaces.set(key, []);
+      this.paperSpaces.get(key).push(entity);
+    } else this.modelSpace.push(entity);
   }
-
   addBlock(block) {
-    if (!block || !block.name) return;
-    if (block.handle) {
-      this.handles.register(block.handle);
-    }
-    this.blocks.set(block.name.toUpperCase(), block);
+    if (!block?.name) return;
+    this.adoptRecord(block, block.source.headerRawTags);
+    this.blockRecords.push(block);
+    if (!this.blocks.has(block.name.toUpperCase())) this.blocks.set(block.name.toUpperCase(), block);
+    else this.diagnostics.push({ code: 'DUPLICATE_BLOCK_NAME', severity: 'warning', name: block.name });
+    block.entities.forEach(e => this.adoptEntity(e, block.id));
   }
-
-  getBlock(name) {
-    if (!name) return null;
-    return this.blocks.get(String(name).trim().toUpperCase()) || null;
-  }
-
+  getBlock(name) { return this.blocks.get(String(name ?? '').trim().toUpperCase()) || null; }
   addLayer(layer) {
-    if (!layer || !layer.name) return;
-    if (layer.handle) {
-      this.handles.register(layer.handle);
-    }
-    this.tables.layers.set(layer.name.toUpperCase(), layer);
+    if (!layer?.name) return;
+    this.adoptRecord(layer, layer.source.rawTags);
+    this.layerRecords.push(layer);
+    const key = layer.name.toUpperCase();
+    if (!this.tables.layers.has(key)) this.tables.layers.set(key, layer);
+    else this.diagnostics.push({ code: 'DUPLICATE_LAYER_NAME', severity: 'warning', name: layer.name });
+    this.tables.layerTable.addRecord(layer.name, layer);
   }
-
-  getLayer(name) {
-    if (!name) return null;
-    return this.tables.layers.get(String(name).trim().toUpperCase()) || null;
-  }
+  getLayer(name) { return this.tables.layers.get(String(name ?? '').trim().toUpperCase()) || null; }
 }

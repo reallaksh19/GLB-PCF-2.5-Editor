@@ -5,7 +5,7 @@
  * Preserves source group-code tags for untouched round-trip fidelity.
  */
 
-let _tempEntityCounter = 0;
+
 
 export class DxfEntity {
   /**
@@ -17,9 +17,10 @@ export class DxfEntity {
     this.type = params.type ? String(params.type).trim().toUpperCase() : 'UNKNOWN';
     this.layerId = params.layerId || '0';
     this.space = params.space === 'paper' ? 'paper' : 'model';
+    this.layoutId = params.layoutId || null;
 
     // Stable editor identity
-    this.id = params.id || (this.handle ? `dxf:entity:${this.handle}` : `dxf:entity:temp_${++_tempEntityCounter}`);
+    this.id = params.id || null; // Imported identities are assigned from document/record indexes.
 
     this.style = {
       colorMode: params.style?.colorMode || 'BYLAYER',

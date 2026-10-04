@@ -1,92 +1,43 @@
-/**
- * formats/dxf/parser/dxf-document-parser.js
- *
- * Primary entrypoint for parsing raw DXF content into an authoritative DxfDocument.
- * Conforms strictly to the Phase 1 specification in Issue #85 and
- * docs/CAD_DOCUMENT_ARCHITECTURE.md.
- */
-
 import { DxfTokenStream } from './dxf-token-stream.js';
 import { DxfDocument } from '../model/dxf-document.js';
-import {
-  parseHeaderSection,
-  parseTablesSection,
-  parseBlocksSection,
-  parseEntitiesSection,
-} from './dxf-section-parser.js';
+import { indexSource, indexSections } from './dxf-source-index.js';
+import { parseHeaderSection, parseTablesSection, parseBlocksSection, parseEntitiesSection } from './dxf-section-parser.js';
 
+/** Preservation-first native parse. No source handle allocation, geometry conversion or CEG. */
 export class DxfDocumentParser {
-  /**
-   * Parse a raw DXF string into an authoritative DxfDocument.
-   *
-   * @param {string} dxfText Raw DXF text.
-   * @param {Object} [options]
-   * @returns {DxfDocument}
-   */
-  static parse(dxfText, options = {}) {
-    if (typeof dxfText !== 'string') {
-      throw new TypeError('DxfDocumentParser.parse requires a DXF string');
-    }
-
-    const stream = new DxfTokenStream(dxfText);
+  static parse(input, options = {}) {
+    const stream = new DxfTokenStream(input);
     const doc = new DxfDocument({
+      id: options.documentId,
+      tokenStream: stream,
       source: {
         fileName: options.fileName || 'untitled.dxf',
+        acadVersion: stream.acadVersion,
+        encoding: stream.encoding,
+        declaredCodepage: stream.declaredCodepage,
+        newline: stream.newline,
+        inputKind: stream.inputKind,
+        byteFidelity: stream.inputKind === 'bytes' ? 'exact-input-bytes' : 'provided-utf8-text',
       },
     });
-
-    while (stream.hasNext()) {
-      const token = stream.peek();
-
-      if (token.code === 0 && token.value === 'SECTION') {
-        stream.next(); // consume 0 SECTION
-        let sectionName = 'UNKNOWN';
-
-        if (stream.hasNext() && stream.peek().code === 2) {
-          sectionName = stream.next().value.trim().toUpperCase();
-        }
-
-        switch (sectionName) {
-          case 'HEADER':
-            parseHeaderSection(stream, doc);
-            break;
-          case 'TABLES':
-            parseTablesSection(stream, doc);
-            break;
-          case 'BLOCKS':
-            parseBlocksSection(stream, doc);
-            break;
-          case 'ENTITIES':
-            parseEntitiesSection(stream, doc);
-            break;
-          default: {
-            // Passthrough preservation for CLASSES, OBJECTS, and custom sections
-            const rawTokens = [
-              { code: 0, value: 'SECTION' },
-              { code: 2, value: sectionName },
-            ];
-            while (stream.hasNext()) {
-              const cur = stream.next();
-              rawTokens.push(cur);
-              if (cur.code === 0 && cur.value === 'ENDSEC') {
-                break;
-              }
-            }
-            doc.raw.sections.set(sectionName, rawTokens);
-            break;
-          }
-        }
-        continue;
+    doc.diagnostics = stream.diagnostics;
+    if (stream.binary) return doc;
+    indexSource(stream, doc);
+    const sections = indexSections(stream, doc);
+    const structuralErrors = new Set(['INVALID_GROUP_CODE', 'MISSING_GROUP_VALUE', 'NESTED_SECTION', 'SECTION_NAME_MISSING', 'UNEXPECTED_ENDSEC', 'UNTERMINATED_SECTION', 'EOF_MISSING', 'DATA_AFTER_EOF', 'ORPHAN_TAG']);
+    if (doc.diagnostics.some(d => d.severity === 'error' && structuralErrors.has(d.code))) return doc;
+    // Semantic-invalid records remain inspectable, but never become editable/savable native documents.
+    for (const section of sections) {
+      const view = stream.substream(section.bodyStart, section.end);
+      if (section.name === 'HEADER') parseHeaderSection(view, doc);
+      else if (section.name === 'TABLES') parseTablesSection(view, doc);
+      else if (section.name === 'BLOCKS') parseBlocksSection(view, doc);
+      else if (section.name === 'ENTITIES') parseEntitiesSection(view, doc);
+      else if (section.name === 'OBJECTS' || section.name === 'CLASSES') {
+        const target = section.name === 'OBJECTS' ? doc.objects : doc.classes;
+        target.push(...doc.raw.records.filter(r => r.span.start > section.span.start && r.span.end <= section.span.end && r.type !== 'ENDSEC'));
       }
-
-      if (token.code === 0 && token.value === 'EOF') {
-        stream.next();
-        break;
-      }
-
-      stream.next();
     }
-
     return doc;
   }
 }
