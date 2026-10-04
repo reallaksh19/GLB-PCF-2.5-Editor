@@ -28,7 +28,7 @@ export class DxfEntity {
       lineTypeMode: params.style?.lineTypeMode || 'BYLAYER',
       lineType: params.style?.lineType || 'BYLAYER',
       lineWeightMode: params.style?.lineWeightMode || 'BYLAYER',
-      lineWeight: params.style?.lineWeight ?? -1,
+      lineWeight: params.style?.lineWeight ?? -2,
       transparency: params.style?.transparency ?? null,
       ...(params.style || {}),
     };
