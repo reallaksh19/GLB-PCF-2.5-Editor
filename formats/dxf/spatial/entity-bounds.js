@@ -6,7 +6,7 @@
  * render primitives without coordinate scaling or Three.js dependencies.
  */
 
-import { sampleBulgeArc } from '../render/dxf-render-adapter.js';
+import { sampleBulgeArc } from '../render/index.js';
 import { resolveTextGeometry, estimateTextBounds } from '../render/dxf-text-renderer.js';
 
 export function createEmptyBounds() {
