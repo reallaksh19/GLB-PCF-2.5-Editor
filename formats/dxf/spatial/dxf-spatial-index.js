@@ -133,6 +133,102 @@ export class DxfSpatialIndex {
   }
 
   /**
+   * Remove an entity's entries from the spatial index.
+   * @param {string} sourceEntityId
+   * @returns {number}
+   */
+  remove(sourceEntityId) {
+    if (!sourceEntityId) return 0;
+    const eid = String(sourceEntityId);
+    this.entityBoundsMap.delete(eid);
+    this.entityMetaMap.delete(eid);
+    return this.tree.remove(eid);
+  }
+
+  /**
+   * Insert an item into the spatial index.
+   * @param {Object} item - { id, minX, minY, maxX, maxY, layer, type, bounds, primitives, entity }
+   */
+  insert(item) {
+    if (!item || !item.id) return;
+    this.tree.insert(item);
+    if (item.bounds) {
+      this.entityBoundsMap.set(item.id, item.bounds);
+    }
+    if (item.layer != null || item.type != null) {
+      this.entityMetaMap.set(item.id, {
+        layer: item.layer || '0',
+        type: item.type || 'UNKNOWN',
+        handle: item.id.replace(/^dxf:entity:/, ''),
+      });
+    }
+  }
+
+  /**
+   * Update an entity in the spatial index.
+   * @param {Object} item
+   */
+  update(item) {
+    if (!item || !item.id) return;
+    this.remove(item.id);
+    this.insert(item);
+  }
+
+  /**
+   * Incrementally index an entity from its render primitives.
+   * @param {string} sourceEntityId
+   * @param {Array<Object>} primitives
+   */
+  insertFromPrimitives(sourceEntityId, primitives = []) {
+    if (!sourceEntityId || !Array.isArray(primitives) || primitives.length === 0) return;
+    const eid = String(sourceEntityId);
+    this.remove(eid);
+
+    const boundsList = primitives.map((p) => computeItemBounds(p));
+    const combined = combineBounds(boundsList);
+
+    if (combined.valid) {
+      const item = {
+        id: eid,
+        minX: combined.min.x,
+        minY: combined.min.y,
+        maxX: combined.max.x,
+        maxY: combined.max.y,
+        layer: primitives[0].layer,
+        type: primitives[0].type,
+        bounds: combined,
+        primitives,
+      };
+      this.insert(item);
+    }
+  }
+
+  /**
+   * Incrementally index an entity directly from its DxfEntity record.
+   * @param {import('../model/dxf-entity.js').DxfEntity} entity
+   */
+  insertFromEntity(entity) {
+    if (!entity || !entity.id) return;
+    this.remove(entity.id);
+    const bounds = computeItemBounds(entity);
+
+    if (bounds.valid) {
+      const item = {
+        id: entity.id,
+        minX: bounds.min.x,
+        minY: bounds.min.y,
+        maxX: bounds.max.x,
+        maxY: bounds.max.y,
+        layer: entity.layerId,
+        type: entity.type,
+        bounds,
+        entity,
+      };
+      this.insert(item);
+    }
+  }
+
+  /**
    * Query CAD entity IDs at a given point (x, y) with pick tolerance.
    * Returns array of unique sourceEntityIds sorted by distance to point.
    *

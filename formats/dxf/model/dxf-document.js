@@ -8,6 +8,7 @@
 
 import { DxfHandleRegistry } from './dxf-handle-registry.js';
 import { DxfTable } from './dxf-table.js';
+import { DxfLayer } from './dxf-layer.js';
 
 export class DxfDocument {
   constructor(params = {}) {
@@ -66,7 +67,7 @@ export class DxfDocument {
     this.layerEntityIndex = new Map(); // layerName (upper) -> Set<string> of entity IDs
   }
 
-  addEntity(entity) {
+  addEntity(entity, insertIndex = -1) {
     if (!entity) return;
     if (entity.handle) {
       this.handles.register(entity.handle);
@@ -74,7 +75,16 @@ export class DxfDocument {
       entity.handle = this.handles.allocate();
       entity.id = `dxf:entity:${entity.handle}`;
     }
-    this.entities.push(entity);
+
+    if (entity.state) {
+      entity.state.deleted = false;
+    }
+
+    if (insertIndex >= 0 && insertIndex < this.entities.length) {
+      this.entities.splice(insertIndex, 0, entity);
+    } else {
+      this.entities.push(entity);
+    }
 
     // Maintain indices
     if (entity.id) {
@@ -89,6 +99,28 @@ export class DxfDocument {
     if (entity.id) {
       layerSet.add(entity.id);
     }
+  }
+
+  removeEntity(idOrHandle) {
+    const ent = typeof idOrHandle === 'string' ? this.getEntity(idOrHandle) : idOrHandle;
+    if (!ent) return null;
+
+    const idx = this.entities.indexOf(ent);
+    if (idx !== -1) {
+      this.entities.splice(idx, 1);
+    }
+
+    if (ent.id) {
+      this.entitiesById.delete(ent.id);
+    }
+    const layerKey = String(ent.layerId || '0').trim().toUpperCase();
+    const layerSet = this.layerEntityIndex.get(layerKey);
+    if (layerSet && ent.id) {
+      layerSet.delete(ent.id);
+    }
+
+    ent.markDeleted();
+    return { entity: ent, index: idx };
   }
 
   getEntity(idOrHandle) {

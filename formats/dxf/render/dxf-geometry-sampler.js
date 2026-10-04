@@ -39,6 +39,47 @@ export class RenderModel {
     if (!layerName) return [];
     return this.primitivesByLayer.get(String(layerName).trim().toUpperCase()) || [];
   }
+
+  /**
+   * Recompute composite bounding box from current primitives.
+   * @returns {Object}
+   */
+  recomputeBounds() {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+    function updateBounds(pt) {
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+      const x = pt.x, y = pt.y, z = Number.isFinite(pt.z) ? pt.z : 0;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      minZ = Math.min(minZ, z);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      maxZ = Math.max(maxZ, z);
+    }
+
+    for (const prim of this.primitives) {
+      if (Array.isArray(prim.points)) {
+        for (const p of prim.points) updateBounds(p);
+      }
+      if (prim.start) updateBounds(prim.start);
+      if (prim.end) updateBounds(prim.end);
+      if (prim.position) updateBounds(prim.position);
+      if (prim.bounds?.corners) {
+        for (const c of prim.bounds.corners) updateBounds(c);
+      }
+    }
+
+    const hasBounds = Number.isFinite(minX) && Number.isFinite(maxX);
+    this.bounds = {
+      min: hasBounds ? { x: minX, y: minY, z: minZ } : { x: 0, y: 0, z: 0 },
+      max: hasBounds ? { x: maxX, y: maxY, z: maxZ } : { x: 0, y: 0, z: 0 },
+      size: hasBounds ? { x: maxX - minX, y: maxY - minY, z: maxZ - minZ } : { x: 0, y: 0, z: 0 },
+      center: hasBounds ? { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 } : { x: 0, y: 0, z: 0 },
+    };
+    return this.bounds;
+  }
 }
 
 /**
