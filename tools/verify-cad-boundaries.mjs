@@ -78,6 +78,7 @@ function checkSourceBoundaries() {
     path.join(REPO_ROOT, 'core', 'selection'),
     path.join(REPO_ROOT, 'core', 'commands', 'cad'),
     path.join(REPO_ROOT, 'core', 'geometry'),
+    path.join(REPO_ROOT, 'core', 'grips'),
   ];
 
   let scannedCount = 0;
