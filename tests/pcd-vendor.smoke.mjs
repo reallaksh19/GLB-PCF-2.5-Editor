@@ -43,8 +43,10 @@ test('fromUxmlXml plain-attribute patch is present', () => {
   assert.ok(text.includes('readPlainAttributes'));
 });
 
+import { pathToFileURL } from 'node:url';
+
 test('vendored package exports the sentinel API surface', async () => {
-  const pcd = await import(join(VENDOR_DIR, 'src/index.js'));
+  const pcd = await import(pathToFileURL(join(VENDOR_DIR, 'src/index.js')).href);
   for (const name of [
     'createPipeDataDb',
     'enrichWithPipeData',

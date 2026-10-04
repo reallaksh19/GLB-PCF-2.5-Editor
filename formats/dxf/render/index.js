@@ -5,14 +5,15 @@
  */
 
 export {
-  DxfRenderAdapter,
   RenderModel,
   sampleBulgeArc,
   sampleArc,
   sampleCircle,
   sampleEllipse,
   sampleSpline,
-} from './dxf-render-adapter.js';
+} from './dxf-geometry-sampler.js';
+
+export { DxfRenderAdapter } from './dxf-render-adapter.js';
 
 export {
   DXF_ACI_RGB,
