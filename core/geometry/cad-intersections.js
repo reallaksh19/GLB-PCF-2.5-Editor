@@ -36,6 +36,45 @@ export function isAngleBetween(deg, startDeg, endDeg) {
 }
 
 /**
+ * Convert a DXF polyline bulge between two vertices into an exact center, radius, and CCW angles.
+ *
+ * @param {{x: number, y: number, z?: number}} p1
+ * @param {{x: number, y: number, z?: number}} p2
+ * @param {number} bulge
+ * @returns {{ center: {x: number, y: number, z: number}, radius: number, startAngle: number, endAngle: number }|null}
+ */
+export function bulgeToArc(p1, p2, bulge) {
+  const b = Number(bulge) || 0;
+  if (Math.abs(b) < EPSILON) return null;
+
+  const dx = (p2.x ?? 0) - (p1.x ?? 0);
+  const dy = (p2.y ?? 0) - (p1.y ?? 0);
+  const chord = Math.sqrt(dx * dx + dy * dy);
+  if (chord < EPSILON) return null;
+
+  const nx = -dy / chord;
+  const ny = dx / chord;
+
+  const d = (chord * (1 - b * b)) / (4 * b);
+  const cx = ((p1.x ?? 0) + (p2.x ?? 0)) / 2 - nx * d;
+  const cy = ((p1.y ?? 0) + (p2.y ?? 0)) / 2 - ny * d;
+  const radius = Math.abs((chord * (1 + b * b)) / (4 * b));
+
+  const ang1 = normalizeAngle((Math.atan2((p1.y ?? 0) - cy, (p1.x ?? 0) - cx) * 180) / Math.PI);
+  const ang2 = normalizeAngle((Math.atan2((p2.y ?? 0) - cy, (p2.x ?? 0) - cx) * 180) / Math.PI);
+
+  const startAngle = b > 0 ? ang2 : ang1;
+  const endAngle = b > 0 ? ang1 : ang2;
+
+  return {
+    center: { x: cx, y: cy, z: p1.z ?? 0 },
+    radius,
+    startAngle,
+    endAngle,
+  };
+}
+
+/**
  * Compute intersection between two 2D lines.
  * Line 1: P1 + t * (P2 - P1)
  * Line 2: P3 + u * (P4 - P3)
@@ -238,37 +277,15 @@ export function getEntitySegments(entity) {
           });
         } else {
           // Arc segment from bulge
-          const dx = v2.x - v1.x;
-          const dy = v2.y - v1.y;
-          const chord = Math.sqrt(dx * dx + dy * dy);
-          const theta = 4 * Math.atan(bulge);
-          const radius = Math.abs(chord / (2 * Math.sin(theta / 2)));
-
-          const mx = (v1.x + v2.x) / 2;
-          const my = (v1.y + v2.y) / 2;
-          const sagitta = (chord / 2) * Math.tan(theta / 4);
-          const nx = -dy / chord;
-          const ny = dx / chord;
-          const dir = bulge > 0 ? 1 : -1;
-
-          const cx = mx + nx * sagitta * dir;
-          const cy = my + ny * sagitta * dir;
-
-          let sAngle = (Math.atan2(v1.y - cy, v1.x - cx) * 180) / Math.PI;
-          let eAngle = (Math.atan2(v2.y - cy, v2.x - cx) * 180) / Math.PI;
-          if (bulge < 0) {
-            [sAngle, eAngle] = [eAngle, sAngle];
+          const arcGeom = bulgeToArc(v1, v2, bulge);
+          if (arcGeom) {
+            segments.push({
+              type: 'ARC',
+              ...arcGeom,
+              entity,
+              vertexIndex: i,
+            });
           }
-
-          segments.push({
-            type: 'ARC',
-            center: { x: cx, y: cy },
-            radius,
-            startAngle: normalizeAngle(sAngle),
-            endAngle: normalizeAngle(eAngle),
-            entity,
-            vertexIndex: i,
-          });
         }
       }
       return segments;

@@ -118,15 +118,46 @@ export function offsetArcGeometry(center, radius, startAngle, endAngle, distance
 export function offsetPolylineVertices(vertices, closed, distance, sidePoint) {
   if (!Array.isArray(vertices) || vertices.length < 2) return [];
 
-  // Offset individual line segments
+  // Determine the overall offset side (+1 or -1) from the first segment so all
+  // segments are consistently shifted in the same direction.
+  const v0 = vertices[0];
+  const v1ref = vertices[1];
+  const dx0 = v1ref.x - v0.x;
+  const dy0 = v1ref.y - v0.y;
+  const len0 = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+  let side = 1;
+  if (len0 > EPSILON) {
+    // Left unit normal of first segment
+    const nx0 = -dy0 / len0;
+    const ny0 = dx0 / len0;
+    const mx0 = (v0.x + v1ref.x) / 2;
+    const my0 = (v0.y + v1ref.y) / 2;
+    const dot0 = (sidePoint.x - mx0) * nx0 + (sidePoint.y - my0) * ny0;
+    side = dot0 >= 0 ? 1 : -1;
+  }
+
+  // Offset individual line segments using the consistent side sign
   const offsetSegments = [];
   const count = closed ? vertices.length : vertices.length - 1;
 
   for (let i = 0; i < count; i++) {
-    const v1 = vertices[i];
-    const v2 = vertices[(i + 1) % vertices.length];
-    const seg = offsetLineSegment(v1, v2, distance, sidePoint);
-    offsetSegments.push(seg);
+    const p1 = vertices[i];
+    const p2 = vertices[(i + 1) % vertices.length];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < EPSILON) {
+      offsetSegments.push({ start: { ...p1 }, end: { ...p2 } });
+      continue;
+    }
+    const nx = (-dy / len) * side;
+    const ny = (dx / len) * side;
+    const ox = nx * distance;
+    const oy = ny * distance;
+    offsetSegments.push({
+      start: { x: p1.x + ox, y: p1.y + oy, z: p1.z ?? 0 },
+      end: { x: p2.x + ox, y: p2.y + oy, z: p2.z ?? 0 },
+    });
   }
 
   if (!closed) {

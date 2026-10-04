@@ -157,22 +157,36 @@ export class TrimEntitiesCommand extends CadCommand {
         changeSet.addAdded(splitLine);
       }
     } else if (type === 'CIRCLE' && allHits.length >= 2) {
-      // Circle trimmed by 2+ hits becomes an ARC
+      // Circle trimmed by 2+ hits becomes an ARC.
+      // Build all arc spans between consecutive cut points and discard the one containing clickAngle.
       const c = target.geometry.center;
-      const r = target.geometry.radius;
 
       const angles = allHits.map((h) => normalizeAngle((Math.atan2(h.y - c.y, h.x - c.x) * 180) / Math.PI));
       angles.sort((a, b) => a - b);
 
       const clickAngle = normalizeAngle((Math.atan2(this.clickPoint.y - c.y, this.clickPoint.x - c.x) * 180) / Math.PI);
 
-      // Identify arc span that does NOT contain clickAngle
-      let arcStart = angles[0];
-      let arcEnd = angles[1];
+      // Build spans: [angles[0]->angles[1]], [angles[1]->angles[2]], ..., [angles[n-1]->angles[0] (wrapping)]
+      const n = angles.length;
+      let arcStart = null;
+      let arcEnd = null;
 
-      if (isAngleBetween(clickAngle, arcStart, arcEnd)) {
-        // Swap so kept arc does not contain clickAngle
-        [arcStart, arcEnd] = [arcEnd, arcStart];
+      for (let i = 0; i < n; i++) {
+        const spanStart = angles[i];
+        const spanEnd = angles[(i + 1) % n];
+        if (isAngleBetween(clickAngle, spanStart, spanEnd)) {
+          // This span is clicked — discard it. The kept arc goes the other way.
+          // arcStart = spanEnd, arcEnd = spanStart (the complementary arc)
+          arcStart = spanEnd;
+          arcEnd = spanStart;
+          break;
+        }
+      }
+
+      // Fallback: if no span matched (shouldn't happen), keep first->second
+      if (arcStart === null) {
+        arcStart = angles[1];
+        arcEnd = angles[0];
       }
 
       // Convert circle entity into ARC

@@ -13,7 +13,7 @@
 import { CadCommand } from '../cad-command.js';
 import { ChangeSet, snapshotEntityState, restoreEntityState } from '../change-set.js';
 import { DxfEntity } from '../../../../formats/dxf/model/dxf-entity.js';
-import { pointDistance, normalizeAngle } from '../../../geometry/cad-intersections.js';
+import { pointDistance, normalizeAngle, bulgeToArc } from '../../../geometry/cad-intersections.js';
 import { createInsertTransform, transformPoint } from '../../../../formats/dxf/render/dxf-block-renderer.js';
 
 const EPSILON = 1e-3;
@@ -96,7 +96,11 @@ export class ExplodeCommand extends CadCommand {
           }
 
           if (Array.isArray(childGeom.vertices)) {
-            childGeom.vertices = childGeom.vertices.map((v) => transformPoint(v, transform, basePoint));
+            childGeom.vertices = childGeom.vertices.map((v) => {
+              const tp = transformPoint(v, transform, basePoint);
+              if (v.bulge != null) tp.bulge = v.bulge;
+              return tp;
+            });
           }
 
           const explodedChild = new DxfEntity({
@@ -148,45 +152,26 @@ export class ExplodeCommand extends CadCommand {
             this.createdEntities.push(line);
             changeSet.addAdded(line);
           } else {
-            // Explode into ARC
-            const dx = v2.x - v1.x;
-            const dy = v2.y - v1.y;
-            const chord = Math.sqrt(dx * dx + dy * dy);
-            const theta = 4 * Math.atan(bulge);
-            const radius = Math.abs(chord / (2 * Math.sin(theta / 2)));
-
-            const mx = (v1.x + v2.x) / 2;
-            const my = (v1.y + v2.y) / 2;
-            const sagitta = (chord / 2) * Math.tan(theta / 4);
-            const nx = -dy / chord;
-            const ny = dx / chord;
-            const dir = bulge > 0 ? 1 : -1;
-
-            const cx = mx + nx * sagitta * dir;
-            const cy = my + ny * sagitta * dir;
-
-            let sAngle = normalizeAngle((Math.atan2(v1.y - cy, v1.x - cx) * 180) / Math.PI);
-            let eAngle = normalizeAngle((Math.atan2(v2.y - cy, v2.x - cx) * 180) / Math.PI);
-            if (bulge < 0) {
-              [sAngle, eAngle] = [eAngle, sAngle];
+            // Explode into ARC using the authoritative bulgeToArc helper
+            const arcGeom = bulgeToArc(v1, v2, bulge);
+            if (arcGeom) {
+              const arc = new DxfEntity({
+                type: 'ARC',
+                layerId: entity.layerId,
+                space: entity.space,
+                style: JSON.parse(JSON.stringify(entity.style || {})),
+                geometry: {
+                  center: arcGeom.center,
+                  radius: arcGeom.radius,
+                  startAngle: arcGeom.startAngle,
+                  endAngle: arcGeom.endAngle,
+                },
+                state: { modified: true, generated: true },
+              });
+              document.addEntity(arc);
+              this.createdEntities.push(arc);
+              changeSet.addAdded(arc);
             }
-
-            const arc = new DxfEntity({
-              type: 'ARC',
-              layerId: entity.layerId,
-              space: entity.space,
-              style: JSON.parse(JSON.stringify(entity.style || {})),
-              geometry: {
-                center: { x: cx, y: cy, z: 0 },
-                radius,
-                startAngle: sAngle,
-                endAngle: eAngle,
-              },
-              state: { modified: true, generated: true },
-            });
-            document.addEntity(arc);
-            this.createdEntities.push(arc);
-            changeSet.addAdded(arc);
           }
         }
       }
