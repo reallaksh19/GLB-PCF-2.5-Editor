@@ -37,3 +37,13 @@ export {
 export {
   IncrementalUpdater,
 } from './incremental-updater.js';
+
+export {
+  TrimEntitiesCommand,
+  ExtendEntitiesCommand,
+  FilletCommand,
+  OffsetCommand,
+  ExplodeCommand,
+  JoinCommand,
+} from './edit-commands/index.js';
+

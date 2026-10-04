@@ -28,6 +28,7 @@ function deepClone(obj) {
 export function snapshotEntityState(entity) {
   if (!entity) return null;
   return {
+    type: entity.type,
     layerId: entity.layerId,
     space: entity.space,
     geometry: deepClone(entity.geometry || {}),
@@ -59,6 +60,10 @@ export function restoreEntityState(entity, snapshot, document = null) {
 
   const oldLayer = entity.layerId;
   const targetLayer = snapshot.layerId;
+
+  if (snapshot.type) {
+    entity.type = snapshot.type;
+  }
 
   entity.geometry = deepClone(snapshot.geometry || {});
   entity.style = deepClone(snapshot.style || {});
