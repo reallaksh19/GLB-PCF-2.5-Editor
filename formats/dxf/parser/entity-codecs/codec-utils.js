@@ -12,7 +12,7 @@ export function parseCommonFields(tags) {
   let colorIndex = 256; // BYLAYER
   let trueColor = null;
   let lineType = 'BYLAYER';
-  let lineWeight = -1; // BYLAYER
+  let lineWeight = -2; // BYLAYER
   let transparency = null;
 
   for (const tag of tags) {
@@ -67,7 +67,7 @@ export function parseCommonFields(tags) {
       trueColor,
       lineTypeMode: lineType === 'BYLAYER' ? 'BYLAYER' : 'EXPLICIT',
       lineType,
-      lineWeightMode: lineWeight === -1 ? 'BYLAYER' : 'EXPLICIT',
+      lineWeightMode: lineWeight === -2 ? 'BYLAYER' : 'EXPLICIT',
       lineWeight,
       transparency,
     },

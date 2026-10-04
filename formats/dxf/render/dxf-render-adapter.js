@@ -674,7 +674,7 @@ export class DxfRenderAdapter {
             projectBlockInstance(
               entity,
               document,
-              { depth: 0, maxBlockDepth, parentTransform: transform },
+              { depth: blockContext ? blockContext.depth : 0, maxBlockDepth, parentTransform: transform },
               (childEntity, childStyle, composedTransform, bCtx) => {
                 projectEntity(childEntity, childStyle, composedTransform, {
                   ...bCtx,

@@ -98,14 +98,14 @@ export function resolveTextGeometry(entity) {
   const geom = entity.geometry || {};
   const attrs = entity.attributes || {};
 
-  let position = { x: geom.point?.x ?? 0, y: geom.point?.y ?? 0, z: geom.point?.z ?? 0 };
+  let position = { x: geom.insertionPoint?.x ?? geom.point?.x ?? 0, y: geom.insertionPoint?.y ?? geom.point?.y ?? 0, z: geom.insertionPoint?.z ?? geom.point?.z ?? 0 };
   let alignmentPoint = geom.alignmentPoint ? { ...geom.alignmentPoint } : null;
 
   let hAlign = 'LEFT';
   let vAlign = 'BASELINE';
   let attachmentPoint = null;
 
-  let rotationDeg = Number(geom.rotation) || 0;
+  let rotationDeg = Number(attrs.rotation) || Number(geom.rotation) || 0;
 
   if (isMText) {
     attachmentPoint = Number(attrs.attachmentPoint) || 1;
@@ -119,8 +119,8 @@ export function resolveTextGeometry(entity) {
     }
   } else {
     // Standard TEXT
-    const hCode = Number(attrs.hAlign) || 0;
-    const vCode = Number(attrs.vAlign) || 0;
+    const hCode = Number(attrs.horizJust ?? attrs.hAlign) || 0;
+    const vCode = Number(attrs.vertJust ?? attrs.vAlign) || 0;
     hAlign = H_ALIGN_MAP[hCode] || 'LEFT';
     vAlign = V_ALIGN_MAP[vCode] || 'BASELINE';
 
@@ -130,9 +130,9 @@ export function resolveTextGeometry(entity) {
     }
   }
 
-  const height = Math.max(0.001, Number(geom.height) || 2.5);
-  const widthFactor = Number.isFinite(Number(geom.widthFactor)) ? Number(geom.widthFactor) : 1.0;
-  const obliqueAngle = Number(geom.obliqueAngle) || 0;
+  const height = Math.max(0.001, Number(attrs.height ?? geom.height) || 2.5);
+  const widthFactor = Number.isFinite(Number(attrs.widthFactor ?? geom.widthFactor)) ? Number(attrs.widthFactor ?? geom.widthFactor) : 1.0;
+  const obliqueAngle = Number(attrs.obliqueAngle ?? geom.obliqueAngle) || 0;
   const rotationRad = (rotationDeg * Math.PI) / 180;
 
   return {

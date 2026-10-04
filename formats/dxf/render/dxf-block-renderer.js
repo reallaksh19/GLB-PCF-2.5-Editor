@@ -140,7 +140,7 @@ export function projectBlockInstance(insertEntity, document, options = {}, proje
 
   // Extract transform parameters
   const localTransform = createInsertTransform(
-    insertEntity.geometry?.point,
+    insertEntity.geometry?.insertionPoint || insertEntity.geometry?.point,
     insertEntity.geometry?.scale,
     insertEntity.geometry?.rotation
   );
@@ -182,8 +182,8 @@ export function projectBlockInstance(insertEntity, document, options = {}, proje
 
       if (r > 0 || c > 0) {
         // Offset along grid axes rotated by rotation angle
-        const offsetX = (c * colSpacing) * composedTransform.cos - (r * rowSpacing) * composedTransform.sin;
-        const offsetY = (c * colSpacing) * composedTransform.sin + (r * rowSpacing) * composedTransform.cos;
+        const offsetX = (c * colSpacing) * localTransform.cos - (r * rowSpacing) * localTransform.sin;
+        const offsetY = (c * colSpacing) * localTransform.sin + (r * rowSpacing) * localTransform.cos;
 
         gridTransform = {
           ...composedTransform,

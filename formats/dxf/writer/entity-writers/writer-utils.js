@@ -48,7 +48,7 @@ export function writeCommonEntityTags(entity, lines) {
       pushTag(lines, 6, entity.style.lineType);
     }
     // 370: Lineweight
-    if (entity.style.lineWeight != null && entity.style.lineWeight !== -1) {
+    if (entity.style.lineWeight != null && entity.style.lineWeight !== -2) {
       pushTag(lines, 370, entity.style.lineWeight);
     }
   }

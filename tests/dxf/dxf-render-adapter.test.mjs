@@ -139,15 +139,15 @@ const entTextAligned = new DxfEntity({
   type: 'TEXT',
   layerId: '0',
   geometry: {
-    point: { x: 100, y: 100, z: 0 },
+    insertionPoint: { x: 100, y: 100, z: 0 },
     alignmentPoint: { x: 150, y: 120, z: 0 },
-    height: 3.5,
-    rotation: 45,
   },
   attributes: {
     text: 'CENTERED LABEL',
-    hAlign: 1, // Center
-    vAlign: 2, // Middle
+    horizJust: 1, // Center
+    vertJust: 2, // Middle
+    height: 3.5,
+    rotation: 45,
   },
 });
 
@@ -233,7 +233,7 @@ assemblyBlock.addEntity(new DxfEntity({
   handle: 'INS_VALVE',
   type: 'INSERT',
   layerId: '0',
-  geometry: { point: { x: 10, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 1 }, rotation: 0 },
+  geometry: { insertionPoint: { x: 10, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 1 }, rotation: 0 },
   attributes: { blockName: 'VALVE_BODY' },
 }));
 blockDoc.addBlock(assemblyBlock);
