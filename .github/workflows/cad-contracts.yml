@@ -1,0 +1,23 @@
+name: CAD contract checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  cad-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: integration/cad/package-lock.json
+      - run: npm ci --prefix integration/cad --ignore-scripts --no-audit --no-fund
+      - run: npm run cad:contracts
+      - name: Native parser regression tests when available
+        if: ${{ hashFiles('tests/cad/A01/*.test.mjs') != '' }}
+        run: node --test tests/cad/A01/*.test.mjs
+      - name: Existing native document fixtures when available
+        if: ${{ hashFiles('tests/dxf/dxf-document-parser.test.mjs') != '' }}
+        run: node tests/dxf/dxf-document-parser.test.mjs
