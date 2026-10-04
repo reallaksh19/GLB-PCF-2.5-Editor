@@ -81,7 +81,11 @@ export const PolylineCodec = {
       y: v.geometry?.point?.y ?? 0,
       z: v.geometry?.point?.z ?? 0,
       bulge: v.geometry?.bulge ?? 0,
+      startWidth: v.geometry?.startWidth ?? 0,
+      endWidth: v.geometry?.endWidth ?? 0,
       flags: v.attributes?.flags ?? 0,
+      handle: v.handle || null,
+      rawTags: v.source?.rawTags || [],
     }));
 
     const closed = Boolean(flags & 1);

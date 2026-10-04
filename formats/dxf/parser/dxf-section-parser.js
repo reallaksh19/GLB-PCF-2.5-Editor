@@ -297,16 +297,23 @@ function parseEntityRecord(stream, order, doc) {
     tags.push(stream.next());
   }
 
-  // Handle compound entities like POLYLINE with sub-VERTEX entities
+  // Handle compound entities: POLYLINE (with VERTEX) and INSERT (with ATTRIB when code 66 == 1)
   const subEntities = [];
+  let seqendTags = null;
+
   if (type === 'POLYLINE') {
     while (stream.hasNext()) {
       const t = stream.peek();
       if (t.code === 0) {
         if (t.value === 'SEQEND') {
-          stream.next(); // consume SEQEND
+          seqendTags = [stream.next()];
           while (stream.hasNext() && stream.peek().code !== 0) {
-            stream.next();
+            seqendTags.push(stream.next());
+          }
+          for (const sTag of seqendTags) {
+            if (sTag.code === 5 || sTag.code === 105) {
+              doc.handles.register(sTag.value);
+            }
           }
           break;
         }
@@ -319,9 +326,40 @@ function parseEntityRecord(stream, order, doc) {
       }
       stream.next();
     }
+  } else if (type === 'INSERT') {
+    const hasAttributesFollow = tags.some((t) => t.code === 66 && parseInt(t.value, 10) === 1);
+    if (hasAttributesFollow) {
+      while (stream.hasNext()) {
+        const t = stream.peek();
+        if (t.code === 0) {
+          if (t.value === 'SEQEND') {
+            seqendTags = [stream.next()];
+            while (stream.hasNext() && stream.peek().code !== 0) {
+              seqendTags.push(stream.next());
+            }
+            for (const sTag of seqendTags) {
+              if (sTag.code === 5 || sTag.code === 105) {
+                doc.handles.register(sTag.value);
+              }
+            }
+            break;
+          }
+          if (t.value === 'ATTRIB') {
+            const a = parseEntityRecord(stream, order, doc);
+            if (a) subEntities.push(a);
+            continue;
+          }
+          break;
+        }
+        stream.next();
+      }
+    }
   }
 
   const entity = decodeEntity(type, tags, order, subEntities);
+  if (seqendTags) {
+    entity.source.seqendRawTags = seqendTags;
+  }
   if (entity.handle) {
     doc.handles.register(entity.handle);
   }

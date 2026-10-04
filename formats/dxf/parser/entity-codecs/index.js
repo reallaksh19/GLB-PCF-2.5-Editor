@@ -8,6 +8,8 @@
 import { LineCodec } from './line-codec.js';
 import { CircleCodec, ArcCodec } from './circle-arc-codec.js';
 import { LwpolylineCodec, PolylineCodec } from './polyline-codec.js';
+import { VertexCodec } from './vertex-codec.js';
+import { AttribCodec } from './attrib-codec.js';
 import { TextCodec, MtextCodec } from './text-codec.js';
 import { InsertCodec } from './insert-codec.js';
 import {
@@ -26,6 +28,8 @@ const CODEC_MAP = new Map([
   ['ARC', ArcCodec],
   ['LWPOLYLINE', LwpolylineCodec],
   ['POLYLINE', PolylineCodec],
+  ['VERTEX', VertexCodec],
+  ['ATTRIB', AttribCodec],
   ['TEXT', TextCodec],
   ['MTEXT', MtextCodec],
   ['INSERT', InsertCodec],

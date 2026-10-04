@@ -182,6 +182,86 @@ PIPING
 43
 1.5
 0
+POLYLINE
+5
+105
+8
+PIPING
+70
+0
+0
+VERTEX
+5
+106
+8
+PIPING
+10
+500.25
+20
+600.75
+30
+0.0
+42
+0.5
+0
+VERTEX
+5
+107
+8
+PIPING
+10
+700.25
+20
+800.75
+30
+0.0
+0
+SEQEND
+5
+108
+8
+PIPING
+0
+INSERT
+5
+109
+2
+VALVE_SYM
+8
+PIPING
+66
+1
+10
+12000.0
+20
+20500.75
+30
+0.0
+0
+ATTRIB
+5
+110
+8
+PIPING
+10
+12000.0
+20
+20500.75
+30
+0.0
+40
+20.0
+1
+VALVE-TAG-01
+2
+ITEM_NO
+0
+SEQEND
+5
+111
+8
+PIPING
+0
 ENDSEC
 0
 EOF`;
@@ -208,9 +288,9 @@ function testSyntheticParsing() {
   assert.strictEqual(block.entities[0].geometry.radius, 25.0, 'Radius unscaled');
 
   // 4. Entities & Entity Identity Invariants
-  assert.strictEqual(doc.entities.length, 5, '5 root entities in model space');
+  assert.strictEqual(doc.entities.length, 7, '7 root entities in model space');
 
-  const [line, circle, text, lwpoly, insert] = doc.entities;
+  const [line, circle, text, lwpoly, insert, polyline, insertWithAttrib] = doc.entities;
 
   // Invariant: Coordinates are NOT scaled by $INSUNITS
   assert.strictEqual(line.type, 'LINE');
@@ -239,6 +319,27 @@ function testSyntheticParsing() {
   assert.strictEqual(insert.type, 'INSERT', 'INSERT remains INSERT');
   assert.strictEqual(insert.attributes.blockName, 'VALVE_SYM', 'Block reference preserved');
   assert.strictEqual(insert.geometry.scale.x, 1.5, 'Scale X preserved');
+
+  // Invariant: VERTEX entities decoded with non-zero coordinates & SEQEND handle preserved
+  assert.strictEqual(polyline.type, 'POLYLINE', 'POLYLINE entity parsed');
+  assert.strictEqual(polyline.geometry.vertices.length, 2, '2 vertices extracted');
+  assert.strictEqual(polyline.geometry.vertices[0].x, 500.25, 'Vertex 0 X coordinate preserved');
+  assert.strictEqual(polyline.geometry.vertices[0].y, 600.75, 'Vertex 0 Y coordinate preserved');
+  assert.strictEqual(polyline.geometry.vertices[0].bulge, 0.5, 'Vertex 0 bulge preserved');
+  assert.strictEqual(polyline.geometry.vertices[1].x, 700.25, 'Vertex 1 X coordinate preserved');
+  assert.strictEqual(polyline.geometry.vertices[1].y, 800.75, 'Vertex 1 Y coordinate preserved');
+  assert.ok(polyline.source.seqendRawTags, 'POLYLINE has seqendRawTags attached');
+  assert.ok(doc.handles.has('108'), 'SEQEND handle 108 registered in doc.handles');
+
+  // Invariant: INSERT with ATTRIB subEntities & SEQEND handle preserved
+  assert.strictEqual(insertWithAttrib.type, 'INSERT', 'Second INSERT parsed');
+  assert.strictEqual(insertWithAttrib.attributes.attribs.length, 1, '1 ATTRIB sub-entity grouped');
+  const attrib = insertWithAttrib.attributes.attribs[0];
+  assert.strictEqual(attrib.type, 'ATTRIB');
+  assert.strictEqual(attrib.attributes.tag, 'ITEM_NO', 'Attribute tag preserved');
+  assert.strictEqual(attrib.attributes.text, 'VALVE-TAG-01', 'Attribute text preserved');
+  assert.ok(insertWithAttrib.source.seqendRawTags, 'INSERT has seqendRawTags attached');
+  assert.ok(doc.handles.has('111'), 'INSERT SEQEND handle 111 registered in doc.handles');
 
   console.log('✅ Synthetic parsing passed all invariants.');
 }
@@ -305,7 +406,15 @@ function testRealLargeFixtureParsing() {
   assert.ok(doc.tables.lineTypes.records.size >= 14, 'Line types table parsed');
   assert.ok(doc.tables.textStyles.records.size >= 1, 'Text styles table parsed');
 
-  console.log('✅ Real-world large fixture parsed cleanly.');
+  // Verify that POLYLINE vertices have actual non-zero coordinates (VertexCodec bugfix verification)
+  const samplePoly = doc.entities.find((e) => e.type === 'POLYLINE');
+  assert.ok(samplePoly, 'Found POLYLINE in real fixture');
+  assert.ok(samplePoly.geometry.vertices.length > 0, 'Vertices parsed for POLYLINE');
+  const hasNonZeroCoords = samplePoly.geometry.vertices.some((v) => v.x !== 0 || v.y !== 0);
+  assert.ok(hasNonZeroCoords, 'Vertices have real non-zero coordinates (not 0,0,0)');
+  assert.ok(samplePoly.source.seqendRawTags, 'SEQEND raw tags captured on POLYLINE');
+
+  console.log('✅ Real-world large fixture parsed cleanly with non-zero polyline vertices.');
 }
 
 function main() {

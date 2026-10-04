@@ -3,7 +3,7 @@ import { parseCommonFields, parseNumber } from './codec-utils.js';
 
 export const InsertCodec = {
   type: 'INSERT',
-  decode(tags, order) {
+  decode(tags, order, subEntities = []) {
     const common = parseCommonFields(tags);
     let blockName = '';
     let x = 0, y = 0, z = 0;
@@ -38,6 +38,7 @@ export const InsertCodec = {
       },
       attributes: {
         blockName,
+        attribs: subEntities,
       },
       source: { order, rawTags: tags },
     });
