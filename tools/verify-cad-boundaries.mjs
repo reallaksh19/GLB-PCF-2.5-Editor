@@ -71,6 +71,7 @@ function checkSourceBoundaries() {
   const modelDirs = [
     path.join(REPO_ROOT, 'formats', 'dxf', 'model'),
     path.join(REPO_ROOT, 'formats', 'dxf', 'parser'),
+    path.join(REPO_ROOT, 'formats', 'dxf', 'writer'),
   ];
 
   let scannedCount = 0;
