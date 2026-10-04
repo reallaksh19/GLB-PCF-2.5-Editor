@@ -73,6 +73,9 @@ function checkSourceBoundaries() {
     path.join(REPO_ROOT, 'formats', 'dxf', 'parser'),
     path.join(REPO_ROOT, 'formats', 'dxf', 'writer'),
     path.join(REPO_ROOT, 'formats', 'dxf', 'render'),
+    path.join(REPO_ROOT, 'formats', 'dxf', 'spatial'),
+    path.join(REPO_ROOT, 'core', 'spatial'),
+    path.join(REPO_ROOT, 'core', 'selection'),
   ];
 
   let scannedCount = 0;

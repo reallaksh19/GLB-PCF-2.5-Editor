@@ -60,6 +60,10 @@ export class DxfDocument {
 
     // Handle allocator and tracker
     this.handles = new DxfHandleRegistry(params.handles?.seed || '1');
+
+    // Fast lookup indices
+    this.entitiesById = new Map(); // id ('dxf:entity:1A') -> DxfEntity
+    this.layerEntityIndex = new Map(); // layerName (upper) -> Set<string> of entity IDs
   }
 
   addEntity(entity) {
@@ -71,6 +75,110 @@ export class DxfDocument {
       entity.id = `dxf:entity:${entity.handle}`;
     }
     this.entities.push(entity);
+
+    // Maintain indices
+    if (entity.id) {
+      this.entitiesById.set(entity.id, entity);
+    }
+    const layerKey = String(entity.layerId || '0').trim().toUpperCase();
+    let layerSet = this.layerEntityIndex.get(layerKey);
+    if (!layerSet) {
+      layerSet = new Set();
+      this.layerEntityIndex.set(layerKey, layerSet);
+    }
+    if (entity.id) {
+      layerSet.add(entity.id);
+    }
+  }
+
+  getEntity(idOrHandle) {
+    if (!idOrHandle) return null;
+    const str = String(idOrHandle).trim();
+    const id = str.startsWith('dxf:entity:') ? str : `dxf:entity:${str.toUpperCase()}`;
+    return this.entitiesById.get(id) || null;
+  }
+
+  getEntityIdsOnLayer(layerName) {
+    if (!layerName) return new Set();
+    const key = String(layerName).trim().toUpperCase();
+    return this.layerEntityIndex.get(key) || new Set();
+  }
+
+  getEntitiesOnLayer(layerName) {
+    const ids = this.getEntityIdsOnLayer(layerName);
+    const result = [];
+    for (const id of ids) {
+      const ent = this.entitiesById.get(id);
+      if (ent) result.push(ent);
+    }
+    return result;
+  }
+
+  getAllLayers() {
+    return Array.from(this.tables.layers.values());
+  }
+
+  setLayerVisibility(layerName, visible) {
+    const layer = this.getLayer(layerName);
+    if (!layer) return false;
+    layer.setVisible(visible);
+    return true;
+  }
+
+  setLayerFrozen(layerName, frozen) {
+    const layer = this.getLayer(layerName);
+    if (!layer) return false;
+    layer.setFrozen(frozen);
+    return true;
+  }
+
+  setLayerLocked(layerName, locked) {
+    const layer = this.getLayer(layerName);
+    if (!layer) return false;
+    layer.setLocked(locked);
+    return true;
+  }
+
+  setLayerColor(layerName, colorIndex, trueColor = null) {
+    const layer = this.getLayer(layerName);
+    if (!layer) return false;
+    layer.setColor(colorIndex, trueColor);
+    return true;
+  }
+
+  moveEntityToLayer(entityOrId, targetLayerName) {
+    const ent = typeof entityOrId === 'string' ? this.getEntity(entityOrId) : entityOrId;
+    if (!ent || !targetLayerName) return false;
+
+    const oldLayerKey = String(ent.layerId || '0').trim().toUpperCase();
+    const newLayerKey = String(targetLayerName).trim().toUpperCase();
+
+    // Remove from old layer index
+    const oldSet = this.layerEntityIndex.get(oldLayerKey);
+    if (oldSet && ent.id) {
+      oldSet.delete(ent.id);
+    }
+
+    // Update entity
+    ent.layerId = targetLayerName;
+    ent.markModified();
+
+    // Add to new layer index
+    let newSet = this.layerEntityIndex.get(newLayerKey);
+    if (!newSet) {
+      newSet = new Set();
+      this.layerEntityIndex.set(newLayerKey, newSet);
+    }
+    if (ent.id) {
+      newSet.add(ent.id);
+    }
+
+    // Ensure layer exists in tables
+    if (!this.getLayer(targetLayerName)) {
+      this.addLayer(new DxfLayer({ name: targetLayerName }));
+    }
+
+    return true;
   }
 
   addBlock(block) {
