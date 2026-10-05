@@ -23,15 +23,9 @@ const V_ALIGN_CODES = ['BASELINE', 'BOTTOM', 'MIDDLE', 'TOP'];
  * MTEXT Attachment mapping (group 71).
  */
 const ATTACHMENT_MAP = {
-  1: { h: 'LEFT', v: 'TOP' },
-  2: { h: 'CENTER', v: 'TOP' },
-  3: { h: 'RIGHT', v: 'TOP' },
-  4: { h: 'LEFT', v: 'MIDDLE' },
-  5: { h: 'CENTER', v: 'MIDDLE' },
-  6: { h: 'RIGHT', v: 'MIDDLE' },
-  7: { h: 'LEFT', v: 'BOTTOM' },
-  8: { h: 'CENTER', v: 'BOTTOM' },
-  9: { h: 'RIGHT', v: 'BOTTOM' },
+  1: { h: 'LEFT', v: 'TOP' }, 2: { h: 'CENTER', v: 'TOP' }, 3: { h: 'RIGHT', v: 'TOP' },
+  4: { h: 'LEFT', v: 'MIDDLE' }, 5: { h: 'CENTER', v: 'MIDDLE' }, 6: { h: 'RIGHT', v: 'MIDDLE' },
+  7: { h: 'LEFT', v: 'BOTTOM' }, 8: { h: 'CENTER', v: 'BOTTOM' }, 9: { h: 'RIGHT', v: 'BOTTOM' },
 };
 
 /**
@@ -42,6 +36,11 @@ const ATTACHMENT_MAP = {
 export function cleanMTextFormatting(raw) {
   if (!raw || typeof raw !== 'string') return '';
   let text = raw;
+
+  // Protect escaped characters first with placeholders so \\P, \{, \} are not consumed as formatting
+  text = text.replace(/\\\\/g, '\u0001');
+  text = text.replace(/\\\{/g, '\u0002');
+  text = text.replace(/\\\}/g, '\u0003');
 
   // AutoCAD escape sequences
   text = text.replace(/%%d/gi, '°');
@@ -69,9 +68,10 @@ export function cleanMTextFormatting(raw) {
     text = text.replace(/\{([^{}]*)\}/g, '$1');
   } while (text !== prev);
 
-  text = text.replace(/\\\\/g, '\\');
-  text = text.replace(/\\\{/g, '{');
-  text = text.replace(/\\\}/g, '}');
+  // Restore escaped characters
+  text = text.replace(/\u0001/g, '\\');
+  text = text.replace(/\u0002/g, '{');
+  text = text.replace(/\u0003/g, '}');
 
   return text;
 }
@@ -96,14 +96,8 @@ export function parseMTextRuns(rawText, baseStyle = {}) {
   const baseColor = baseStyle.color || null;
 
   const stack = [{
-    font: baseFont,
-    height: baseHeight,
-    widthFactor: baseWidthFactor,
-    obliqueAngle: baseOblique,
-    color: baseColor,
-    underline: false,
-    overline: false,
-    strike: false,
+    font: baseFont, height: baseHeight, widthFactor: baseWidthFactor,
+    obliqueAngle: baseOblique, color: baseColor, underline: false, overline: false, strike: false,
   }];
 
   const runs = [];
@@ -113,16 +107,10 @@ export function parseMTextRuns(rawText, baseStyle = {}) {
     if (!currentRunText) return;
     const current = stack[stack.length - 1];
     runs.push({
-      text: currentRunText,
-      font: current.font,
-      height: current.height,
-      widthFactor: current.widthFactor,
-      obliqueAngle: current.obliqueAngle,
-      color: current.color,
-      underline: current.underline,
-      overline: current.overline,
-      strike: current.strike,
-      isStacked: false,
+      text: currentRunText, font: current.font, height: current.height,
+      widthFactor: current.widthFactor, obliqueAngle: current.obliqueAngle,
+      color: current.color, underline: current.underline, overline: current.overline,
+      strike: current.strike, isStacked: false,
     });
     currentRunText = '';
   }
@@ -304,7 +292,8 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
   const rawText = String(attrs.rawText || attrs.text || '');
   const cleanText = cleanMTextFormatting(rawText);
 
-  let height = Math.max(0.001, Number(attrs.height ?? geom.height) || 2.5);
+  const rawH = Number(attrs.height ?? geom.height);
+  let height = Number.isFinite(rawH) && rawH > 0 ? rawH : 2.5;
   let widthFactor = Number.isFinite(Number(attrs.widthFactor ?? geom.widthFactor)) ? Number(attrs.widthFactor ?? geom.widthFactor) : 1.0;
   let rotationDeg = Number(attrs.rotation ?? geom.rotation ?? 0);
   const obliqueAngle = Number(attrs.obliqueAngle ?? geom.obliqueAngle) || 0;
@@ -447,7 +436,8 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
   };
 
   const rawText = String(attrs.rawText || attrs.text || '');
-  const baseHeight = Math.max(0.001, Number(attrs.height ?? geom.height) || 2.5);
+  const rawH = Number(attrs.height ?? geom.height);
+  const baseHeight = Number.isFinite(rawH) && rawH > 0 ? rawH : 2.5;
   const baseWidthFactor = Number.isFinite(Number(attrs.widthFactor ?? geom.widthFactor)) ? Number(attrs.widthFactor ?? geom.widthFactor) : 1.0;
   const refWidth = Math.max(0, Number(attrs.referenceWidth ?? attrs.width) || 0);
 
