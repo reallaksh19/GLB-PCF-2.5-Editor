@@ -30,3 +30,9 @@ jobs:
       - name: Native render fixture projection when available
         if: ${{ hashFiles('tests/dxf/dxf-render-adapter.test.mjs') != '' }}
         run: node tests/dxf/dxf-render-adapter.test.mjs
+      - name: Native spatial selection regressions when available
+        if: ${{ hashFiles('tests/cad/A08/*.test.mjs') != '' }}
+        run: node --test tests/cad/A08/*.test.mjs
+      - name: Existing spatial selection fixtures when available
+        if: ${{ hashFiles('tests/dxf/dxf-selection-spatial.test.mjs') != '' }}
+        run: node tests/dxf/dxf-selection-spatial.test.mjs

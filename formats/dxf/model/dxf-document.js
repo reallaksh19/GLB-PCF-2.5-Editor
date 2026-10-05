@@ -21,6 +21,8 @@ export class DxfDocument {
     this.layerRecords = [];
     this.entities = [];
     this.entityIndex = new Map();
+    this.entitiesById = this.entityIndex;
+    this.layerEntityIndex = new Map();
     this.modelSpace = [];
     this.paperSpaces = new Map();
     this.objects = [];
@@ -81,6 +83,9 @@ export class DxfDocument {
     if (!entity) return;
     this.adoptEntity(entity);
     this.entities.push(entity);
+    const key=String(entity.layerId || '0').trim().toUpperCase();
+    if(!this.layerEntityIndex.has(key)) this.layerEntityIndex.set(key,new Set());
+    this.layerEntityIndex.get(key).add(entity.id);
     if (entity.space === 'paper') {
       const key = entity.layoutId || entity.ownerHandle || 'paper';
       if (!this.paperSpaces.has(key)) this.paperSpaces.set(key, []);
@@ -94,6 +99,33 @@ export class DxfDocument {
     if (!this.blocks.has(block.name.toUpperCase())) this.blocks.set(block.name.toUpperCase(), block);
     else this.diagnostics.push({ code: 'DUPLICATE_BLOCK_NAME', severity: 'warning', name: block.name });
     block.entities.forEach(e => this.adoptEntity(e, block.id));
+  }
+  getEntity(idOrHandle) {
+    if(this.entityIndex.has(idOrHandle)) return this.entityIndex.get(idOrHandle);
+    const handle=String(idOrHandle || '').trim().toUpperCase().replace(/^DXF:ENTITY:/,'');
+    const matches=[...this.entityIndex.values()].filter(e=>e.handle===handle);
+    return matches.length===1?matches[0]:null;
+  }
+  getEntityIdsOnLayer(name) { return new Set(this.layerEntityIndex.get(String(name).trim().toUpperCase()) || []); }
+  getEntitiesOnLayer(name) { return [...this.getEntityIdsOnLayer(name)].map(id=>this.entityIndex.get(id)).filter(e=>e && !e.state.deleted); }
+  getAllLayers() { return [...this.tables.layers.values()]; }
+  isEntitySelectable(id,options={}) {
+    const e=this.entityIndex.get(id);if(!e || e.state.deleted)return false;
+    if(!options.includePaperSpace && e.space!==(options.activeSpace || 'model'))return false;
+    const layer=this.getLayer(e.layerId);
+    return options.includeHidden || !(layer?.off || layer?.frozen || Number(e.style.colorIndex)<0 || e.attributes.invisible || e.source.rawTags.some(t=>t.code===60 && Number(t.value)===1));
+  }
+  setLayerVisibility(name,visible) { const l=this.getLayer(name);if(!l)return false;l.setVisible(visible);return true; }
+  setLayerFrozen(name,frozen) { const l=this.getLayer(name);if(!l)return false;l.setFrozen(frozen);return true; }
+  setLayerLocked(name,locked) { const l=this.getLayer(name);if(!l)return false;l.setLocked(locked);return true; }
+  setLayerColor(name,colorIndex,trueColor=null) { const l=this.getLayer(name);if(!l)return false;l.setColor(colorIndex,trueColor);return true; }
+  moveEntityToLayer(entityOrId,targetLayer) {
+    const e=typeof entityOrId==='string'?this.getEntity(entityOrId):entityOrId;
+    if(!e || !this.getLayer(targetLayer))return false;
+    this.layerEntityIndex.get(String(e.layerId).toUpperCase())?.delete(e.id);
+    e.layerId=targetLayer;e.markModified();
+    const key=String(targetLayer).toUpperCase();if(!this.layerEntityIndex.has(key))this.layerEntityIndex.set(key,new Set());
+    this.layerEntityIndex.get(key).add(e.id);return true;
   }
   getBlock(name) { return this.blocks.get(String(name ?? '').trim().toUpperCase()) || null; }
   addLayer(layer) {

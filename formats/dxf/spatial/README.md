@@ -1,0 +1,11 @@
+# Native spatial selection checkpoint
+
+`DxfSpatialIndex.loadFromDocument(document)` builds a source-derived index. INSERT and MINSERT bounds traverse native block definitions, bases, OCS and full affine transforms through the shared geometry ports. Source selection does not import the render adapter or its tessellation.
+
+The R-tree supplies candidates. Point queries refine distance to source segments/conics and rank the result. Crossing queries intersect the source segments/conics with the rectangle; an empty circle center or an empty diagonal-line bounding-box corner is not a hit. Window selection uses analytic conic extrema and the complete eligible occurrence bounds. Hidden/frozen/off/deleted and active-space policy is applied at query time; hidden geometry still retains source census metadata and bounds. Explicit `includeHidden`, `includePaperSpace` or `activeSpace: 'paper'` options change the query policy. Locked entities may be selected; command capability checks must reject forbidden edits.
+
+The compatibility `loadFromRenderModel` entry point preserves existing source IDs and projected text bounds. Native source selection uses `loadFromDocument`. Text metrics and spline subdivision remain approximate and are reported in diagnostics. Unsupported or invalid selection geometry produces a diagnostic; it does not receive an invented origin box.
+
+Dynamic R-tree splits now return their sibling to the parent, including splits below the root. Appended bulk loads preserve existing records. Layer visibility/frozen/locked state remains native metadata, preserves unrelated flags, and survives Save/reopen without rewriting opaque data. A table-only document no longer needs an ENTITIES insertion boundary when Save creates no entities.
+
+Verification: `node --test tests/cad/A08/*.test.mjs`, the existing native selection fixture suite, parser/writer/render regressions and `npm run cad:contracts`. The 1,000-record tree test compares complete ID sets and query results to a brute-force oracle. Fixture timings are smoke measurements, not controlled A12 benchmark acceptance. Dependency-driven spatial updates, exact native text/spline picking, full CAD UI and independent A12 acceptance remain incomplete; child #95 and parent #85 remain open.

@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {SpatialIndex2D} from '../../../core/spatial/spatial-index-2d.js';
+import {SelectionManager} from '../../../core/selection/selection-manager.js';
+import {DxfSpatialIndex} from '../../../formats/dxf/spatial/dxf-spatial-index.js';
+import {DxfDocument} from '../../../formats/dxf/model/dxf-document.js';
+import {DxfEntity} from '../../../formats/dxf/model/dxf-entity.js';
+import {DxfLayer} from '../../../formats/dxf/model/dxf-layer.js';
+import {DxfBlock} from '../../../formats/dxf/model/dxf-block.js';
+import {DxfRenderAdapter} from '../../../formats/dxf/render/index.js';
+import {DxfDocumentParser} from '../../../formats/dxf/parser/dxf-document-parser.js';
+import {DxfDocumentWriter} from '../../../formats/dxf/writer/dxf-document-writer.js';
+const check=test;
+const pt=(x,y)=>({x,y,z:0});const box=(x,y)=>({minX:x,minY:y,maxX:x,maxY:y});
+function index(entity){const doc=new DxfDocument();doc.addEntity(entity);const ix=new DxfSpatialIndex();ix.loadFromDocument(doc);return {doc,ix};}
+check('positive control: bulk index retains all records',()=>{const ix=new SpatialIndex2D(4);ix.load(Array.from({length:20},(_,i)=>({id:String(i),...box(i,0)})));assert.equal(ix.all().length,20);});
+check('positive control: actual LINE hit selectable',()=>{const {ix}=index(new DxfEntity({handle:'L',type:'LINE',geometry:{start:pt(0,0),end:pt(10,10)}}));const s=new SelectionManager();s.selectPoint(5,5,ix,{tolerance:0.01});assert.equal(s.count,1);});
+check('F105-01 nonroot R-tree insert split preserves records',()=>{const ix=new SpatialIndex2D(4);for(let i=0;i<20;i++)ix.insert({id:String(i),...box(i,0)});assert.equal(ix.all().length,20,`size=${ix.size}, stored=${ix.all().length}, IDs=${ix.all().map(x=>x.id)}`);});
+check('F105-02 point pick must refine geometry',()=>{const {ix}=index(new DxfEntity({handle:'L',type:'LINE',geometry:{start:pt(0,0),end:pt(10,10)}}));const s=new SelectionManager();s.selectPoint(0,10,ix,{tolerance:0.01});assert.equal(s.count,0,'point is 7.07 units from line, but within AABB');});
+check('F105-02 crossing must refine actual curve intersection',()=>{const {ix}=index(new DxfEntity({handle:'C',type:'CIRCLE',geometry:{center:pt(0,0),radius:10}}));const s=new SelectionManager();s.selectCrossing({minX:-1,minY:-1,maxX:1,maxY:1},ix);assert.equal(s.count,0,'tiny box at empty circle center crosses no curve');});
+check('F105-03 normal document pick excludes hidden and paper entities',()=>{const d=new DxfDocument();d.addLayer(new DxfLayer({name:'OFF',off:true}));d.addEntity(new DxfEntity({type:'LINE',handle:'H',layerId:'OFF',geometry:{start:pt(0,0),end:pt(10,0)}}));d.addEntity(new DxfEntity({type:'LINE',handle:'P',space:'paper',geometry:{start:pt(0,0),end:pt(10,0)}}));const ix=new DxfSpatialIndex();ix.loadFromDocument(d);const s=new SelectionManager();s.selectPoint(5,0,ix,{tolerance:0.01});assert.equal(s.count,0);});
+check('F105-04 source-only INSERT index includes transformed child bounds',()=>{const d=new DxfDocument();d.addBlock(new DxfBlock({name:'B',entities:[new DxfEntity({type:'LINE',handle:'L',geometry:{start:pt(100,0),end:pt(110,0)}})]}));const e=new DxfEntity({type:'INSERT',handle:'I',geometry:{point:pt(0,0)},attributes:{blockName:'B'}});d.addEntity(e);const ix=new DxfSpatialIndex();ix.loadFromDocument(d);assert.deepEqual(ix.searchPoint(105,0,0.01),[e.id]);});
+check('F105-05 rendered TEXT uses actual projected position/bounds',()=>{const d=new DxfDocument();d.addEntity(new DxfEntity({type:'TEXT',handle:'T',geometry:{insertionPoint:pt(100,100)},attributes:{text:'AB',height:1}}));const r=DxfRenderAdapter.buildRenderModel(d);const ix=new DxfSpatialIndex();ix.loadFromRenderModel(r);assert.ok(ix.getEntityBounds(d.entities[0].id).min.x>=100,JSON.stringify(ix.getEntityBounds(d.entities[0].id)));});
+check('F105-06 source layer visibility survives native Save',()=>{const d=DxfDocumentParser.parse('0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n1\n0\nLAYER\n2\nPIPES\n70\n0\n62\n1\n6\nCONTINUOUS\n0\nENDTAB\n0\nENDSEC\n0\nEOF\n');assert.equal(d.setLayerVisibility('PIPES',false),true);const output=DxfDocumentWriter.write(d);const reopened=DxfDocumentParser.parse(typeof output==='string'?output:output.content);assert.equal(reopened.getLayer('PIPES').off,true,'source layer state mutation lost on Save');});
