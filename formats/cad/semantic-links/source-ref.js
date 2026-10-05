@@ -7,6 +7,16 @@
  * Pure JS: zero DOM, zero Node runtime imports, zero Three.js.
  */
 
+function cloneDerivedValue(value) {
+  if (Array.isArray(value)) return value.map(cloneDerivedValue);
+  if (value && typeof value === 'object') {
+    const copy = {};
+    for (const [key, nested] of Object.entries(value)) copy[key] = cloneDerivedValue(nested);
+    return copy;
+  }
+  return value;
+}
+
 /**
  * Immutable reference to an authoritative native CAD source entity.
  */
@@ -33,7 +43,7 @@ export class SourceRef {
     this.documentId = documentId;
     this.sourceRevision = Number(sourceRevision) || 0;
     this.occurrencePath = Array.isArray(occurrencePath)
-      ? occurrencePath.map(step => ({ ...step }))
+      ? cloneDerivedValue(occurrencePath)
       : [];
     this.role = role || 'PRIMARY';
   }
@@ -67,7 +77,7 @@ export class SourceRef {
       cadEntityId: this.cadEntityId,
       documentId: this.documentId,
       sourceRevision: this.sourceRevision,
-      occurrencePath: this.occurrencePath,
+      occurrencePath: cloneDerivedValue(this.occurrencePath),
       role: this.role,
     };
   }
@@ -100,7 +110,7 @@ export class SemanticComponentRef {
     this.componentId = componentId;
     this.componentType = componentType;
     this.sourceRefs = sourceRefs.map(ref => ref instanceof SourceRef ? ref : new SourceRef(ref));
-    this.properties = { ...properties };
+    this.properties = cloneDerivedValue(properties);
     this.confidence = Math.max(0, Math.min(1.0, Number(confidence) || 0));
     this.ruleId = ruleId;
   }
@@ -132,7 +142,7 @@ export class SemanticComponentRef {
       componentId: this.componentId,
       componentType: this.componentType,
       sourceRefs: this.sourceRefs.map(r => r.toJSON()),
-      properties: this.properties,
+      properties: cloneDerivedValue(this.properties),
       confidence: this.confidence,
       ruleId: this.ruleId,
     };
