@@ -66,7 +66,7 @@ export function createRequestEnvelope({
   return {
     type,
     documentId,
-    baseRevision: Number(baseRevision) || 0,
+    baseRevision,
     requestId: requestId || generateRequestId(),
     timestamp: Date.now(),
     payload,
@@ -94,7 +94,7 @@ export function createResponseEnvelope({
   return {
     type,
     documentId,
-    sourceRevision: Number(sourceRevision) || 0,
+    sourceRevision,
     requestId,
     timestamp: Date.now(),
     data,
@@ -124,7 +124,7 @@ export function createErrorEnvelope({
   return {
     type: EnvelopeType.ERROR_RESPONSE,
     documentId,
-    sourceRevision: Number(sourceRevision) || 0,
+    sourceRevision,
     requestId,
     timestamp: Date.now(),
     error: {
@@ -144,11 +144,13 @@ export function validateEnvelope(envelope) {
   if (!envelope || typeof envelope !== 'object') {
     return { valid: false, error: 'Envelope must be a non-null object' };
   }
-  if (!envelope.type || !EnvelopeType[envelope.type]) {
+  if (!envelope.type || !Object.hasOwn(EnvelopeType, envelope.type)) {
     return { valid: false, error: `Invalid envelope type: ${envelope.type}` };
   }
-  if (!envelope.requestId) {
+  if (typeof envelope.requestId !== 'string' || !envelope.requestId.trim()) {
     return { valid: false, error: 'Envelope missing requestId' };
   }
+  const revision = envelope.type.endsWith('_REQUEST') ? envelope.baseRevision : envelope.sourceRevision;
+  if (!Number.isSafeInteger(revision) || revision < 0) return { valid: false, error: 'Revision must be a non-negative safe integer' };
   return { valid: true };
 }

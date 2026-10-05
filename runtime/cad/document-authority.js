@@ -13,6 +13,7 @@ import { DxfDocumentWriter } from '../../formats/dxf/writer/dxf-document-writer.
 import { DxfDocument } from '../../formats/dxf/model/dxf-document.js';
 import { CommandHistory } from '../../core/commands/cad/command-history.js';
 import { DxfRenderAdapter } from '../../formats/dxf/render/dxf-render-adapter.js';
+import { commandIdentity } from './session-command-identity.js';
 import { SessionErrorCode } from './session-envelope.js';
 
 let nextDocId = 1;
@@ -43,11 +44,12 @@ export class DocumentAuthority {
    * @returns {Object} initial summary
    */
   open({ source = null, documentId = null, options = {} } = {}) {
-    this.close();
-
+    if (this.status === 'DISPOSED') { const error = new Error('Authority disposed'); error.code = SessionErrorCode.SESSION_DISPOSED; throw error; }
+    if (source !== null && typeof source !== 'string' && !(source instanceof Uint8Array) && !(source instanceof ArrayBuffer)) throw new TypeError('Unsupported native source input');
+    let nextDocument, nextBytes = null;
     const assignedId = documentId || `doc:dxf:${Date.now()}:${nextDocId++}`;
 
-    if (source) {
+    if (source !== null) {
       const bytes = source instanceof Uint8Array
         ? source
         : typeof source === 'string'
@@ -57,17 +59,15 @@ export class DocumentAuthority {
       // Copy input bytes to preserve backing buffer
       const safeCopy = new Uint8Array(bytes.length);
       safeCopy.set(bytes);
-      this.originalBytes = safeCopy;
+      nextBytes = safeCopy;
 
-      this.document = DxfDocumentParser.parse(safeCopy, {
-        documentId: assignedId,
-        ...options,
-      });
+      nextDocument = DxfDocumentParser.parse(safeCopy, { ...options, documentId: assignedId });
     } else {
-      this.document = new DxfDocument({ id: assignedId });
-      this.originalBytes = null;
+      nextDocument = new DxfDocument({ id: assignedId });
     }
 
+    this.document = nextDocument;
+    this.originalBytes = nextBytes;
     this.documentId = assignedId;
     this.sourceRevision = 0;
     this.commandHistory = new CommandHistory();
@@ -90,15 +90,18 @@ export class DocumentAuthority {
   executeCommand({ command, baseRevision, transactionId = null, payloadDigest = null }) {
     this._ensureReady();
 
+    if (transactionId && command?.transactionId && transactionId !== command.transactionId) { const e = new Error('Conflicting transaction identifiers'); e.code = SessionErrorCode.TRANSACTION_CONFLICT; throw e; }
+    transactionId ||= command?.transactionId || null;
+    const actualPayload = commandIdentity(command);
     // 1. Idempotency Check: already committed?
     if (transactionId && this.committedTransactions.has(transactionId)) {
       const recorded = this.committedTransactions.get(transactionId);
-      if (payloadDigest && recorded.payloadDigest && recorded.payloadDigest !== payloadDigest) {
+      if (recorded.actualPayload !== actualPayload || (payloadDigest && recorded.payloadDigest && recorded.payloadDigest !== payloadDigest)) {
         const error = new Error(`Transaction ${transactionId} already committed with conflicting payload`);
         error.code = SessionErrorCode.TRANSACTION_CONFLICT;
         throw error;
       }
-      return recorded.result;
+      return structuredClone(recorded.result);
     }
 
     // 2. Base Revision Check: stale command?
@@ -116,8 +119,7 @@ export class DocumentAuthority {
     const changeSet = this.commandHistory.execute(command, this.document);
 
     // 4. Advance Monotonic Revision once
-    this.sourceRevision++;
-    this.document.revision = this.sourceRevision;
+    this.sourceRevision = this.document.revision;
 
     const result = {
       documentId: this.documentId,
@@ -130,7 +132,8 @@ export class DocumentAuthority {
     // 5. Record idempotent transaction
     if (transactionId) {
       this.committedTransactions.set(transactionId, {
-        result,
+        result: structuredClone(result),
+        actualPayload,
         payloadDigest,
         revision: this.sourceRevision,
       });
@@ -153,8 +156,7 @@ export class DocumentAuthority {
     }
 
     const changeSet = this.commandHistory.undo(this.document);
-    this.sourceRevision++;
-    this.document.revision = this.sourceRevision;
+    this.sourceRevision = this.document.revision;
 
     return {
       documentId: this.documentId,
@@ -181,8 +183,7 @@ export class DocumentAuthority {
     }
 
     const changeSet = this.commandHistory.redo(this.document);
-    this.sourceRevision++;
-    this.document.revision = this.sourceRevision;
+    this.sourceRevision = this.document.revision;
 
     return {
       documentId: this.documentId,
@@ -247,7 +248,7 @@ export class DocumentAuthority {
         const layers = Array.from(layerMap.values()).map((l) => ({
           name: l.name,
           color: l.color,
-          visible: l.visible !== false,
+          visible: !l.off && !l.frozen,
           locked: Boolean(l.locked),
           frozen: Boolean(l.frozen),
         }));

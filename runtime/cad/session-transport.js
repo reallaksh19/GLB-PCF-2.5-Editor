@@ -8,6 +8,7 @@
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
  */
 
+import { snapshotSubmission } from './session-command-identity.js';
 import { DocumentAuthority } from './document-authority.js';
 import { RevisionQueue } from './revision-queue.js';
 import {
@@ -21,6 +22,8 @@ import {
 export class DirectSessionTransport {
   constructor(options = {}) {
     this.mode = 'direct';
+    this.degradedPerformance = true;
+    this.maxPendingRequests = options.maxPendingRequests ?? 256;
     this.authority = new DocumentAuthority(options);
     this.queue = new RevisionQueue();
     this.messageListeners = new Set();
@@ -56,6 +59,11 @@ export class DirectSessionTransport {
       return;
     }
 
+    if (envelope.type === EnvelopeType.CANCEL_REQUEST && envelope.documentId !== this.authority.documentId) {
+      this._emit(createErrorEnvelope({requestId:envelope.requestId, documentId:envelope.documentId, code:SessionErrorCode.DOCUMENT_NOT_FOUND, message:'Request targets another document'}));
+      return;
+    }
+    if (envelope.type !== EnvelopeType.CANCEL_REQUEST) envelope = snapshotSubmission(envelope);
     // Handle cancel request synchronously before queue execution if possible
     if (envelope.type === EnvelopeType.CANCEL_REQUEST) {
       const targetRequestId = envelope.payload?.targetRequestId;
@@ -72,11 +80,16 @@ export class DirectSessionTransport {
       return;
     }
 
+    if (this.queue.queue.length >= this.maxPendingRequests) {
+      this._emit(createErrorEnvelope({requestId:envelope.requestId, documentId:envelope.documentId, code:SessionErrorCode.EXECUTION_FAILED, message:'Session queue capacity exceeded'}));
+      return;
+    }
     // Enqueue task for serial processing
     this.queue.enqueue(async () => {
       if (this.terminated) return;
 
       try {
+        if (envelope.type !== EnvelopeType.OPEN_REQUEST && envelope.documentId !== this.authority.documentId && !(envelope.type === EnvelopeType.CLOSE_REQUEST && !this.authority.documentId)) { const error=new Error('Request targets another document'); error.code=SessionErrorCode.DOCUMENT_NOT_FOUND; throw error; }
         switch (envelope.type) {
           case EnvelopeType.OPEN_REQUEST: {
             const summary = this.authority.open(envelope.payload || {});
@@ -174,8 +187,8 @@ export class DirectSessionTransport {
           })
         );
       }
-    }, { requestId: envelope.requestId }).catch(() => {
-      // Rejections already emitted as error envelopes
+    }, { requestId: envelope.requestId }).catch(err => {
+      this._emit(createErrorEnvelope({requestId:envelope.requestId, documentId:envelope.documentId, sourceRevision:this.authority.sourceRevision, code:err.code || SessionErrorCode.EXECUTION_FAILED, message:err.message}));
     });
   }
 
@@ -216,7 +229,7 @@ export class WorkerSessionTransport {
     this.terminated = false;
 
     this._onWorkerMessage = (event) => {
-      const data = event.data;
+      const data = this._usesEventTarget ? event.data : event;
       if (!this.terminated && data) {
         for (const listener of this.messageListeners) {
           listener(data);
@@ -224,7 +237,8 @@ export class WorkerSessionTransport {
       }
     };
 
-    if (this.worker.addEventListener) {
+    this._usesEventTarget = typeof this.worker.addEventListener === 'function';
+    if (this._usesEventTarget) {
       this.worker.addEventListener('message', this._onWorkerMessage);
     } else if (this.worker.on) {
       this.worker.on('message', this._onWorkerMessage);
@@ -244,6 +258,8 @@ export class WorkerSessionTransport {
   terminate() {
     this.terminated = true;
     this.messageListeners.clear();
+    if (this._usesEventTarget) this.worker.removeEventListener?.('message', this._onWorkerMessage);
+    else this.worker.off?.('message', this._onWorkerMessage);
     if (typeof this.worker.terminate === 'function') {
       this.worker.terminate();
     }

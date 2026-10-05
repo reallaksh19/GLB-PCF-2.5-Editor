@@ -56,7 +56,7 @@ export class RevisionQueue {
    */
   cancel(requestId) {
     if (!requestId) return false;
-    this.cancelledRequestIds.add(requestId);
+
 
     const pendingIdx = this.queue.findIndex((t) => t.requestId === requestId);
     if (pendingIdx !== -1) {
@@ -64,6 +64,7 @@ export class RevisionQueue {
       const err = new Error(`Request ${requestId} cancelled before execution`);
       err.code = SessionErrorCode.REQUEST_CANCELLED;
       cancelledTask.reject(err);
+      this.cancelledRequestIds.delete(requestId);
       return true;
     }
 
