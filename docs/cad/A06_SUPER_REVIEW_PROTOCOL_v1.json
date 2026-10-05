@@ -1,0 +1,737 @@
+{
+  "protocol_id": "CAD85-A06-TEXT-SUPER-REVIEW",
+  "version": "1.0",
+  "repository": "reallaksh19/GLB-PCF-2.5-Editor",
+  "acceptance_sets": [
+    {
+      "id": "A06-TEXT-FOUNDATION",
+      "criteria": [
+        {
+          "id": "A06-NATIVE-FLAGS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-NATIVE-FLAGS"
+          ]
+        },
+        {
+          "id": "A06-NATIVE-WIDTH",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-NATIVE-WIDTH"
+          ]
+        },
+        {
+          "id": "A06-TEXT-LITERALS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-TEXT-LITERALS"
+          ]
+        },
+        {
+          "id": "A06-MIRROR-BOUNDS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-MIRROR-BOUNDS"
+          ]
+        },
+        {
+          "id": "A06-TOP-ALIGN",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-TOP-ALIGN"
+          ]
+        },
+        {
+          "id": "A06-OBLIQUE-BOUNDS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-OBLIQUE-BOUNDS"
+          ]
+        },
+        {
+          "id": "A06-FONT-HONESTY",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-FONT-HONESTY"
+          ]
+        },
+        {
+          "id": "A06-FONT-CACHE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-FONT-CACHE"
+          ]
+        },
+        {
+          "id": "A06-CACHE-ISOLATION",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-CACHE-ISOLATION"
+          ]
+        },
+        {
+          "id": "A06-UNICODE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-UNICODE"
+          ]
+        },
+        {
+          "id": "A06-MONO-FALLBACK",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-MONO-FALLBACK"
+          ]
+        },
+        {
+          "id": "A06-REGISTRY-OWNERSHIP",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-REGISTRY-OWNERSHIP"
+          ]
+        },
+        {
+          "id": "A06-FINITE-METRICS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-FINITE-METRICS"
+          ]
+        },
+        {
+          "id": "A06-RUN-FONT",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-RUN-FONT"
+          ]
+        },
+        {
+          "id": "A06-RUN-HEIGHT",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-RUN-HEIGHT"
+          ]
+        },
+        {
+          "id": "A06-UNKNOWN-FORMAT",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-UNKNOWN-FORMAT"
+          ]
+        },
+        {
+          "id": "A06-FINITE-LAYOUT",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-FINITE-LAYOUT"
+          ]
+        },
+        {
+          "id": "A06-TYPE-SAFETY",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-TYPE-SAFETY"
+          ]
+        },
+        {
+          "id": "A06-SOURCE-IMMUTABLE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-SOURCE-IMMUTABLE"
+          ]
+        },
+        {
+          "id": "A06-OCCURRENCE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-OCCURRENCE"
+          ]
+        },
+        {
+          "id": "A06-WCS-MTEXT",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-WCS-MTEXT"
+          ]
+        },
+        {
+          "id": "A06-NATIVE-MTEXT-ANGLE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-NATIVE-MTEXT-ANGLE"
+          ]
+        },
+        {
+          "id": "A06-MTEXT-ATTACHMENTS",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-MTEXT-ATTACHMENTS"
+          ]
+        },
+        {
+          "id": "A06-ESCAPES",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A06-ESCAPES"
+          ]
+        }
+      ]
+    }
+  ],
+  "verification_methods": [
+    {
+      "id": "A06-NATIVE-FLAGS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-NATIVE-WIDTH",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-TEXT-LITERALS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-MIRROR-BOUNDS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-TOP-ALIGN",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-OBLIQUE-BOUNDS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-FONT-HONESTY",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-FONT-CACHE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-CACHE-ISOLATION",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-UNICODE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-MONO-FALLBACK",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-REGISTRY-OWNERSHIP",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-FINITE-METRICS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-RUN-FONT",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-RUN-HEIGHT",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-UNKNOWN-FORMAT",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-FINITE-LAYOUT",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-TYPE-SAFETY",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-SOURCE-IMMUTABLE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-OCCURRENCE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-WCS-MTEXT",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-NATIVE-MTEXT-ANGLE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-MTEXT-ATTACHMENTS",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A06-ESCAPES",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A06-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "formats/dxf/render/annotations/**",
+        "formats/dxf/parser/entity-codecs/text-codec.js"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    }
+  ],
+  "harnesses": [
+    {
+      "id": "A06-SUPER-HARNESS",
+      "criteria": [
+        "A06-NATIVE-FLAGS",
+        "A06-NATIVE-WIDTH",
+        "A06-TEXT-LITERALS",
+        "A06-MIRROR-BOUNDS",
+        "A06-TOP-ALIGN",
+        "A06-OBLIQUE-BOUNDS",
+        "A06-FONT-HONESTY",
+        "A06-FONT-CACHE",
+        "A06-CACHE-ISOLATION",
+        "A06-UNICODE",
+        "A06-MONO-FALLBACK",
+        "A06-REGISTRY-OWNERSHIP",
+        "A06-FINITE-METRICS",
+        "A06-RUN-FONT",
+        "A06-RUN-HEIGHT",
+        "A06-UNKNOWN-FORMAT",
+        "A06-FINITE-LAYOUT",
+        "A06-TYPE-SAFETY",
+        "A06-SOURCE-IMMUTABLE",
+        "A06-OCCURRENCE",
+        "A06-WCS-MTEXT",
+        "A06-NATIVE-MTEXT-ANGLE",
+        "A06-MTEXT-ATTACHMENTS",
+        "A06-ESCAPES"
+      ],
+      "protected": true,
+      "verification_method_ids": [
+        "A06-NATIVE-FLAGS",
+        "A06-NATIVE-WIDTH",
+        "A06-TEXT-LITERALS",
+        "A06-MIRROR-BOUNDS",
+        "A06-TOP-ALIGN",
+        "A06-OBLIQUE-BOUNDS",
+        "A06-FONT-HONESTY",
+        "A06-FONT-CACHE",
+        "A06-CACHE-ISOLATION",
+        "A06-UNICODE",
+        "A06-MONO-FALLBACK",
+        "A06-REGISTRY-OWNERSHIP",
+        "A06-FINITE-METRICS",
+        "A06-RUN-FONT",
+        "A06-RUN-HEIGHT",
+        "A06-UNKNOWN-FORMAT",
+        "A06-FINITE-LAYOUT",
+        "A06-TYPE-SAFETY",
+        "A06-SOURCE-IMMUTABLE",
+        "A06-OCCURRENCE",
+        "A06-WCS-MTEXT",
+        "A06-NATIVE-MTEXT-ANGLE",
+        "A06-MTEXT-ATTACHMENTS",
+        "A06-ESCAPES"
+      ],
+      "manifest_refs": [
+        "A06-SUPER-HARNESS",
+        "ARCHITECTURE",
+        "LOCKFILE"
+      ]
+    }
+  ],
+  "external_gates": [],
+  "source_ref": "reallaksh19/GLB-PCF-2.5-Editor@ff0868bace4f58babdde262abb3f373e576ccc68:docs/CAD_DOCUMENT_ARCHITECTURE.md",
+  "protected_surface": {
+    "harness_digest": "62e5f894bb23b7ee3926635f6a33dc7d82a9163ecf17a662f79f0bbc501a396d",
+    "baseline_digest": "9a051e81e9ebfd81e593e95fa654ebfc68721c24ff92211517a1e14679caf46f",
+    "oracle_digests": [],
+    "fixture_digests": [
+      "62e5f894bb23b7ee3926635f6a33dc7d82a9163ecf17a662f79f0bbc501a396d"
+    ],
+    "manifest": [
+      {
+        "id": "A06-SUPER-HARNESS",
+        "kind": "HARNESS_ENTRYPOINT",
+        "ref": "tests/cad/A06/super-review.mjs",
+        "digest": "62e5f894bb23b7ee3926635f6a33dc7d82a9163ecf17a662f79f0bbc501a396d",
+        "transitive": true
+      },
+      {
+        "id": "ARCHITECTURE",
+        "kind": "POLICY",
+        "ref": "docs/CAD_DOCUMENT_ARCHITECTURE.md",
+        "digest": "170e12ef2973db8f3356fc7628830007ad5dd333f8d63a1578185895e215106a",
+        "transitive": true
+      },
+      {
+        "id": "LOCKFILE",
+        "kind": "LOCKFILE",
+        "ref": "package-lock.json",
+        "digest": "64ca81015543683ddf7763730afd65ea87b04b47244e14c2bb59bc6a5a8b5482",
+        "transitive": true
+      }
+    ],
+    "manifest_digest": "82019edf6e80d8df94fe4d70016676b34f63d8d4e8bfce6d979da0e4c5b94420"
+  },
+  "regressions": [],
+  "digest": "0601a27eaf0943ab953e0ca0059d4e940fb90541d0f0cb6c4bbbbee85cd3b20b"
+}
