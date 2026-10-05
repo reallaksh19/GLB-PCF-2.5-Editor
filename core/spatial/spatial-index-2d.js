@@ -278,6 +278,8 @@ export class SpatialIndex2D {
 
     traverse(this.root);
     this._size = Math.max(0, this._size - removedCount);
+    if(!this._size) this.clear();
+    else while(!this.root.leaf && this.root.children.length===1) this.root=this.root.children[0];
     return removedCount;
   }
 

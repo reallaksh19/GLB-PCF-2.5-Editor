@@ -17,6 +17,7 @@ import { DxfLayer } from '../../formats/dxf/model/dxf-layer.js';
 import { DxfRenderAdapter } from '../../formats/dxf/render/dxf-render-adapter.js';
 import { DxfSpatialIndex } from '../../formats/dxf/spatial/dxf-spatial-index.js';
 import { SelectionManager } from '../../core/selection/selection-manager.js';
+import {DxfDocumentParser} from '../../formats/dxf/parser/dxf-document-parser.js';
 import { DxfDocumentWriter } from '../../formats/dxf/writer/dxf-document-writer.js';
 
 import {
@@ -146,11 +147,12 @@ function createSampleDocument() {
   });
   doc.addEntity(text);
 
+  for(const e of doc.entities)doc.handles.register(e.handle);
   return doc;
 }
 
 describe('CAD Command/History Framework (Phase 5)', () => {
-  it('MoveEntitiesCommand: executes, modifies entity, clears rawTags, and undos cleanly', () => {
+  it('MoveEntitiesCommand: executes, modifies entity, retains source tags, and undos cleanly', () => {
     const doc = createSampleDocument();
     const history = new CommandHistory();
     const line = doc.getEntity('10');
@@ -171,7 +173,7 @@ describe('CAD Command/History Framework (Phase 5)', () => {
     assert.equal(line.geometry.end.x, 65);
     assert.equal(line.geometry.end.y, 30);
     assert.equal(line.state.modified, true);
-    assert.equal(line.source.rawTags, null, 'Modified entity must have rawTags cleared');
+    assert.ok(line.source.rawTags.length, 'Modified native entity retains opaque and source tags');
     assert.ok(untouchedCircle.source.rawTags != null, 'Untouched entity must retain rawTags verbatim');
 
     // Undo Move
@@ -192,7 +194,7 @@ describe('CAD Command/History Framework (Phase 5)', () => {
     assert.equal(line.geometry.start.x, 25);
     assert.equal(line.geometry.start.y, 30);
     assert.equal(line.state.modified, true);
-    assert.equal(line.source.rawTags, null);
+    assert.ok(line.source.rawTags.length);
   });
 
   it('RotateEntitiesCommand: rotates geometry and angles around base point and undos', () => {
@@ -251,7 +253,7 @@ describe('CAD Command/History Framework (Phase 5)', () => {
     assert.equal(cs.added.length, 1);
     assert.equal(doc.entities.length, initialCount + 1);
 
-    const clone = cs.added[0];
+    const clone = doc.getEntity(cs.added[0].entityId);
     assert.notEqual(clone.id, 'dxf:entity:10');
     assert.equal(clone.geometry.start.x, 60);
     assert.equal(clone.geometry.start.y, 60);
@@ -298,6 +300,7 @@ describe('CAD Command/History Framework (Phase 5)', () => {
     assert.equal(line.layerId, 'WALLS');
     assert.ok(doc.layerEntityIndex.get('WALLS').has(line.id));
 
+    doc.addLayer(new DxfLayer({name:'NEW_LAYER'}));
     const changeLayerCmd = new ChangeLayerCommand([line.id], 'NEW_LAYER');
     history.execute(changeLayerCmd, doc);
 
@@ -446,12 +449,12 @@ describe('CAD Command/History Framework (Phase 5)', () => {
 
     const report3 = IncrementalUpdater.reconcile(copyCS, renderModel, spatialIndex, doc, selection);
     assert.equal(report3.addedCount, 1);
-    const copyEntityId = copyCS.added[0].id;
+    const copyEntityId = copyCS.added[0].entityId;
     assert.ok(spatialIndex.getEntityBounds(copyEntityId) != null);
   });
 
   it('Lossless Invariant on Edit-and-Undo: same-format round-trip retains 100% equivalence', () => {
-    const doc = createSampleDocument();
+    const doc = DxfDocumentParser.parse(['0','SECTION','2','ENTITIES','0','LINE','5','10','8','0','10','10','20','10','30','5','11','50','21','10','31','5','0','ENDSEC','0','EOF'].join('\n'));
     const originalDxf = DxfDocumentWriter.write(doc);
 
     const history = new CommandHistory();

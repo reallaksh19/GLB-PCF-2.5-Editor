@@ -46,6 +46,19 @@ export class DxfSpatialIndex {
     }
     this.tree.load(items);
   }
+  remove(id) {
+    this.tree.remove(item=>item.id===id);this.itemMap.delete(id);this.entityBoundsMap.delete(id);this.entityMetaMap.delete(id);
+    this.diagnostics=this.diagnostics.filter(d=>d.entityId!==id);
+  }
+  insertFromEntity(entity,document=this.document) {
+    this.remove(entity.id);this.document=document;
+    this.entityMetaMap.set(entity.id,{layer:entity.layerId,type:entity.type,handle:entity.handle});
+    const paths=sourcePaths(entity,document),bounds=computePointsBounds(paths.flatMap(pathBoundsPoints));
+    if(!bounds.valid){this.diagnostics.push({entityId:entity.id,code:'UNSUPPORTED_SELECTION_GEOMETRY'});return;}
+    const item={id:entity.id,...box(bounds),bounds,paths,entity,layer:entity.layerId,type:entity.type};
+    this.itemMap.set(item.id,item);this.entityBoundsMap.set(item.id,bounds);this.tree.insert(item);
+    if(paths.some(p=>p.approximate))this.diagnostics.push({entityId:entity.id,code:'APPROXIMATE_SELECTION_GEOMETRY'});
+  }
   eligiblePaths(item,options={}) {
     const policy={...this.options,...options};return (item.paths || []).filter(p=>pathVisible(p,this.document,policy) && (policy.includeHidden || p.visible!==false));
   }

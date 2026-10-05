@@ -36,3 +36,9 @@ jobs:
       - name: Existing spatial selection fixtures when available
         if: ${{ hashFiles('tests/dxf/dxf-selection-spatial.test.mjs') != '' }}
         run: node tests/dxf/dxf-selection-spatial.test.mjs
+      - name: Native transaction regressions when available
+        if: ${{ hashFiles('tests/cad/A09/*.test.mjs') != '' }}
+        run: node --test tests/cad/A09/*.test.mjs
+      - name: Existing command history controls when available
+        if: ${{ hashFiles('tests/dxf/dxf-command-history.test.mjs') != '' }}
+        run: node --test tests/dxf/dxf-command-history.test.mjs

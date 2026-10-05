@@ -9,6 +9,8 @@
  */
 
 import { ChangeSet } from './change-set.js';
+import {validateCommand} from './command-validation.js';
+import {atomically} from './transaction-state.js';
 
 export class CadCommand {
   /**
@@ -27,6 +29,8 @@ export class CadCommand {
    * @param {import('../../../formats/dxf/model/dxf-document.js').DxfDocument} document
    * @returns {ChangeSet}
    */
+  validate(document) { validateCommand(this,document); }
+
   execute(document) {
     throw new Error(`execute() must be implemented by ${this.constructor.name}`);
   }
@@ -62,6 +66,8 @@ export class CompositeCadCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
+    return atomically(document,this,()=> {
     const combined = new ChangeSet(this.name);
     for (const cmd of this.commands) {
       const cs = cmd.execute(document);
@@ -69,6 +75,7 @@ export class CompositeCadCommand extends CadCommand {
     }
     this.executed = true;
     return combined;
+    });
   }
 
   undo(document) {

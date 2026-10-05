@@ -9,7 +9,7 @@
  * - GripEditCommand
  *
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
- * Touched-only rawTags invalidation on mutated entities (Invariant 1).
+ * Touched source tags stay available to the native byte-overlay writer.
  */
 
 import { CadCommand } from './cad-command.js';
@@ -29,9 +29,11 @@ export class DeleteEntitiesCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.deletedRecords = [];
 
+    const originalPositions=new Map(document.entities.map((e,i)=>[e.id,i]));
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
       if (!entity) continue;
@@ -39,7 +41,7 @@ export class DeleteEntitiesCommand extends CadCommand {
       const snapshot = snapshotEntityState(entity);
       const res = document.removeEntity(entity);
       if (res) {
-        this.deletedRecords.push({ entity: res.entity, index: res.index, snapshot });
+        this.deletedRecords.push({ entity: res.entity, index: originalPositions.get(entity.id), snapshot });
         changeSet.addDeleted(res.entity, res.index);
       }
     }
@@ -81,6 +83,7 @@ export class ChangeLayerCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.snapshots.clear();
 
@@ -93,7 +96,6 @@ export class ChangeLayerCommand extends CadCommand {
 
       document.moveEntityToLayer(entity, this.targetLayer);
       entity.markModified();
-      entity.source.rawTags = null;
 
       const after = snapshotEntityState(entity);
       changeSet.addModified(entity.id, entity, before, after);
@@ -108,7 +110,7 @@ export class ChangeLayerCommand extends CadCommand {
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
-      const before = this.snapshots.get(id);
+      const before = this.snapshots.get(entity?.id);
       if (!entity || !before) continue;
 
       const current = snapshotEntityState(entity);
@@ -145,6 +147,7 @@ export class ChangePropertiesCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.snapshots.clear();
 
@@ -164,7 +167,6 @@ export class ChangePropertiesCommand extends CadCommand {
       if (this.properties.lineWeight != null) entity.style.lineWeight = this.properties.lineWeight;
 
       entity.markModified();
-      entity.source.rawTags = null;
 
       const after = snapshotEntityState(entity);
       changeSet.addModified(entity.id, entity, before, after);
@@ -179,7 +181,7 @@ export class ChangePropertiesCommand extends CadCommand {
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
-      const before = this.snapshots.get(id);
+      const before = this.snapshots.get(entity?.id);
       if (!entity || !before) continue;
 
       const current = snapshotEntityState(entity);
@@ -213,6 +215,7 @@ export class EditTextCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const entity = document.getEntity(this.entityId);
     if (!entity) return changeSet;
@@ -233,7 +236,6 @@ export class EditTextCommand extends CadCommand {
     }
 
     entity.markModified();
-    entity.source.rawTags = null;
 
     const after = snapshotEntityState(entity);
     changeSet.addModified(entity.id, entity, this.beforeSnapshot, after);
@@ -269,27 +271,30 @@ export class GripEditCommand extends CadCommand {
     super({ name: 'GRIP_EDIT', description: `Grip edit ${gripKey} on ${entityId}` });
     this.entityId = entityId;
     this.gripKey = gripKey;
-    this.newPoint = { x: newPoint?.x ?? 0, y: newPoint?.y ?? 0, z: newPoint?.z ?? 0 };
+    this.newPoint = { x: newPoint?.x ?? 0, y: newPoint?.y ?? 0, ...(newPoint?.z == null ? {} : {z:newPoint.z}) };
     this.beforeSnapshot = null;
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const entity = document.getEntity(this.entityId);
     if (!entity) return changeSet;
 
     this.beforeSnapshot = snapshotEntityState(entity);
     const g = entity.geometry;
+    const target=entity.type==='LINE' ? (this.gripKey===0 || this.gripKey==='start' ? g.start : g.end) : g.center || g.point || g.insertionPoint || g.vertices?.[Number(this.gripKey)];
+    const point={...this.newPoint,z:this.newPoint.z ?? target?.z ?? 0};
 
     if (entity.type === 'LINE') {
       if (this.gripKey === 0 || this.gripKey === 'start') {
-        g.start = { ...this.newPoint };
+        g.start = { ...point };
       } else if (this.gripKey === 1 || this.gripKey === 'end') {
-        g.end = { ...this.newPoint };
+        g.end = { ...point };
       }
     } else if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
       if (this.gripKey === 0 || this.gripKey === 'center') {
-        g.center = { ...this.newPoint };
+        g.center = { ...point };
       } else if (this.gripKey === 'radius' || typeof this.gripKey === 'number') {
         // Adjust radius by distance from center
         const dx = this.newPoint.x - (g.center?.x || 0);
@@ -302,7 +307,7 @@ export class GripEditCommand extends CadCommand {
         g.vertices[idx].x = this.newPoint.x;
         g.vertices[idx].y = this.newPoint.y;
         if (this.newPoint.z != null && g.vertices[idx].z != null) {
-          g.vertices[idx].z = this.newPoint.z;
+          g.vertices[idx].z = point.z;
         }
       }
       if (Array.isArray(entity.attributes?.subEntities) && idx >= 0 && idx < entity.attributes.subEntities.length) {
@@ -310,17 +315,16 @@ export class GripEditCommand extends CadCommand {
         if (sub.geometry?.point) {
           sub.geometry.point.x = this.newPoint.x;
           sub.geometry.point.y = this.newPoint.y;
-          sub.geometry.point.z = this.newPoint.z;
+          sub.geometry.point.z = point.z;
         }
       }
     } else if (entity.type === 'POINT') {
-      g.point = { ...this.newPoint };
+      g.point = { ...point };
     } else if (entity.type === 'TEXT' || entity.type === 'MTEXT' || entity.type === 'INSERT') {
-      g.insertionPoint = { ...this.newPoint };
+      g.insertionPoint = { ...point };
     }
 
     entity.markModified();
-    entity.source.rawTags = null;
 
     const after = snapshotEntityState(entity);
     changeSet.addModified(entity.id, entity, this.beforeSnapshot, after);

@@ -8,7 +8,7 @@
  * - CopyEntitiesCommand
  *
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
- * Touched-only rawTags invalidation on mutated entities (Invariant 1).
+ * Touched source tags stay available to the native byte-overlay writer.
  */
 
 import { CadCommand } from './cad-command.js';
@@ -37,56 +37,57 @@ function scalePoint(p, center, sx, sy, sz = 1) {
   p.x = center.x + ((p.x ?? 0) - center.x) * sx;
   p.y = center.y + ((p.y ?? 0) - center.y) * sy;
   if (p.z != null) {
-    p.z = (p.z ?? 0) * sz;
+    p.z = (center.z ?? 0) + ((p.z ?? 0) - (center.z ?? 0)) * sz;
   }
 }
 
-function applyTranslation(entity, dx, dy, dz) {
+function applyTranslation(entity, dx, dy, dz, seen=new Set()) {
   const g = entity.geometry;
   if (!g) return;
 
-  translatePoint(g.start, dx, dy, dz);
-  translatePoint(g.end, dx, dy, dz);
-  translatePoint(g.center, dx, dy, dz);
-  translatePoint(g.point, dx, dy, dz);
-  translatePoint(g.insertionPoint, dx, dy, dz);
-  translatePoint(g.alignmentPoint, dx, dy, dz);
-  translatePoint(g.definitionPoint, dx, dy, dz);
-  translatePoint(g.midpoint, dx, dy, dz);
+  if (g.start && !seen.has(g.start)) {seen.add(g.start); translatePoint(g.start, dx, dy, dz);}
+  if (g.end && !seen.has(g.end)) {seen.add(g.end); translatePoint(g.end, dx, dy, dz);}
+  if (g.center && !seen.has(g.center)) {seen.add(g.center); translatePoint(g.center, dx, dy, dz);}
+  if (g.point && !seen.has(g.point)) {seen.add(g.point); translatePoint(g.point, dx, dy, dz);}
+  if (g.insertionPoint && !seen.has(g.insertionPoint)) {seen.add(g.insertionPoint); translatePoint(g.insertionPoint, dx, dy, dz);}
+  if (g.alignmentPoint && !seen.has(g.alignmentPoint)) {seen.add(g.alignmentPoint); translatePoint(g.alignmentPoint, dx, dy, dz);}
+  if (g.definitionPoint && !seen.has(g.definitionPoint)) {seen.add(g.definitionPoint); translatePoint(g.definitionPoint, dx, dy, dz);}
+  if (g.midpoint && !seen.has(g.midpoint)) {seen.add(g.midpoint); translatePoint(g.midpoint, dx, dy, dz);}
 
   if (Array.isArray(g.vertices)) {
     for (const v of g.vertices) {
-      translatePoint(v, dx, dy, dz);
+      if (v && !seen.has(v)) {seen.add(v); translatePoint(v, dx, dy, dz);}
     }
   }
 
   if (Array.isArray(g.controlPoints)) {
     for (const cp of g.controlPoints) {
-      translatePoint(cp, dx, dy, dz);
+      if (cp && !seen.has(cp)) {seen.add(cp); translatePoint(cp, dx, dy, dz);}
     }
   }
 
   if (Array.isArray(g.fitPoints)) {
     for (const fp of g.fitPoints) {
-      translatePoint(fp, dx, dy, dz);
+      if (fp && !seen.has(fp)) {seen.add(fp); translatePoint(fp, dx, dy, dz);}
     }
   }
 
   if (Array.isArray(g.corners)) {
     for (const c of g.corners) {
-      translatePoint(c, dx, dy, dz);
+      if (c && !seen.has(c)) {seen.add(c); translatePoint(c, dx, dy, dz);}
     }
   }
 
+  if ((entity.type==='LWPOLYLINE' || (entity.type==='POLYLINE' && !((g.flags || 0)&8))) && g.elevation!=null) g.elevation+=dz;
   // Also translate subEntities if compound entity (e.g. POLYLINE with VERTEX records)
   if (Array.isArray(entity.attributes?.subEntities)) {
     for (const sub of entity.attributes.subEntities) {
-      applyTranslation(sub, dx, dy, dz);
+      applyTranslation(sub, dx, dy, dz,seen);
     }
   }
 }
 
-function applyRotation(entity, center, angleDeg) {
+function applyRotation(entity, center, angleDeg, seen=new Set()) {
   const g = entity.geometry;
   if (!g) return;
 
@@ -94,36 +95,36 @@ function applyRotation(entity, center, angleDeg) {
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
 
-  rotatePoint(g.start, center, cos, sin);
-  rotatePoint(g.end, center, cos, sin);
-  rotatePoint(g.center, center, cos, sin);
-  rotatePoint(g.point, center, cos, sin);
-  rotatePoint(g.insertionPoint, center, cos, sin);
-  rotatePoint(g.alignmentPoint, center, cos, sin);
-  rotatePoint(g.definitionPoint, center, cos, sin);
-  rotatePoint(g.midpoint, center, cos, sin);
+  if (g.start && !seen.has(g.start)) {seen.add(g.start); rotatePoint(g.start, center, cos, sin);}
+  if (g.end && !seen.has(g.end)) {seen.add(g.end); rotatePoint(g.end, center, cos, sin);}
+  if (g.center && !seen.has(g.center)) {seen.add(g.center); rotatePoint(g.center, center, cos, sin);}
+  if (g.point && !seen.has(g.point)) {seen.add(g.point); rotatePoint(g.point, center, cos, sin);}
+  if (g.insertionPoint && !seen.has(g.insertionPoint)) {seen.add(g.insertionPoint); rotatePoint(g.insertionPoint, center, cos, sin);}
+  if (g.alignmentPoint && !seen.has(g.alignmentPoint)) {seen.add(g.alignmentPoint); rotatePoint(g.alignmentPoint, center, cos, sin);}
+  if (g.definitionPoint && !seen.has(g.definitionPoint)) {seen.add(g.definitionPoint); rotatePoint(g.definitionPoint, center, cos, sin);}
+  if (g.midpoint && !seen.has(g.midpoint)) {seen.add(g.midpoint); rotatePoint(g.midpoint, center, cos, sin);}
 
   if (Array.isArray(g.vertices)) {
     for (const v of g.vertices) {
-      rotatePoint(v, center, cos, sin);
+      if (v && !seen.has(v)) {seen.add(v); rotatePoint(v, center, cos, sin);}
     }
   }
 
   if (Array.isArray(g.controlPoints)) {
     for (const cp of g.controlPoints) {
-      rotatePoint(cp, center, cos, sin);
+      if (cp && !seen.has(cp)) {seen.add(cp); rotatePoint(cp, center, cos, sin);}
     }
   }
 
   if (Array.isArray(g.fitPoints)) {
     for (const fp of g.fitPoints) {
-      rotatePoint(fp, center, cos, sin);
+      if (fp && !seen.has(fp)) {seen.add(fp); rotatePoint(fp, center, cos, sin);}
     }
   }
 
   if (Array.isArray(g.corners)) {
     for (const c of g.corners) {
-      rotatePoint(c, center, cos, sin);
+      if (c && !seen.has(c)) {seen.add(c); rotatePoint(c, center, cos, sin);}
     }
   }
 
@@ -135,7 +136,7 @@ function applyRotation(entity, center, angleDeg) {
 
   if (entity.type === 'TEXT' || entity.type === 'MTEXT' || entity.type === 'ATTRIB') {
     if (entity.attributes) {
-      entity.attributes.rotation = ((entity.attributes.rotation || 0) + angleDeg) % 360;
+      entity.attributes.rotation = (entity.attributes.rotation || 0) + (entity.type === 'MTEXT' ? rad : angleDeg);
     }
   }
 
@@ -145,54 +146,55 @@ function applyRotation(entity, center, angleDeg) {
     }
   }
 
-  if (entity.type === 'ELLIPSE' && g.majorAxisEndPoint) {
-    rotatePoint(g.majorAxisEndPoint, { x: 0, y: 0 }, cos, sin);
+  if (entity.type === 'ELLIPSE' && g.majorAxis) {
+    rotatePoint(g.majorAxis, { x: 0, y: 0 }, cos, sin);
   }
 
   if (Array.isArray(entity.attributes?.subEntities)) {
     for (const sub of entity.attributes.subEntities) {
-      applyRotation(sub, center, angleDeg);
+      applyRotation(sub, center, angleDeg,seen);
     }
   }
 }
 
-function applyScaling(entity, center, sx, sy, sz) {
+function applyScaling(entity, center, sx, sy, sz, seen=new Set()) {
   const g = entity.geometry;
   if (!g) return;
 
-  scalePoint(g.start, center, sx, sy, sz);
-  scalePoint(g.end, center, sx, sy, sz);
-  scalePoint(g.center, center, sx, sy, sz);
-  scalePoint(g.point, center, sx, sy, sz);
-  scalePoint(g.insertionPoint, center, sx, sy, sz);
-  scalePoint(g.alignmentPoint, center, sx, sy, sz);
-  scalePoint(g.definitionPoint, center, sx, sy, sz);
-  scalePoint(g.midpoint, center, sx, sy, sz);
+  if (g.start && !seen.has(g.start)) {seen.add(g.start); scalePoint(g.start, center, sx, sy, sz);}
+  if (g.end && !seen.has(g.end)) {seen.add(g.end); scalePoint(g.end, center, sx, sy, sz);}
+  if (g.center && !seen.has(g.center)) {seen.add(g.center); scalePoint(g.center, center, sx, sy, sz);}
+  if (g.point && !seen.has(g.point)) {seen.add(g.point); scalePoint(g.point, center, sx, sy, sz);}
+  if (g.insertionPoint && !seen.has(g.insertionPoint)) {seen.add(g.insertionPoint); scalePoint(g.insertionPoint, center, sx, sy, sz);}
+  if (g.alignmentPoint && !seen.has(g.alignmentPoint)) {seen.add(g.alignmentPoint); scalePoint(g.alignmentPoint, center, sx, sy, sz);}
+  if (g.definitionPoint && !seen.has(g.definitionPoint)) {seen.add(g.definitionPoint); scalePoint(g.definitionPoint, center, sx, sy, sz);}
+  if (g.midpoint && !seen.has(g.midpoint)) {seen.add(g.midpoint); scalePoint(g.midpoint, center, sx, sy, sz);}
 
   if (Array.isArray(g.vertices)) {
     for (const v of g.vertices) {
-      scalePoint(v, center, sx, sy, sz);
+      if (v && !seen.has(v)) {seen.add(v); scalePoint(v, center, sx, sy, sz);}
     }
   }
 
   if (Array.isArray(g.controlPoints)) {
     for (const cp of g.controlPoints) {
-      scalePoint(cp, center, sx, sy, sz);
+      if (cp && !seen.has(cp)) {seen.add(cp); scalePoint(cp, center, sx, sy, sz);}
     }
   }
 
   if (Array.isArray(g.fitPoints)) {
     for (const fp of g.fitPoints) {
-      scalePoint(fp, center, sx, sy, sz);
+      if (fp && !seen.has(fp)) {seen.add(fp); scalePoint(fp, center, sx, sy, sz);}
     }
   }
 
   if (Array.isArray(g.corners)) {
     for (const c of g.corners) {
-      scalePoint(c, center, sx, sy, sz);
+      if (c && !seen.has(c)) {seen.add(c); scalePoint(c, center, sx, sy, sz);}
     }
   }
 
+  if(g.elevation!=null)g.elevation=(center.z ?? 0)+(g.elevation-(center.z ?? 0))*sz;
   // Dimension scaling
   if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
     const avgScale = (Math.abs(sx) + Math.abs(sy)) / 2;
@@ -211,14 +213,15 @@ function applyScaling(entity, center, sx, sy, sz) {
     g.scale.z = (g.scale.z ?? 1) * sz;
   }
 
-  if (entity.type === 'ELLIPSE' && g.majorAxisEndPoint) {
-    g.majorAxisEndPoint.x *= sx;
-    g.majorAxisEndPoint.y *= sy;
+  if (entity.type === 'ELLIPSE' && g.majorAxis) {
+    g.majorAxis.x *= sx;
+    g.majorAxis.y *= sy;
+    g.majorAxis.z=(g.majorAxis.z ?? 0)*sz;
   }
 
   if (Array.isArray(entity.attributes?.subEntities)) {
     for (const sub of entity.attributes.subEntities) {
-      applyScaling(sub, center, sx, sy, sz);
+      applyScaling(sub, center, sx, sy, sz,seen);
     }
   }
 }
@@ -236,13 +239,14 @@ export class MoveEntitiesCommand extends CadCommand {
   constructor(entityIds, dx, dy, dz = 0) {
     super({ name: 'MOVE', description: `Move ${entityIds.length} entities by (${dx}, ${dy}, ${dz})` });
     this.entityIds = Array.isArray(entityIds) ? entityIds : [entityIds];
-    this.dx = Number(dx) || 0;
-    this.dy = Number(dy) || 0;
-    this.dz = Number(dz) || 0;
+    this.dx = Number(dx);
+    this.dy = Number(dy);
+    this.dz = Number(dz);
     this.snapshots = new Map(); // entityId -> snapshot
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.snapshots.clear();
 
@@ -255,7 +259,6 @@ export class MoveEntitiesCommand extends CadCommand {
 
       applyTranslation(entity, this.dx, this.dy, this.dz);
       entity.markModified();
-      entity.source.rawTags = null; // Clear raw tags for re-serialization
 
       const after = snapshotEntityState(entity);
       changeSet.addModified(entity.id, entity, before, after);
@@ -270,7 +273,7 @@ export class MoveEntitiesCommand extends CadCommand {
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
-      const before = this.snapshots.get(id);
+      const before = this.snapshots.get(entity?.id);
       if (!entity || !before) continue;
 
       const current = snapshotEntityState(entity);
@@ -296,12 +299,13 @@ export class RotateEntitiesCommand extends CadCommand {
   constructor(entityIds, basePoint, angleDeg) {
     super({ name: 'ROTATE', description: `Rotate ${entityIds.length} entities by ${angleDeg}°` });
     this.entityIds = Array.isArray(entityIds) ? entityIds : [entityIds];
-    this.basePoint = { x: basePoint?.x ?? 0, y: basePoint?.y ?? 0 };
-    this.angleDeg = Number(angleDeg) || 0;
+    this.basePoint = { x: basePoint?.x ?? 0, y: basePoint?.y ?? 0, z:basePoint?.z ?? 0 };
+    this.angleDeg = Number(angleDeg);
     this.snapshots = new Map();
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.snapshots.clear();
 
@@ -314,7 +318,6 @@ export class RotateEntitiesCommand extends CadCommand {
 
       applyRotation(entity, this.basePoint, this.angleDeg);
       entity.markModified();
-      entity.source.rawTags = null;
 
       const after = snapshotEntityState(entity);
       changeSet.addModified(entity.id, entity, before, after);
@@ -329,7 +332,7 @@ export class RotateEntitiesCommand extends CadCommand {
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
-      const before = this.snapshots.get(id);
+      const before = this.snapshots.get(entity?.id);
       if (!entity || !before) continue;
 
       const current = snapshotEntityState(entity);
@@ -355,7 +358,7 @@ export class ScaleEntitiesCommand extends CadCommand {
   constructor(entityIds, basePoint, scaleFactor) {
     super({ name: 'SCALE', description: `Scale ${entityIds.length} entities` });
     this.entityIds = Array.isArray(entityIds) ? entityIds : [entityIds];
-    this.basePoint = { x: basePoint?.x ?? 0, y: basePoint?.y ?? 0 };
+    this.basePoint = { x: basePoint?.x ?? 0, y: basePoint?.y ?? 0, z:basePoint?.z ?? 0 };
     if (typeof scaleFactor === 'number') {
       this.sx = scaleFactor;
       this.sy = scaleFactor;
@@ -369,6 +372,7 @@ export class ScaleEntitiesCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.snapshots.clear();
 
@@ -381,7 +385,6 @@ export class ScaleEntitiesCommand extends CadCommand {
 
       applyScaling(entity, this.basePoint, this.sx, this.sy, this.sz);
       entity.markModified();
-      entity.source.rawTags = null;
 
       const after = snapshotEntityState(entity);
       changeSet.addModified(entity.id, entity, before, after);
@@ -396,7 +399,7 @@ export class ScaleEntitiesCommand extends CadCommand {
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
-      const before = this.snapshots.get(id);
+      const before = this.snapshots.get(entity?.id);
       if (!entity || !before) continue;
 
       const current = snapshotEntityState(entity);
@@ -423,21 +426,24 @@ export class CopyEntitiesCommand extends CadCommand {
   constructor(sourceEntityIds, dx, dy, dz = 0) {
     super({ name: 'COPY', description: `Copy ${sourceEntityIds.length} entities by (${dx}, ${dy}, ${dz})` });
     this.sourceEntityIds = Array.isArray(sourceEntityIds) ? sourceEntityIds : [sourceEntityIds];
-    this.dx = Number(dx) || 0;
-    this.dy = Number(dy) || 0;
-    this.dz = Number(dz) || 0;
+    this.dx = Number(dx);
+    this.dy = Number(dy);
+    this.dz = Number(dz);
     this.createdEntities = [];
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
-    this.createdEntities = [];
+    if(this.createdEntities.length) {for(const clone of this.createdEntities){document.addEntity(clone);changeSet.addAdded(clone);}this.executed=true;return changeSet;}
 
     for (const id of this.sourceEntityIds) {
       const src = document.getEntity(id);
       if (!src) continue;
 
       const clone = new DxfEntity({
+        id:document.id+':committed:'+document.handles.handseed,
+        handle:document.handles.allocate(),ownerHandle:src.ownerHandle,layoutId:src.layoutId,
         type: src.type,
         layerId: src.layerId,
         space: src.space,
@@ -446,7 +452,7 @@ export class CopyEntitiesCommand extends CadCommand {
         attributes: JSON.parse(JSON.stringify(src.attributes || {})),
         source: {
           order: document.entities.length,
-          rawTags: null, // New entities do not have pre-existing rawTags
+          rawTags: [], // No imported byte span belongs to this created record
         },
         state: {
           modified: true,
@@ -455,6 +461,7 @@ export class CopyEntitiesCommand extends CadCommand {
         },
       });
 
+      clone.source.copiedRawTags=src.source.rawTags.slice();
       applyTranslation(clone, this.dx, this.dy, this.dz);
       document.addEntity(clone);
 
