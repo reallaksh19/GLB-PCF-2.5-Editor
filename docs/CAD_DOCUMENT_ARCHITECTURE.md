@@ -1,6 +1,8 @@
 # CAD Document Architecture Contract
 
 ## Status & Authority
+- **Execution contracts**: [A00 / #86](https://github.com/reallaksh19/GLB-PCF-2.5-Editor/issues/86) refine #85. This Phase 0 PR establishes documentation and static boundary checks; it does not claim complete A00 runtime-contract implementation.
+
 - **Governing Issue**: [Issue #85](https://github.com/reallaksh19/GLB-PCF-2.5-Editor/issues/85)
 - **Supersedes**: The DXF-specific "CEG is authoritative" portions of Issue #11 and `docs/GEOMETRY_DRAFTING_CONTRACT.md`.
 - **Preserves**: CEG as the authoritative model for native piping/route semantics, topology, and PCF-derived engineering geometry.
@@ -167,3 +169,17 @@ Every phase PR must pass the following mechanical checks before delivery:
 - [ ] **Entity Identity Preserved**: Codecs strictly preserve entity types (`CIRCLE` != `ARC`).
 - [ ] **Untouched Entity Passthrough**: Entities not modified in the session preserve their original group-code tag sequence.
 - [ ] **Automated Boundary Tool Passes**: `node tools/verify-cad-boundaries.mjs` exits with code 0.
+
+## CAD85 execution contract refinements
+
+The shared schemas in #86 govern implementing agents. Source authority lives in a document worker; the UI receives bounded read-only summaries and source-ID projections. Native storage retains one immutable input byte buffer with token/record spans and edit overlays, preserving BOM/codepage/newlines, repeated sections, unknown records and numeric lexemes. A string-only import cannot claim preservation of bytes discarded by its caller.
+
+Selection references include document ID. Missing/duplicate handles use preserved record identity; opening never allocates replacement source handles. Revision is monotonic through commands/undo/redo and is distinct from saved-content state. Native Save acknowledges its captured content checkpoint, leaving concurrent edits dirty. Source writes and the union of old/new projection dependencies are separate sets. Adapter-provided native patches and inverses remain worker-local; the core command framework does not interpret DXF tags or GLB/PCF internals.
+
+Preparation stages complete patches/ownership/history. Cancellation before commit discards staging; after commit it returns the committed transaction result. Same transaction-ID replay is idempotent. Existing blocks stay shared definitions; occurrence selection defaults to the owning INSERT. Geometry, native writer, native UI, full transaction/history and runtime sentinel tests land in their respective owner issues.
+
+### What this PR enforces
+
+`npm ci --prefix integration/cad --ignore-scripts` installs the isolated static-tool dependency without requiring the existing application dependency manifest. `npm run cad:contracts` checks contract headings, parses source imports with Acorn, resolves/transitively checks local dependencies, rejects Three/CEG/piping/DOM dependencies and known legacy mm scalers, and runs deliberate negative controls. Static AST checks do not prove arbitrary arithmetic preserves coordinates or that native Save/history/runtime authority is complete.
+
+An empty native source directory reports NOT_APPLICABLE, not evidence that source boundaries have been exercised. The CAD contract workflow is additive to existing Phase Gates. The complete set of runtime invariants, ownership guards, fixtures, benchmark targets and acceptance evidence remains tracked in #86 and its child issues.

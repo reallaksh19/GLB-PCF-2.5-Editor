@@ -7,7 +7,7 @@ export const TextCodec = {
     const common = parseCommonFields(tags);
     let x = 0, y = 0, z = 0;
     let ax = 0, ay = 0, az = 0;
-    let height = 2.5;
+    let height = null;
     let text = '';
     let rotation = 0;
     let widthFactor = 1.0;
@@ -26,7 +26,7 @@ export const TextCodec = {
         case 11: ax = parseNumber(tag.value); hasAlign = true; break;
         case 21: ay = parseNumber(tag.value); hasAlign = true; break;
         case 31: az = parseNumber(tag.value); hasAlign = true; break;
-        case 40: height = parseNumber(tag.value, 2.5); break;
+        case 40: height = parseNumber(tag.value); break;
         case 1: text = tag.value; break;
         case 50: rotation = parseNumber(tag.value); break;
         case 41: widthFactor = parseNumber(tag.value, 1.0); break;
@@ -66,7 +66,7 @@ export const MtextCodec = {
   decode(tags, order) {
     const common = parseCommonFields(tags);
     let x = 0, y = 0, z = 0;
-    let height = 2.5;
+    let height = null;
     let rectWidth = 0;
     let text = '';
     let attachmentPoint = 1; // 71: 1 = Top left, 5 = Middle center, etc.
@@ -81,7 +81,7 @@ export const MtextCodec = {
         case 10: x = parseNumber(tag.value); break;
         case 20: y = parseNumber(tag.value); break;
         case 30: z = parseNumber(tag.value); break;
-        case 40: height = parseNumber(tag.value, 2.5); break;
+        case 40: height = parseNumber(tag.value); break;
         case 41: rectWidth = parseNumber(tag.value); break;
         case 3:
           textParts.push(tag.value);

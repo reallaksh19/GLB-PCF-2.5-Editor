@@ -1,9 +1,9 @@
 /*
  * core/ceg/canonical-edit-graph.js
  *
- * Canonical Edit Graph (CEG) factory — the single source of truth for
- * all import/export/edit operations.  Import adapters create a CEG;
- * editors mutate it via the command dispatcher; exporters serialize it.
+ * Canonical Edit Graph (CEG) factory — authority for native piping/route
+ * engineering semantics. Imported DXF source fidelity belongs to DxfDocument
+ * under #85; its CEG is optional/derived and never the native Save authority.
  */
 
 export const CEG_SCHEMA_VERSION = 'CEG-1.0';

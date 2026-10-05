@@ -1,49 +1,38 @@
-/**
- * formats/dxf/model/dxf-handle-registry.js
- *
- * Manages AutoCAD 16-hex handles and $HANDSEED tracking.
- */
-
+/** Session allocation never rounds 64-bit handles or invents handles during parsing. */
+export function normalizeHandle(value) {
+  const lexeme = String(value ?? '').trim();
+  if (!/^[0-9a-f]{1,16}$/i.test(lexeme)) return null;
+  return BigInt('0x' + lexeme).toString(16).toUpperCase();
+}
 export class DxfHandleRegistry {
   constructor(initialSeed = '1') {
     this.knownHandles = new Set();
-    this.maxNumericHandle = 0;
+    this.nextNumericHandle = 1n;
+    this.sourceSeed = null;
     this.setSeed(initialSeed);
   }
-
-  setSeed(seedStr) {
-    if (!seedStr) return;
-    const clean = String(seedStr).trim();
-    const val = parseInt(clean, 16);
-    if (!Number.isNaN(val) && val > this.maxNumericHandle) {
-      this.maxNumericHandle = val;
-    }
+  setSeed(value) {
+    const handle = normalizeHandle(value);
+    if (handle === null) return false;
+    this.sourceSeed = String(value);
+    const next = BigInt('0x' + handle);
+    if (next > this.nextNumericHandle) this.nextNumericHandle = next;
+    return true;
   }
-
-  register(handleStr) {
-    if (!handleStr) return;
-    const clean = String(handleStr).trim().toUpperCase();
-    this.knownHandles.add(clean);
-    const val = parseInt(clean, 16);
-    if (!Number.isNaN(val) && val > this.maxNumericHandle) {
-      this.maxNumericHandle = val;
-    }
+  register(value) {
+    const handle = normalizeHandle(value);
+    if (handle === null) return false;
+    this.knownHandles.add(handle);
+    const next = BigInt('0x' + handle) + 1n;
+    if (next > this.nextNumericHandle) this.nextNumericHandle = next;
+    return true;
   }
-
-  has(handleStr) {
-    if (!handleStr) return false;
-    return this.knownHandles.has(String(handleStr).trim().toUpperCase());
-  }
-
+  has(value) { const h = normalizeHandle(value); return h !== null && this.knownHandles.has(h); }
   allocate() {
-    this.maxNumericHandle++;
-    const nextHex = this.maxNumericHandle.toString(16).toUpperCase();
-    this.knownHandles.add(nextHex);
-    return nextHex;
+    if (this.nextNumericHandle > 0xffffffffffffffffn) throw new RangeError('DXF handle space exhausted');
+    const h = this.nextNumericHandle.toString(16).toUpperCase();
+    this.register(h);
+    return h;
   }
-
-  get handseed() {
-    // $HANDSEED in DXF specifies the NEXT available handle
-    return (this.maxNumericHandle + 1).toString(16).toUpperCase();
-  }
+  get handseed() { return this.nextNumericHandle.toString(16).toUpperCase(); }
 }

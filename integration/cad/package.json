@@ -1,0 +1,8 @@
+{
+  "name": "cad-boundary-tooling",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "acorn": "8.18.0"
+  }
+}

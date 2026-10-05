@@ -1,3 +1,4 @@
+import { nativeTags } from '../dxf-source-index.js';
 /**
  * formats/dxf/parser/entity-codecs/index.js
  *
@@ -44,10 +45,15 @@ const CODEC_MAP = new Map([
 export function decodeEntity(type, tags, order, subEntities = []) {
   const upperType = String(type).trim().toUpperCase();
   const codec = CODEC_MAP.get(upperType);
-  if (codec) {
-    return codec.decode(tags, order, subEntities);
-  }
-  return UnknownCodec.decode(tags, order, upperType);
+  const fields = nativeTags(tags);
+  const entity = codec ? codec.decode(fields, order, subEntities) : UnknownCodec.decode(fields, order, upperType);
+  entity.source.rawTags = tags; // Opaque control groups/XDATA remain authoritative.
+  if (!entity.geometry.extrusion) entity.geometry.extrusion = {
+    x: Number(fields.find(t => t.code === 210)?.value || 0),
+    y: Number(fields.find(t => t.code === 220)?.value || 0),
+    z: Number(fields.find(t => t.code === 230)?.value ?? 1),
+  };
+  return entity;
 }
 
 export function registerCodec(type, codec) {

@@ -10,6 +10,7 @@ export const SplineCodec = {
     const controlPoints = [];
     const fitPoints = [];
     const knots = [];
+    const weights = [];
 
     let currentCP = null;
     let currentFP = null;
@@ -19,6 +20,7 @@ export const SplineCodec = {
         case 71: degree = parseInt(tag.value, 10); break;
         case 70: flags = parseInt(tag.value, 10); break;
         case 40: knots.push(parseNumber(tag.value)); break;
+        case 41: weights.push(parseNumber(tag.value)); break;
         case 10:
           currentCP = { x: parseNumber(tag.value), y: 0, z: 0 };
           controlPoints.push(currentCP);
@@ -37,7 +39,7 @@ export const SplineCodec = {
     return new DxfEntity({
       ...common,
       type: 'SPLINE',
-      geometry: { controlPoints, fitPoints, knots, degree },
+      geometry: { controlPoints, fitPoints, knots, weights, degree },
       attributes: { flags },
       source: { order, rawTags: tags },
     });

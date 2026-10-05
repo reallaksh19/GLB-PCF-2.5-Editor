@@ -273,7 +273,7 @@ function testSyntheticParsing() {
   // 1. Units & Header
   assert.strictEqual(doc.source.acadVersion, 'AC1015', 'Version matches');
   assert.strictEqual(doc.units.insunits, 4, '$INSUNITS=4 (mm) preserved as metadata');
-  assert.strictEqual(doc.handles.handseed, '200', 'Handseed updated correctly');
+  assert.strictEqual(doc.handles.handseed, '1FF', 'Opening preserves the next-available seed without allocating handles');
 
   // 2. Layers
   const layer = doc.getLayer('PIPING');
@@ -353,6 +353,8 @@ function testFid07FixtureParsing() {
   const doc = DxfDocumentParser.parse(rawDxf, { fileName: 'fid07-visual-fixture.dxf' });
 
   assert.strictEqual(doc.units.insunits, 4, '$INSUNITS is 4');
+  assert.equal(doc.readOnly, true, 'This visual fixture has nonhex L/T/I handles; native edits/Save must stay disabled');
+  assert.ok(doc.diagnostics.some(d => d.code === 'INVALID_HANDLE'), 'Inherited fixture invalid handles are reported, not silently normalized');
   assert.strictEqual(doc.tables.layers.size, 3, 'Parsed 3 layers (0, PIPE, SYMBOL)');
   assert.ok(doc.getLayer('PIPE'), 'Layer PIPE exists');
   assert.ok(doc.getLayer('SYMBOL'), 'Layer SYMBOL exists');
@@ -378,7 +380,7 @@ function testRealLargeFixtureParsing() {
   console.log('\n--- Test 3: Real-World Large Fixture (STD-98-...dxf) ---');
   const fixturePath = path.resolve('Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf');
   if (!fs.existsSync(fixturePath)) {
-    console.log('⚠️ Large fixture not found on disk, skipping.');
+    console.log('UNRUN: authorized large fixture unavailable.');
     return;
   }
 

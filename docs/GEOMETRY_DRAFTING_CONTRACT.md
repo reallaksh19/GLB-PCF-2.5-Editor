@@ -4,6 +4,10 @@
 
 This contract freezes the shared geometry/drafting platform before professional Line, Polyline, Spline, Macro, parser, topology, and future scaling work proceeds.
 
+## Imported DXF authority exception
+
+Issue #85 and `CAD_DOCUMENT_ARCHITECTURE.md` supersede this contract for imported DXF source storage, identity, coordinates and same-format Save. DxfDocument owns those source facts; CEG is an optional semantic projection. The rules below continue to govern native piping/route and PCF-derived engineering geometry, including the shared precision parser and engineering-mm semantics.
+
 ## Governing rule
 
 `ep1`, `ep2`, `cp`, `bp`, and `origin` are compatibility/render fields. They are not the long-term source of truth for editable geometry.
