@@ -1,5 +1,5 @@
 import {snapshotEntityState,restoreEntityState} from './change-set.js';
-const runtimeKeys=['createdEntity','createdArc','createdPolyline','createdEntities','removedEntities','snapshots','deletedRecords','beforeSnapshot','beforeSnapshots'];
+const runtimeKeys=['createdEntity','createdArc','createdPolyline','createdEntities','removedEntities','snapshots','deletedRecords','beforeSnapshot','beforeSnapshots','preSnapshot'];
 function caches(command,out=[]) {
   out.push([command,Object.fromEntries(runtimeKeys.filter(k=>k in command).map(k=>[k,command[k]]))]);
   command.commands?.forEach(child=>caches(child,out));return out;

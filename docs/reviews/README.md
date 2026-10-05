@@ -7,3 +7,5 @@
 | **105** | Phase 4: Spatial Index & Selection | `phase-4-selection-spatial-index` | ⏳ Pending Review | - |
 
 PR107 high-ROI editing checkpoint: [report](PR-107.md); prior broad approval superseded by current Coordinator evidence on #85.
+
+PR108 source grips and snaps: [report](PR-108.md); exact Coordinator verification and delivery recorded on #85.

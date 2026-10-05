@@ -1,3 +1,4 @@
+import {bulgeArc} from '../../geometry/cad/native-curves.js';
 /**
  * core/geometry/cad-intersections.js
  *
@@ -43,35 +44,10 @@ export function isAngleBetween(deg, startDeg, endDeg) {
  * @param {number} bulge
  * @returns {{ center: {x: number, y: number, z: number}, radius: number, startAngle: number, endAngle: number }|null}
  */
-export function bulgeToArc(p1, p2, bulge) {
-  const b = Number(bulge) || 0;
-  if (Math.abs(b) < EPSILON) return null;
-
-  const dx = (p2.x ?? 0) - (p1.x ?? 0);
-  const dy = (p2.y ?? 0) - (p1.y ?? 0);
-  const chord = Math.sqrt(dx * dx + dy * dy);
-  if (chord < EPSILON) return null;
-
-  const nx = -dy / chord;
-  const ny = dx / chord;
-
-  const d = (chord * (1 - b * b)) / (4 * b);
-  const cx = ((p1.x ?? 0) + (p2.x ?? 0)) / 2 - nx * d;
-  const cy = ((p1.y ?? 0) + (p2.y ?? 0)) / 2 - ny * d;
-  const radius = Math.abs((chord * (1 + b * b)) / (4 * b));
-
-  const ang1 = normalizeAngle((Math.atan2((p1.y ?? 0) - cy, (p1.x ?? 0) - cx) * 180) / Math.PI);
-  const ang2 = normalizeAngle((Math.atan2((p2.y ?? 0) - cy, (p2.x ?? 0) - cx) * 180) / Math.PI);
-
-  const startAngle = b > 0 ? ang2 : ang1;
-  const endAngle = b > 0 ? ang1 : ang2;
-
-  return {
-    center: { x: cx, y: cy, z: p1.z ?? 0 },
-    radius,
-    startAngle,
-    endAngle,
-  };
+export function bulgeToArc(p1,p2,bulge) {
+  const arc=bulgeArc(p1,p2,Number(bulge));if(!arc)return null;
+  const a=arc.startAngle*180/Math.PI,b=(arc.startAngle+arc.sweep)*180/Math.PI;
+  return {center:arc.center,radius:arc.radius,startAngle:normalizeAngle(arc.sweep>0?a:b),endAngle:normalizeAngle(arc.sweep>0?b:a)};
 }
 
 /**
@@ -252,15 +228,15 @@ export function getEntitySegments(entity) {
         center: { ...c },
         radius: g.radius || 0,
         startAngle: g.startAngle || 0,
-        endAngle: g.endAngle || 360,
+        endAngle: g.endAngle ?? 360,
         entity,
       }];
     }
     case 'LWPOLYLINE':
     case 'POLYLINE': {
-      const vertices = g.vertices || [];
+      const vertices = (g.vertices || []).map(v=>({...v,z:(g.is3D || (entity.attributes?.flags&8)) ? v.z ?? 0 : g.elevation ?? v.z ?? 0}));
       const segments = [];
-      const count = g.closed ? vertices.length : vertices.length - 1;
+      const count = (g.closed ?? g.isClosed) ? vertices.length : vertices.length - 1;
 
       for (let i = 0; i < count; i++) {
         const v1 = vertices[i];
@@ -270,8 +246,8 @@ export function getEntitySegments(entity) {
         if (Math.abs(bulge) < EPSILON) {
           segments.push({
             type: 'LINE',
-            start: { x: v1.x, y: v1.y },
-            end: { x: v2.x, y: v2.y },
+            start: { x: v1.x, y: v1.y, z:v1.z },
+            end: { x: v2.x, y: v2.y, z:v2.z },
             entity,
             vertexIndex: i,
           });
