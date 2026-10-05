@@ -21,3 +21,6 @@ jobs:
       - name: Existing native document fixtures when available
         if: ${{ hashFiles('tests/dxf/dxf-document-parser.test.mjs') != '' }}
         run: node tests/dxf/dxf-document-parser.test.mjs
+      - name: Native writer preservation regressions when available
+        if: ${{ hashFiles('tests/cad/A03/*.test.mjs') != '' }}
+        run: node --test tests/cad/A03/*.test.mjs

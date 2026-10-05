@@ -29,9 +29,21 @@ export class DxfDocument {
     this.diagnostics = [];
     this.handles = new DxfHandleRegistry(params.handles?.seed || '1');
     this.tokenStream = params.tokenStream || null;
+    this.revision = 0;
+    this.contentStateId = this.id + ':content:0';
+    this.savedContentStateId = this.contentStateId;
+    this.knownContentStates = new Set([this.contentStateId]);
   }
   get originalBytes() { return this.tokenStream?.originalBytes || new Uint8Array(); }
   get readOnly() { return this.diagnostics.some(d => d.severity === 'error'); }
+  get dirty() { return this.contentStateId !== this.savedContentStateId; }
+  acknowledgeSave(result, delivered = false) {
+    if (!delivered) return false;
+    if (result.documentId !== this.id || result.outputFormat !== 'dxf' || result.sourceRevision > this.revision ||
+        !this.knownContentStates.has(result.sourceContentStateId) || !result.outputDigest) throw new Error('Invalid Save delivery checkpoint');
+    this.savedContentStateId = result.sourceContentStateId;
+    return true;
+  }
   get capabilities() {
     return { preservation: this.source.byteFidelity || 'exact-input-bytes', nativeEditing: false, nativeSave: false, recoveredBytes: true, parseStatus: this.readOnly ? 'incomplete' : 'complete' };
   }

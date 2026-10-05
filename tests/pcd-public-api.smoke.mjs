@@ -23,8 +23,10 @@ const REQUIRED_VALUES = [
   'COMPONENT_STUDIO_SCHEMA',
 ];
 
+import { pathToFileURL } from 'node:url';
+
 test('vendored PipeComponentData exposes required public contract', async () => {
-  const pcd = await import(PCD_ENTRY);
+  const pcd = await import(pathToFileURL(PCD_ENTRY).href);
   const missingFunctions = REQUIRED_FUNCTIONS.filter((name) => typeof pcd[name] !== 'function');
   const missingValues = REQUIRED_VALUES.filter((name) => !(name in pcd));
 
@@ -41,7 +43,7 @@ test('vendored PipeComponentData exposes required public contract', async () => 
 });
 
 test('lookup status contract is explicit', async () => {
-  const { LOOKUP_STATUS } = await import(PCD_ENTRY);
+  const { LOOKUP_STATUS } = await import(pathToFileURL(PCD_ENTRY).href);
   assert.equal(LOOKUP_STATUS.FOUND, 'FOUND');
   assert.equal(LOOKUP_STATUS.NO_EXACT_MATCH, 'NO_EXACT_MATCH');
   assert.equal(LOOKUP_STATUS.CATALOG_ROW_MISSING, 'CATALOG_ROW_MISSING');
