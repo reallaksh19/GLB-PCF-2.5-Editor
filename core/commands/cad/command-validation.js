@@ -1,5 +1,7 @@
+import {validateRemoval} from './native-reference-validation.js';
+import {validateEditing} from './edit-commands/edit-validation.js';
 /** Validate the entire source operand plan before the first mutation. */
-const supported = new Set(['MOVE','ROTATE','SCALE','COPY','DELETE','CHANGE_LAYER','CHANGE_PROPERTIES','EDIT_TEXT','GRIP_EDIT']);
+const supported = new Set(['MOVE','ROTATE','SCALE','COPY','DELETE','CHANGE_LAYER','CHANGE_PROPERTIES','EDIT_TEXT','GRIP_EDIT','TRIM','EXTEND','OFFSET','FILLET','EXPLODE','JOIN']);
 const geometric = new Set(['LINE','POINT','CIRCLE','ARC','ELLIPSE','LWPOLYLINE','POLYLINE','SPLINE','TEXT','MTEXT','ATTRIB','INSERT','SOLID','TRACE','3DFACE']);
 function finite(value,seen=new Set()) {
   if(typeof value === 'number' && !Number.isFinite(value)) throw new Error('Non-finite command operand');
@@ -9,7 +11,7 @@ export function validateCommand(command,document) {
   if(!document || document.readOnly) throw new Error('Editable source document required');
   if(command.commands) { for(const child of command.commands) validateCommand(child,document); return; }
   if(!supported.has(command.name) && typeof command.validateOperands !== 'function') throw new Error('Unsupported command plan');
-  const ids = command.entityIds || command.sourceEntityIds || (command.entityId ? [command.entityId] : []);
+  const ids = command.entityIds || command.sourceEntityIds || [command.entityId,command.entity1Id,command.entity2Id].filter(Boolean);
   if(new Set(ids).size !== ids.length) throw new Error('Duplicate command operands');
   const entities = ids.map(id => {
     const e=document.getEntity(id);
@@ -18,7 +20,8 @@ export function validateCommand(command,document) {
     if(layer?.locked || layer?.frozen) throw new Error('Layer is locked or frozen');
     return e;
   });
-  for(const key of ['dx','dy','dz','angleDeg','sx','sy','sz','basePoint','newPoint','updates','properties']) finite(command[key]);
+  for(const point of [command.basePoint,command.clickPoint,command.pickPoint,command.sidePoint])if(point && (!Number.isFinite(point.x) || !Number.isFinite(point.y)))throw new Error('Finite source point required');
+  for(const key of ['dx','dy','dz','angleDeg','sx','sy','sz','basePoint','newPoint','updates','properties','radius','distance','clickPoint','pickPoint','sidePoint']) finite(command[key]);
   if(['MOVE','COPY','ROTATE','SCALE'].includes(command.name)) for(const e of entities) {
     if(!geometric.has(e.type)) throw new Error('Unsupported native transform: '+e.type);
     const n=e.geometry.extrusion || e.attributes.extrusion;
@@ -51,6 +54,8 @@ export function validateCommand(command,document) {
     if(!valid)throw new Error('Unsupported native grip');
     if(!Number.isFinite(command.newPoint.x) || !Number.isFinite(command.newPoint.y))throw new Error('Finite grip coordinates required');
   }
+  if(['TRIM','EXTEND','OFFSET','FILLET','EXPLODE','JOIN'].includes(command.name))validateEditing(command,entities,document);
+  if(['DELETE','JOIN','EXPLODE'].includes(command.name))validateRemoval(document,entities);
   command.validateOperands?.(document,entities);
 }
 
