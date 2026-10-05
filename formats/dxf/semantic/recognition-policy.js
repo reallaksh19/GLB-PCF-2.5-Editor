@@ -115,7 +115,7 @@ export class RecognitionPolicy {
     }
 
     const type = entity.type.toUpperCase();
-    const layer = entity.layer || entity.attributes?.layer || '0';
+    const layer = entity.layerId ?? entity.layer ?? entity.attributes?.layer ?? '0';
 
     // Rule 1: Text, Dimensions, Hatches, and Leaders are explicitly non-piping
     if (['TEXT', 'MTEXT', 'DIMENSION', 'HATCH', 'LEADER', 'POINT'].includes(type)) {
