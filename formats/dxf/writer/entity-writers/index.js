@@ -74,13 +74,5 @@ export function writeEntity(entity, lines) {
     return;
   }
 
-  // 3. Fallback: if untouched raw tags exist, write them
-  if (entity.source?.rawTags && entity.source.rawTags.length > 0) {
-    for (const tag of entity.source.rawTags) {
-      pushTag(lines, tag.code, tag.value);
-    }
-  } else {
-    // If unknown entity was modified with no writer, throw or write safe fallback
-    throw new Error(`Cannot serialize modified entity of unsupported type: ${upperType}`);
-  }
+  throw new Error(`Cannot serialize modified entity of unsupported type: ${upperType}`);
 }

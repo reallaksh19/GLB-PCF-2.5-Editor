@@ -5,8 +5,8 @@
  */
 
 export function fmtNum(val, defaultVal = 0) {
-  const n = Number(val);
-  if (!Number.isFinite(n)) return String(defaultVal);
+  const n = Number(val ?? defaultVal);
+  if (!Number.isFinite(n)) throw new Error('Invalid non-finite DXF numeric field');
   // Max 10 decimal places, strip trailing zeros
   const fixed = n.toFixed(10);
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');

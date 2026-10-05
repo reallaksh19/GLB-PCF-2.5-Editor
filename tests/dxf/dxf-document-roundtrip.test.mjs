@@ -6,7 +6,7 @@
  * 1. Parse -> Write -> Parse idempotence and structural equivalence.
  * 2. Untouched entity raw-tag passthrough fidelity.
  * 3. Modified entity serialization via entity codec writers.
- * 4. New entity handle allocation and $HANDSEED update.
+ * 4. Transaction-owned handle allocation and explicit unsupported creation rejection.
  * 5. Full round-trip preservation of real-world CAD fixtures.
  */
 
@@ -339,42 +339,22 @@ function testModifiedEntityRoundTrip() {
   console.log('✅ Modified entity writer correctly encoded changed fields.');
 }
 
-function testNewEntityAllocationRoundTrip() {
-  console.log('\n--- Test 3: New Entity Handle Allocation and $HANDSEED ---');
-  const doc = DxfDocumentParser.parse(SYNTHETIC_DXF, { fileName: 'test_new.dxf' });
-
-  // Add a new LINE
-  const newLine = new DxfEntity({
-    type: 'LINE',
-    layerId: 'PIPING',
-    geometry: {
-      start: { x: 1.0, y: 2.0, z: 0.0 },
-      end: { x: 3.0, y: 4.0, z: 0.0 },
-    },
-    state: { generated: true, modified: true },
-  });
-
+function testCreationContractRejection() {
+  const doc = DxfDocumentParser.parse(SYNTHETIC_DXF);
+  const newLine = new DxfEntity({ type: 'LINE', layerId: 'PIPING',
+    geometry: { start: { x: 1, y: 2, z: 0 }, end: { x: 3, y: 4, z: 0 } },
+    state: { generated: true, modified: true } });
+  const seed = doc.handles.nextNumericHandle;
   doc.addEntity(newLine);
-  const allocatedHandle = newLine.handle;
-  assert.ok(allocatedHandle, 'New entity allocated a handle');
-  console.log(`Allocated handle for new entity: ${allocatedHandle}`);
-
-  const written = DxfDocumentWriter.write(doc, { newline: '\n' });
-  const docAfter = DxfDocumentParser.parse(written, { fileName: 'test_new_out.dxf' });
-
-  assert.strictEqual(docAfter.entities.length, 8, '8 entities after adding new line');
-  const addedLine = docAfter.entities[docAfter.entities.length - 1];
-  assert.strictEqual(addedLine.type, 'LINE');
-  assert.strictEqual(addedLine.handle, allocatedHandle, 'Allocated handle serialized and parsed back');
-  assert.strictEqual(addedLine.geometry.start.x, 1.0);
-  assert.strictEqual(addedLine.geometry.end.x, 3.0);
-
-  // Check $HANDSEED was updated to exceed new handle
-  const handseedVal = parseInt(docAfter.handles.handseed, 16);
-  const entityHandleVal = parseInt(allocatedHandle, 16);
-  assert.ok(handseedVal > entityHandleVal, '$HANDSEED exceeds highest allocated entity handle');
-
-  console.log('✅ New entity handle allocation and $HANDSEED update verified.');
+  assert.strictEqual(newLine.handle, null, 'Adding a view must not allocate transaction handles');
+  assert.strictEqual(doc.handles.nextNumericHandle, seed);
+  // Simulate transaction allocation, rather than reintroduce the obsolete eager model allocation.
+  newLine.handle = doc.handles.allocate();
+  const committedSeed = doc.handles.nextNumericHandle, known = [...doc.handles.knownHandles];
+  assert.throws(() => DxfDocumentWriter.writeBytes(doc), /Unsupported create\/delete/);
+  assert.strictEqual(doc.handles.nextNumericHandle, committedSeed, 'Failed Save does not allocate');
+  assert.deepStrictEqual([...doc.handles.knownHandles], known);
+  console.log('Creation rejection/purity verified; successful Create Save remains UNIMPLEMENTED.');
 }
 
 function testRealFixtureRoundTrips() {
@@ -384,7 +364,11 @@ function testRealFixtureRoundTrips() {
   const fid07Path = path.resolve('tests/fixtures/dxf/fid07-visual-fixture.dxf');
   const fid07Raw = fs.readFileSync(fid07Path, 'utf8');
   const docA = DxfDocumentParser.parse(fid07Raw, { fileName: 'fid07.dxf' });
-  const fid07Written = DxfDocumentWriter.write(docA, { newline: '\r\n' });
+  assert.ok(docA.readOnly, 'Fixture contains invalid handles under the current parser');
+  assert.throws(() => DxfDocumentWriter.writeBytes(docA), /Invalid source document/);
+  const recovered = DxfDocumentWriter.recoverOriginalBytes(docA);
+  assert.deepStrictEqual(Buffer.from(recovered), Buffer.from(fid07Raw));
+  const fid07Written = new TextDecoder().decode(recovered);
   const docB = DxfDocumentParser.parse(fid07Written, { fileName: 'fid07_rt.dxf' });
 
   assert.strictEqual(docB.entities.length, docA.entities.length, 'fid07 entity count preserved (6)');
@@ -395,7 +379,7 @@ function testRealFixtureRoundTrips() {
     assert.strictEqual(docB.entities[i].type, docA.entities[i].type, `Entity ${i} type match`);
     assert.strictEqual(docB.entities[i].handle, docA.entities[i].handle, `Entity ${i} handle match`);
   }
-  console.log('✅ fid07-visual-fixture round-trip passed.');
+  console.log('✅ fid07 invalid-source recovery verified; ordinary Save correctly rejected.');
 
   // B. Large fixture (STD-98-...dxf)
   const largePath = path.resolve('Comments/dxf-1/STD-98-103440-MP-2343-00001-0018-GG1000SR0523-01.dxf');
@@ -403,7 +387,8 @@ function testRealFixtureRoundTrips() {
     const largeRaw = fs.readFileSync(largePath, 'utf8');
     const docLarge1 = DxfDocumentParser.parse(largeRaw, { fileName: 'std98.dxf' });
     const writeStart = Date.now();
-    const largeWritten = DxfDocumentWriter.write(docLarge1, { newline: '\r\n' });
+    const largeWritten = DxfDocumentWriter.writeBytes(docLarge1);
+    assert.deepStrictEqual(Buffer.from(largeWritten), Buffer.from(largeRaw));
     const writeTime = Date.now() - writeStart;
 
     const parseStart = Date.now();
@@ -436,10 +421,10 @@ function main() {
   console.log('====================================================');
   testSyntheticRoundTrip();
   testModifiedEntityRoundTrip();
-  testNewEntityAllocationRoundTrip();
+  testCreationContractRejection();
   testRealFixtureRoundTrips();
   console.log('====================================================');
-  console.log('✅ All Phase 2 round-trip tests passed successfully.');
+  console.log('✅ Writer checkpoint checks passed; creation/resource closure and A12 release gates remain incomplete.');
   console.log('====================================================');
 }
 

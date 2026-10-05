@@ -39,7 +39,7 @@ export const InsertWriter = {
 
     const attribs = entity.attributes?.attribs || [];
     if (attribs.length > 0) {
-      pushTag(lines, 66, 1);
+      if (entity.state.modified || !entity.source?.rawTags?.some(t => t.code === 66)) pushTag(lines, 66, 1);
       for (const a of attribs) {
         if (a.source?.rawTags && a.source.rawTags.length > 0) {
           for (const t of a.source.rawTags) {

@@ -59,7 +59,7 @@ export const PolylineWriter = {
 
     const vertices = entity.geometry?.vertices || [];
     for (const v of vertices) {
-      if (v.rawTags && v.rawTags.length > 0) {
+      if (!entity.state.modified && v.rawTags && v.rawTags.length > 0) {
         // Untouched vertex passthrough
         for (const t of v.rawTags) {
           pushTag(lines, t.code, t.value);
