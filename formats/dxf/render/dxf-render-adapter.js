@@ -41,6 +41,7 @@ export class DxfRenderAdapter {
       return new RenderModel();
     }
 
+    const diagnostics = [];
     const primitives = [];
     const primitivesByEntityId = new Map();
     const primitivesByLayer = new Map();
@@ -142,7 +143,7 @@ export class DxfRenderAdapter {
       }
 
       const style = resolveEntityStyle(entity, document);
-      projectEntity(entity, style, null, null, { addPrimitive, stats, document, arcSegments, splineSegments, maxBlockDepth });
+      projectEntity(entity, style, null, null, { addPrimitive, stats, document, arcSegments, splineSegments, maxBlockDepth, diagnostics });
 
     }
 
@@ -174,6 +175,8 @@ export class DxfRenderAdapter {
 
     return new RenderModel({
       sourceDocument: {
+        documentId: document.id,
+        revision: document.revision,
         fileName: document.source?.fileName || 'untitled.dxf',
         acadVersion: document.source?.acadVersion || 'AC1015',
         entityCount: entities.length,
@@ -186,6 +189,7 @@ export class DxfRenderAdapter {
       primitivesByLayer,
       layers,
       stats,
+      diagnostics,
     });
   }
 }

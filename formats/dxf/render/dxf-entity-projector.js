@@ -1,14 +1,17 @@
+import { affinePoint, affineVector, ocsAffine } from '../../../geometry/cad/affine3d.js';
+import { occurrenceIdentity } from './dxf-occurrence.js';
 import { projectBlockInstance, transformPoint } from './dxf-block-renderer.js';
 import { projectTextPrimitive } from './dxf-text-renderer.js';
 import { sampleBulgeArc, sampleArc, sampleCircle, sampleEllipse, sampleSpline } from './dxf-geometry-sampler.js';
 
 export function projectEntity(entity, style, transform, blockContext, ctx) {
   const { addPrimitive, stats, document, arcSegments, splineSegments, maxBlockDepth } = ctx;
-      const sourceEntityId = blockContext
-        ? `dxf:entity:${blockContext.insertHandle}`
-        : (entity.id || `dxf:entity:${entity.handle || 'temp'}`);
-
-      const basePoint = blockContext?.basePoint;
+  const identity = occurrenceIdentity(entity, blockContext);
+  const basePoint = blockContext?.basePoint;
+  const world = p => transform ? transformPoint(p, transform, basePoint) : { ...p };
+  const plane = ocsAffine(entity.geometry?.extrusion);
+  const ocsWorld = p => world(affinePoint(p, plane));
+  const worldVector = p => transform ? affineVector(p, transform.matrix) : { ...p };
 
       switch (entity.type) {
         case 'LINE': {
@@ -25,8 +28,7 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           stats.lines++;
           addPrimitive({
             type: 'line',
-            id: `render:${entity.handle || 'line'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             start,
@@ -38,60 +40,19 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           break;
         }
 
-        case 'ARC': {
-          const rawCenter = entity.geometry?.center || { x: 0, y: 0, z: 0 };
-          const center = transform ? transformPoint(rawCenter, transform, basePoint) : { ...rawCenter };
-          const scaleFactor = transform ? (Math.abs(transform.scale.x) + Math.abs(transform.scale.y)) / 2 : 1;
-          const radius = (entity.geometry?.radius || 0) * scaleFactor;
-
-          const rotOffsetDeg = transform ? transform.rotationDeg : 0;
-          const startAngle = (entity.geometry?.startAngle || 0) + rotOffsetDeg;
-          const endAngle = (entity.geometry?.endAngle || 0) + rotOffsetDeg;
-
-          const points = sampleArc(center, radius, startAngle, endAngle, arcSegments);
-          const startPoint = points[0] || center;
-          const endPoint = points[points.length - 1] || center;
-
-          stats.arcs++;
-          addPrimitive({
-            type: 'arc',
-            id: `render:${entity.handle || 'arc'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
-            layer: style.layerName,
-            style,
-            center,
-            radius,
-            startAngle,
-            endAngle,
-            clockwise: false,
-            startPoint,
-            endPoint,
-            points,
-            blockContext: blockContext || null,
-          });
-          break;
-        }
-
+        case 'ARC':
         case 'CIRCLE': {
-          const rawCenter = entity.geometry?.center || { x: 0, y: 0, z: 0 };
-          const center = transform ? transformPoint(rawCenter, transform, basePoint) : { ...rawCenter };
-          const scaleFactor = transform ? (Math.abs(transform.scale.x) + Math.abs(transform.scale.y)) / 2 : 1;
-          const radius = (entity.geometry?.radius || 0) * scaleFactor;
-
-          const points = sampleCircle(center, radius, arcSegments);
-
-          stats.circles++;
-          addPrimitive({
-            type: 'circle',
-            id: `render:${entity.handle || 'circle'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
-            layer: style.layerName,
-            style,
-            center,
-            radius,
-            points,
-            blockContext: blockContext || null,
-          });
+          const g=entity.geometry, rawCenter=g.center || {x:0,y:0,z:0};
+          const radius=g.radius ?? 0, startAngle=g.startAngle ?? 0, endAngle=g.endAngle ?? 360;
+          const sourcePoints=entity.type==='CIRCLE' ? sampleCircle(rawCenter,radius,arcSegments) : sampleArc(rawCenter,radius,startAngle,endAngle,arcSegments);
+          const points=sourcePoints.map(ocsWorld), center=ocsWorld(rawCenter);
+          const axisX=worldVector(affineVector({x:radius,y:0,z:0},plane)), axisY=worldVector(affineVector({x:0,y:radius,z:0},plane));
+          const a=Math.hypot(axisX.x,axisX.y,axisX.z), b=Math.hypot(axisY.x,axisY.y,axisY.z);
+          const circular=Math.abs(a-b)<1e-10*Math.max(a,b,1) && Math.abs(axisX.x*axisY.x+axisX.y*axisY.y+axisX.z*axisY.z)<1e-10*Math.max(a*b,1);
+          stats[entity.type==='CIRCLE'?'circles':'arcs']++;
+          addPrimitive({type:circular?entity.type.toLowerCase():'ellipse',...identity,layer:style.layerName,style,center,
+            radius:circular?a:undefined,sourceType:entity.type,axisX,axisY,startAngle,endAngle,
+            startPoint:points[0],endPoint:points.at(-1),points,blockContext:blockContext || null});
           break;
         }
 
@@ -100,49 +61,23 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           const rawVertices = Array.isArray(entity.geometry?.vertices) ? entity.geometry.vertices : [];
           if (rawVertices.length < 2) break;
 
-          const transformedVertices = rawVertices.map((v) => {
-            const pt = transform ? transformPoint(v, transform, basePoint) : { ...v };
-            return {
-              x: pt.x,
-              y: pt.y,
-              z: pt.z ?? v.z ?? 0,
-              bulge: Number(v.bulge) || 0,
-            };
-          });
-
-          const closed = Boolean(entity.geometry?.closed);
-          const count = closed ? transformedVertices.length : transformedVertices.length - 1;
-          const allPoints = [];
-          const segments = [];
-
-          for (let i = 0; i < count; i++) {
-            const v1 = transformedVertices[i];
-            const v2 = transformedVertices[(i + 1) % transformedVertices.length];
-            const bulge = v1.bulge || 0;
-
-            if (Math.abs(bulge) > 1e-9) {
-              const arcPts = sampleBulgeArc(v1, v2, bulge, arcSegments);
-              segments.push({ type: 'arc', bulge, points: arcPts });
-              if (allPoints.length === 0) {
-                allPoints.push(...arcPts);
-              } else {
-                allPoints.push(...arcPts.slice(1));
-              }
-            } else {
-              segments.push({ type: 'line', bulge: 0, points: [v1, v2] });
-              if (allPoints.length === 0) {
-                allPoints.push(v1, v2);
-              } else {
-                allPoints.push(v2);
-              }
-            }
+          const is3D=Boolean(entity.geometry?.is3D || entity.attributes?.flags & 8);
+          const sourceVertices=rawVertices.map(v=>({...v,z:is3D?(v.z??0):(entity.geometry.elevation??v.z??0)}));
+          const mapPoint=is3D?world:ocsWorld;
+          const transformedVertices=sourceVertices.map(v=>({...mapPoint(v),bulge:Number(v.bulge)||0,startWidth:v.startWidth,endWidth:v.endWidth}));
+          const closed=Boolean(entity.geometry?.closed),count=closed?sourceVertices.length:sourceVertices.length-1;
+          const allPoints=[],segments=[];
+          for(let i=0;i<count;i++) {
+            const v1=sourceVertices[i],v2=sourceVertices[(i+1)%sourceVertices.length],bulge=Number(v1.bulge)||0;
+            const points=(bulge?sampleBulgeArc(v1,v2,bulge,arcSegments):[v1,v2]).map(mapPoint);
+            segments.push({type:bulge?'arc':'line',bulge,points});
+            allPoints.push(...(allPoints.length?points.slice(1):points));
           }
 
           stats.polylines++;
           addPrimitive({
             type: 'polyline',
-            id: `render:${entity.handle || 'polyline'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             vertices: transformedVertices,
@@ -164,73 +99,25 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
         }
 
         case 'SPLINE': {
-          const controlPoints = (entity.geometry?.controlPoints || []).map((cp) =>
-            transform ? transformPoint(cp, transform, basePoint) : { ...cp }
-          );
-          const fitPoints = (entity.geometry?.fitPoints || []).map((fp) =>
-            transform ? transformPoint(fp, transform, basePoint) : { ...fp }
-          );
-
-          const basisPoints = fitPoints.length >= 2 ? fitPoints : controlPoints;
-          const closed = Boolean(entity.attributes?.flags & 1);
-          const points = sampleSpline(basisPoints, closed, splineSegments);
-
+          const g=entity.geometry,controlPoints=(g.controlPoints || []).map(world),fitPoints=(g.fitPoints || []).map(world);
+          let points,approximate=false;
+          try { points=sampleSpline(g,false,splineSegments).map(world); }
+          catch(error) {
+            points=(g.fitPoints?.length>=2?g.fitPoints:g.controlPoints || []).map(world);
+            approximate=true;
+            ctx.diagnostics?.push({entityId:identity.sourceEntityId,code:'SPLINE_BASIS_UNSUPPORTED',message:error.message});
+          }
           stats.splines++;
-          addPrimitive({
-            type: 'spline',
-            id: `render:${entity.handle || 'spline'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
-            layer: style.layerName,
-            style,
-            controlPoints,
-            fitPoints,
-            degree: entity.geometry?.degree || 3,
-            closed,
-            points,
-            blockContext: blockContext || null,
-          });
+          addPrimitive({type:'spline',...identity,layer:style.layerName,style,controlPoints,fitPoints,
+            degree:g.degree,closed:Boolean(entity.attributes?.flags & 1),points,approximate,blockContext:blockContext || null});
           break;
         }
-
         case 'ELLIPSE': {
-          const rawCenter = entity.geometry?.center || { x: 0, y: 0, z: 0 };
-          const center = transform ? transformPoint(rawCenter, transform, basePoint) : { ...rawCenter };
-          const rawMajor = entity.geometry?.majorAxis || { x: 1, y: 0, z: 0 };
-
-          let majorAxis = rawMajor;
-          if (transform) {
-            const rotCos = transform.cos;
-            const rotSin = transform.sin;
-            const sx = transform.scale.x;
-            const sy = transform.scale.y;
-            majorAxis = {
-              x: (rawMajor.x * sx) * rotCos - (rawMajor.y * sy) * rotSin,
-              y: (rawMajor.x * sx) * rotSin + (rawMajor.y * sy) * rotCos,
-              z: rawMajor.z * (transform.scale.z || 1),
-            };
-          }
-
-          const ratio = entity.geometry?.ratio || 1.0;
-          const startParam = entity.geometry?.startParam || 0;
-          const endParam = entity.geometry?.endParam || 2 * Math.PI;
-
-          const points = sampleEllipse(center, majorAxis, ratio, startParam, endParam, arcSegments);
-
+          const g=entity.geometry,rawCenter=g.center || {x:0,y:0,z:0},rawMajor=g.majorAxis || {x:1,y:0,z:0};
+          const points=sampleEllipse(rawCenter,rawMajor,g.ratio,g.startParam??0,g.endParam??2*Math.PI,arcSegments,g.extrusion).map(world);
           stats.ellipses++;
-          addPrimitive({
-            type: 'ellipse',
-            id: `render:${entity.handle || 'ellipse'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
-            layer: style.layerName,
-            style,
-            center,
-            majorAxis,
-            ratio,
-            startParam,
-            endParam,
-            points,
-            blockContext: blockContext || null,
-          });
+          addPrimitive({type:'ellipse',...identity,layer:style.layerName,style,center:world(rawCenter),
+            majorAxis:worldVector(rawMajor),sourceRatio:g.ratio,startParam:g.startParam??0,endParam:g.endParam??2*Math.PI,points,blockContext:blockContext || null});
           break;
         }
 
@@ -259,8 +146,7 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           stats.solids++;
           addPrimitive({
             type: 'solid',
-            id: `render:${entity.handle || 'solid'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             vertices: points,
@@ -306,8 +192,7 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           stats.leaders++;
           addPrimitive({
             type: 'leader',
-            id: `render:${entity.handle || 'leader'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             vertices: points,
@@ -333,24 +218,24 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
               (childEntity, childStyle, composedTransform, bCtx) => {
                 projectEntity(childEntity, childStyle, composedTransform, {
                   ...bCtx,
+                  rootInsertId: blockContext?.rootInsertId || entity.id,
                   insertHandle: entity.handle || 'DIMENSION',
-                });
+                }, ctx);
               }
             );
           } else {
             // Synthesize dimension lines from definition points (p10, p11, p13, p14)
             const dp = entity.geometry?.defPoints || {};
-            const p10 = dp.p10 ? (transform ? transformPoint(dp.p10, transform, basePoint) : dp.p10) : null;
-            const p11 = dp.p11 ? (transform ? transformPoint(dp.p11, transform, basePoint) : dp.p11) : null;
-            const p13 = dp.p13 ? (transform ? transformPoint(dp.p13, transform, basePoint) : dp.p13) : null;
-            const p14 = dp.p14 ? (transform ? transformPoint(dp.p14, transform, basePoint) : dp.p14) : null;
+            const p10 = dp.p10 ? (transform ? transformPoint(dp.p10, transform, basePoint) : { ...dp.p10 }) : null;
+            const p11 = dp.p11 ? (transform ? transformPoint(dp.p11, transform, basePoint) : { ...dp.p11 }) : null;
+            const p13 = dp.p13 ? (transform ? transformPoint(dp.p13, transform, basePoint) : { ...dp.p13 }) : null;
+            const p14 = dp.p14 ? (transform ? transformPoint(dp.p14, transform, basePoint) : { ...dp.p14 }) : null;
 
             const dimPoints = [p13, p14, p10, p11].filter(Boolean);
 
             addPrimitive({
               type: 'dimension',
-              id: `render:${entity.handle || 'dim'}:${blockContext ? blockContext.depth : 0}`,
-              sourceEntityId,
+              ...identity,
               layer: style.layerName,
               style,
               text: entity.attributes?.text || '',
@@ -370,8 +255,7 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
           stats.points++;
           addPrimitive({
             type: 'point',
-            id: `render:${entity.handle || 'point'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             position,
@@ -394,10 +278,10 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
             }
           }
 
+          if (!boundaryPoints.length) { ctx.diagnostics?.push({entityId:entity.id,code:'HATCH_BOUNDARY_UNSUPPORTED'}); break; }
           addPrimitive({
             type: 'hatch',
-            id: `render:${entity.handle || 'hatch'}:${blockContext ? blockContext.depth : 0}`,
-            sourceEntityId,
+            ...identity,
             layer: style.layerName,
             style,
             pattern: entity.attributes?.patternName || 'SOLID',
@@ -425,12 +309,11 @@ export function projectEntity(entity, style, transform, blockContext, ctx) {
         default: {
           // Unknown or unspecialized entity: pass through point or points if present
           if (entity.geometry?.point) {
-            const position = transform ? transformPoint(entity.geometry.point, transform, basePoint) : entity.geometry.point;
+            const position = transform ? transformPoint(entity.geometry.point, transform, basePoint) : { ...entity.geometry.point };
             addPrimitive({
               type: 'unknown',
               originalType: entity.type,
-              id: `render:${entity.handle || 'unknown'}:${blockContext ? blockContext.depth : 0}`,
-              sourceEntityId,
+              ...identity,
               layer: style.layerName,
               style,
               position,

@@ -4,7 +4,7 @@
  * Phase 3: DXF Render Projection Test Suite
  * Validates:
  * 1. DxfRenderAdapter projects DxfDocument into RenderModel without CEG or Three.js dependencies.
- * 2. Every primitive carries a stable sourceEntityId ('dxf:entity:<HANDLE>').
+ * 2. Every primitive carries a stable sourceEntityId (document-scoped ID).
  * 3. Style resolver: BYLAYER, BYBLOCK, full 256 ACI palette, TrueColor (420), lineweights, linetypes, visibility.
  * 4. Block instance renderer: recursive transform stack, nested INSERTs, layer 0 inheritance, cycle guard, MINSERT.
  * 5. Block child geometry resolves to its INSERT instance by default.
@@ -168,7 +168,7 @@ console.log('\n--- Test 3: Polyline Bulge Geometry & Interpolation ---');
 const p1 = { x: 0, y: 0, z: 0 };
 const p2 = { x: 10, y: 0, z: 0 };
 
-// Semicircle with bulge = +1 (curves to the left of chord 0,0 -> 10,0, i.e. +Y)
+// Semicircle with bulge = +1 (curves to the left of chord 0,0 -> 10,0, CCW, below the chord)
 const arcPtsPos = sampleBulgeArc(p1, p2, 1, 16);
 assert.ok(arcPtsPos.length >= 5);
 assert.equal(Math.round(arcPtsPos[0].x), 0);
@@ -177,18 +177,18 @@ assert.equal(Math.round(arcPtsPos[arcPtsPos.length - 1].x), 10);
 assert.equal(Math.round(arcPtsPos[arcPtsPos.length - 1].y), 0);
 
 // Find peak Y along positive bulge arc
-const maxPosY = Math.max(...arcPtsPos.map((p) => p.y));
-assert.ok(Math.abs(maxPosY - 5.0) < 0.05, `Positive bulge +1 should peak at Y ~ +5.0, got ${maxPosY}`);
+const maxPosY = Math.min(...arcPtsPos.map((p) => p.y));
+assert.ok(Math.abs(maxPosY + 5.0) < 0.05, `Positive bulge +1 should reach Y ~ -5.0, got ${maxPosY}`);
 
-// Semicircle with bulge = -1 (curves to the right of chord 0,0 -> 10,0, i.e. -Y)
+// Semicircle with bulge = -1 (curves to the right of chord 0,0 -> 10,0, clockwise, above the chord)
 const arcPtsNeg = sampleBulgeArc(p1, p2, -1, 16);
-const minNegY = Math.min(...arcPtsNeg.map((p) => p.y));
-assert.ok(Math.abs(minNegY - (-5.0)) < 0.05, `Negative bulge -1 should dip at Y ~ -5.0, got ${minNegY}`);
+const minNegY = Math.max(...arcPtsNeg.map((p) => p.y));
+assert.ok(Math.abs(minNegY - 5.0) < 0.05, `Negative bulge -1 should reach Y ~ +5.0, got ${minNegY}`);
 
 // Intermediate bulge = +0.5 (sagitta h = 10/2 * 0.5 = 2.5)
 const arcPts05 = sampleBulgeArc(p1, p2, 0.5, 16);
-const max05Y = Math.max(...arcPts05.map((p) => p.y));
-assert.ok(Math.abs(max05Y - 2.5) < 0.05, `Bulge 0.5 sagitta should be 2.5, got ${max05Y}`);
+const max05Y = Math.min(...arcPts05.map((p) => p.y));
+assert.ok(Math.abs(max05Y + 2.5) < 0.05, `Bulge 0.5 sagitta should be 2.5, got ${max05Y}`);
 
 console.log('✅ Bulge arc geometry tests passed (accurate center, radius, and left/right curvature).');
 
@@ -233,6 +233,7 @@ assemblyBlock.addEntity(new DxfEntity({
   handle: 'INS_VALVE',
   type: 'INSERT',
   layerId: '0',
+  style: { colorIndex: 0 }, // Explicit BYBLOCK through both levels.
   geometry: { insertionPoint: { x: 10, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 1 }, rotation: 0 },
   attributes: { blockName: 'VALVE_BODY' },
 }));
@@ -259,7 +260,7 @@ assert.equal(renderModel.primitives.length, 2, 'Top insert should expand 2 leaf 
 for (const prim of renderModel.primitives) {
   assert.equal(
     prim.sourceEntityId,
-    'dxf:entity:TOP_INS_1',
+    topInsert.id,
     'Block child geometry MUST resolve to top-level INSERT instance by default'
   );
   assert.ok(prim.blockContext, 'Primitive must carry blockContext');
@@ -419,7 +420,7 @@ assert.equal(spectrumModel.stats.leaders, 1);
 assert.equal(spectrumModel.stats.texts, 1);
 
 // Test query methods
-const circlePrims = spectrumModel.getPrimitivesForEntity('dxf:entity:C1');
+const circlePrims = spectrumModel.getPrimitivesForEntity(spectrumDoc.entities.find(e => e.handle === 'C1').id);
 assert.equal(circlePrims.length, 1);
 assert.equal(circlePrims[0].type, 'circle');
 
@@ -469,7 +470,7 @@ if (fs.existsSync(largeFixturePath)) {
   // Verify all primitives have valid non-null sourceEntityId starting with dxf:entity:
   let invalidIdCount = 0;
   for (const prim of largeModel.primitives) {
-    if (!prim.sourceEntityId || !prim.sourceEntityId.startsWith('dxf:entity:')) {
+    if (!prim.sourceEntityId || !parsedDoc.entityIndex.has(prim.sourceEntityId)) {
       invalidIdCount++;
     }
   }

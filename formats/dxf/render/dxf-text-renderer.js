@@ -1,3 +1,5 @@
+import { affinePoint, ocsAffine, boundsOfPoints } from '../../../geometry/cad/affine3d.js';
+import { occurrenceIdentity } from './dxf-occurrence.js';
 /**
  * formats/dxf/render/dxf-text-renderer.js
  *
@@ -61,7 +63,7 @@ export function cleanMText(rawText) {
   text = text.replace(/\\\{/g, '{');
   text = text.replace(/\\\}/g, '}');
 
-  return text.trim();
+  return text;
 }
 
 /**
@@ -105,7 +107,7 @@ export function resolveTextGeometry(entity) {
   let vAlign = 'BASELINE';
   let attachmentPoint = null;
 
-  let rotationDeg = Number(attrs.rotation) || Number(geom.rotation) || 0;
+  let rotationDeg = Number(attrs.rotation ?? geom.rotation ?? 0) * (isMText ? 180 / Math.PI : 1);
 
   if (isMText) {
     attachmentPoint = Number(attrs.attachmentPoint) || 1;
@@ -237,48 +239,36 @@ export function projectTextPrimitive(entity, resolvedStyle, transform, blockCont
   const cleanString = cleanMText(rawString);
   const lines = cleanString.split('\n');
 
-  // Compute bounding box
-  const bounds = estimateTextBounds(lines, geomInfo);
-
-  // If transform is provided (e.g. inside an INSERT block instance), transform position and rotation
-  let effectivePosition = geomInfo.position;
-  let effectiveRotation = geomInfo.rotationDeg;
-  let effectiveRotationRad = geomInfo.rotationRad;
-
-  if (transform) {
-    const cos = transform.cos;
-    const sin = transform.sin;
-    const lx = (geomInfo.position.x - (blockContext?.basePoint?.x || 0)) * transform.scale.x;
-    const ly = (geomInfo.position.y - (blockContext?.basePoint?.y || 0)) * transform.scale.y;
-    const lz = (geomInfo.position.z - (blockContext?.basePoint?.z || 0)) * transform.scale.z;
-
-    effectivePosition = {
-      x: transform.translation.x + lx * cos - ly * sin,
-      y: transform.translation.y + lx * sin + ly * cos,
-      z: transform.translation.z + lz,
-    };
-
-    effectiveRotationRad += transform.rotationRad;
-    effectiveRotation = (effectiveRotationRad * 180) / Math.PI;
-  }
-
-  // Stable selection target: if inside a block, defaults to the INSERT handle
-  const sourceEntityId = blockContext
-    ? `dxf:entity:${blockContext.insertHandle}`
-    : `dxf:entity:${entity.handle || 'TEXT'}`;
+  // Bounds are estimated font metrics, but every corner uses the full affine transform.
+  const plane = ocsAffine(entity.geometry?.extrusion);
+  const toWorld = p => {
+    const local = entity.type === 'MTEXT' ? { ...p } : affinePoint(p, plane);
+    return transform ? affinePoint(local, transform.matrix, blockContext?.basePoint) : local;
+  };
+  const localBounds = estimateTextBounds(lines, geomInfo);
+  const corners = localBounds.corners.map(toWorld);
+  const bounds = { ...boundsOfPoints(corners), corners, approximate: true, reason: 'font metrics estimated' };
+  const effectivePosition = toWorld(geomInfo.position);
+  const axis = toWorld({ x: geomInfo.position.x + Math.cos(geomInfo.rotationRad), y: geomInfo.position.y + Math.sin(geomInfo.rotationRad), z: geomInfo.position.z });
+  const up = toWorld({ x: geomInfo.position.x - Math.sin(geomInfo.rotationRad), y: geomInfo.position.y + Math.cos(geomInfo.rotationRad), z: geomInfo.position.z });
+  const xAxis = { x: axis.x-effectivePosition.x, y: axis.y-effectivePosition.y, z: axis.z-effectivePosition.z };
+  const yAxis = { x: up.x-effectivePosition.x, y: up.y-effectivePosition.y, z: up.z-effectivePosition.z };
+  const effectiveRotationRad = Math.atan2(xAxis.y,xAxis.x);
+  const effectiveRotation = effectiveRotationRad*180/Math.PI;
 
   return {
     type: 'text',
-    id: `render:${entity.handle || 'text'}:${blockContext ? blockContext.depth : 0}`,
-    sourceEntityId,
+    ...occurrenceIdentity(entity, blockContext),
     layer: resolvedStyle.layerName,
     style: resolvedStyle,
     text: cleanString,
     rawText: rawString,
     lines,
     position: effectivePosition,
-    alignmentPoint: geomInfo.alignmentPoint,
-    height: geomInfo.height * (transform ? Math.abs(transform.scale.y) : 1.0),
+    alignmentPoint: geomInfo.alignmentPoint ? toWorld(geomInfo.alignmentPoint) : null,
+    height: geomInfo.height * Math.hypot(yAxis.x, yAxis.y, yAxis.z),
+    xAxis, yAxis,
+    approximate: true,
     rotation: effectiveRotation,
     rotationRad: effectiveRotationRad,
     widthFactor: geomInfo.widthFactor,

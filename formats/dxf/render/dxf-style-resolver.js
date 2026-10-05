@@ -98,8 +98,8 @@ export function rgbToHex(rgb) {
  * Parse an AutoCAD lineweight value (code 370) into millimeters.
  * Standard DXF values:
  * -3 = DEFAULT (returns 0.25mm)
- * -2 = BYLAYER
- * -1 = BYBLOCK
+ * -2 = BYBLOCK
+ * -1 = BYLAYER
  * >= 0: hundredths of mm (e.g. 25 -> 0.25mm)
  * @param {number} rawWeight
  * @param {number} [fallback=0.25]
@@ -189,7 +189,7 @@ export function resolveEntityStyle(entity, document, context = {}) {
   const entityDeleted = Boolean(entity?.state?.deleted);
   const entityOff = (entity?.style?.colorIndex != null && Number(entity.style.colorIndex) < 0) ||
                     (entity?.attributes?.invisible === true) ||
-                    (entity?.source?.rawTags?.some((t) => t.code === 60 && t.value === 1));
+                    (entity?.source?.rawTags?.some((t) => t.code === 60 && Number(t.value) === 1));
 
   const isContextHidden = context.visible === false;
   const visible = !entityDeleted && !entityOff && !isContextHidden && layerStyle.visible;
@@ -242,19 +242,12 @@ export function resolveEntityStyle(entity, document, context = {}) {
   const rawLineWeight = entity?.style?.lineWeight;
   const lineWeightMode = (entity?.style?.lineWeightMode || '').toUpperCase();
 
-  if (lineWeightMode === 'BYLAYER' || rawLineWeight === -2 || rawLineWeight == null || rawLineWeight === -3) {
-    lineWeight = layerStyle.lineWeight;
-    lineWeightCode = layerStyle.lineWeightCode;
-  } else if (lineWeightMode === 'BYBLOCK' || (rawLineWeight === -1 && context.inBlock)) {
-    lineWeight = context.parentLineWeight != null ? context.parentLineWeight : 0.25;
-    lineWeightCode = -1;
-  } else if (rawLineWeight >= 0) {
-    lineWeight = rawLineWeight / 100;
-    lineWeightCode = rawLineWeight;
-  } else {
-    lineWeight = layerStyle.lineWeight;
-    lineWeightCode = layerStyle.lineWeightCode;
-  }
+  const weightCode = rawLineWeight == null ? (lineWeightMode === 'BYBLOCK' ? -2 : -1) : Number(rawLineWeight);
+  lineWeightCode = weightCode;
+  if (weightCode === -1) lineWeight = layerStyle.lineWeight;
+  else if (weightCode === -2) lineWeight = context.parentLineWeight ?? 0.25;
+  else if (weightCode >= 0) lineWeight = weightCode / 100;
+  else lineWeight = 0.25;
 
   return {
     layerName: effectiveLayerName,
