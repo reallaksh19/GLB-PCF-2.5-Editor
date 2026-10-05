@@ -69,7 +69,7 @@ function inspect(ast, report, dependency) {
 }
 export function checkSourceBoundaries(root = process.cwd()) {
   root = path.resolve(root);
-  const entries = ['formats/dxf/model', 'formats/dxf/parser', 'formats/dxf/writer'].flatMap(p => filesBelow(path.join(root, p)));
+  const entries = ['formats/dxf/model', 'formats/dxf/parser', 'formats/dxf/writer', 'formats/dxf/render'].flatMap(p => filesBelow(path.join(root, p)));
   const visited = new Set(), violations = [], dependencyEdges = [];
   function scan(file) {
     file = fs.realpathSync(file);

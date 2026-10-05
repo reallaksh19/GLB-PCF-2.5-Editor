@@ -24,3 +24,9 @@ jobs:
       - name: Native writer preservation regressions when available
         if: ${{ hashFiles('tests/cad/A03/*.test.mjs') != '' }}
         run: node --test tests/cad/A03/*.test.mjs
+      - name: Native render geometry regressions when available
+        if: ${{ hashFiles('tests/cad/A05/*.test.mjs') != '' }}
+        run: node --test tests/cad/A05/*.test.mjs
+      - name: Native render fixture projection when available
+        if: ${{ hashFiles('tests/dxf/dxf-render-adapter.test.mjs') != '' }}
+        run: node tests/dxf/dxf-render-adapter.test.mjs
