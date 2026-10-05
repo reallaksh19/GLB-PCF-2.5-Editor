@@ -117,10 +117,11 @@ check('Missing optional vertex tags insert at their own vertex, and negative bul
   assert.equal(vertices[0].bulge, -1); assert.equal(vertices[0].startWidth, 2);
   assert.equal(vertices[1].bulge, 0); assert.equal(vertices[1].x, 3);
 });
-check('Vertex topology change rejects rather than misassigning source fields', () => {
-  const doc = Parser.parse(wrap(['0','LWPOLYLINE','90','1','10','1','20','2']));
+check('Vertex topology edits retain typed polyline identity and the new point', () => {
+  const doc = Parser.parse(wrap(['0','LWPOLYLINE','5','A1','90','1','10','1','20','2']));
   doc.entities[0].geometry.vertices.push({x:3,y:4});
-  assert.throws(() => Writer.writeBytes(doc), /topology/);
+  const after=Parser.parse(Writer.writeBytes(doc));
+  assert.equal(after.entities[0].type,'LWPOLYLINE');assert.equal(after.entities[0].geometry.vertices[1].x,3);
 });
 check('Changing closed flag retains the remaining POLYLINE flag bits', () => {
   const doc = Parser.parse(wrap(['0','LWPOLYLINE','90','1','70','128','10','1','20','2']));
@@ -136,13 +137,15 @@ check('Edited ATTRIB value preserves its INSERT marker and attribute metadata', 
   assert.equal(pairs(out).filter(t=>t.code===66).length,1);
   assert.ok(out.includes('OPAQUE'));
 });
-check('Resource changes require an explicit plan instead of being ignored', () => {
+check('HEADER field edits retain their original group code and reach reopened units', () => {
   const doc = Parser.parse(wrap(line)); doc.header.set('$INSUNITS','8');
-  assert.throws(() => Writer.writeBytes(doc), /resource mutation/);
+  const output=Writer.writeBytes(doc), reopened=Parser.parse(output);
+  assert.equal(reopened.units.insunits,8);
+  assert.equal(pairs(new TextDecoder().decode(output)).find(t=>t.code===70).value,'8');
 });
-check('Record deletion is rejected without transaction closure', () => {
+check('Unreferenced record deletion removes only that preserved record', () => {
   const doc = Parser.parse(wrap(line)); doc.entities[0].markDeleted();
-  assert.throws(() => Writer.writeBytes(doc), /topology/);
+  assert.equal(Parser.parse(Writer.writeBytes(doc)).entities.length,0);
 });
 check('Unsupported field changes do not silently replay stale geometry', () => {
   const doc = Parser.parse(wrap(line)); doc.entities[0].geometry.unsupportedField = 100;

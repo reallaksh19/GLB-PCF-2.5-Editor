@@ -339,7 +339,7 @@ function testModifiedEntityRoundTrip() {
   console.log('✅ Modified entity writer correctly encoded changed fields.');
 }
 
-function testCreationContractRejection() {
+function testCreationTransactionRoundTrip() {
   const doc = DxfDocumentParser.parse(SYNTHETIC_DXF);
   const newLine = new DxfEntity({ type: 'LINE', layerId: 'PIPING',
     geometry: { start: { x: 1, y: 2, z: 0 }, end: { x: 3, y: 4, z: 0 } },
@@ -351,10 +351,13 @@ function testCreationContractRejection() {
   // Simulate transaction allocation, rather than reintroduce the obsolete eager model allocation.
   newLine.handle = doc.handles.allocate();
   const committedSeed = doc.handles.nextNumericHandle, known = [...doc.handles.knownHandles];
-  assert.throws(() => DxfDocumentWriter.writeBytes(doc), /Unsupported create\/delete/);
-  assert.strictEqual(doc.handles.nextNumericHandle, committedSeed, 'Failed Save does not allocate');
+  const output = DxfDocumentWriter.writeBytes(doc), reopened = DxfDocumentParser.parse(output);
+  assert.strictEqual(reopened.entities.length,8);
+  assert.strictEqual(reopened.entities.at(-1).handle,newLine.handle);
+  assert.strictEqual(reopened.header.get('$HANDSEED'),doc.handles.handseed);
+  assert.strictEqual(doc.handles.nextNumericHandle, committedSeed, 'Save does not allocate');
   assert.deepStrictEqual([...doc.handles.knownHandles], known);
-  console.log('Creation rejection/purity verified; successful Create Save remains UNIMPLEMENTED.');
+  console.log('Transaction-allocated creation, native Save/reopen and writer purity verified.');
 }
 
 function testRealFixtureRoundTrips() {
@@ -421,10 +424,10 @@ function main() {
   console.log('====================================================');
   testSyntheticRoundTrip();
   testModifiedEntityRoundTrip();
-  testCreationContractRejection();
+  testCreationTransactionRoundTrip();
   testRealFixtureRoundTrips();
   console.log('====================================================');
-  console.log('✅ Writer checkpoint checks passed; creation/resource closure and A12 release gates remain incomplete.');
+  console.log('✅ Writer roundtrip checks passed; independent A12 release gates remain separate.');
   console.log('====================================================');
 }
 

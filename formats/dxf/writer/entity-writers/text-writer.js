@@ -73,7 +73,9 @@ export const MtextWriter = {
     }
 
     const text = entity.attributes?.text ?? '';
-    pushTag(lines, 1, text);
+    const chars=Array.from(text);
+    while(chars.length>250)pushTag(lines,3,chars.splice(0,250).join(''));
+    pushTag(lines,1,chars.join(''));
 
     if (entity.attributes?.styleName) {
       pushTag(lines, 7, entity.attributes.styleName);

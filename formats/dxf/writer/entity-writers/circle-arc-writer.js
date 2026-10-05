@@ -10,7 +10,7 @@ export const CircleWriter = {
     pushTag(lines, 10, fmtNum(c.x));
     pushTag(lines, 20, fmtNum(c.y));
     pushTag(lines, 30, fmtNum(c.z));
-    pushTag(lines, 40, fmtNum(entity.geometry?.radius || 0));
+    pushTag(lines, 40, fmtNum(entity.geometry?.radius ?? 0));
 
     const ex = entity.geometry?.extrusion;
     if (ex && (ex.x !== 0 || ex.y !== 0 || ex.z !== 1)) {
@@ -31,9 +31,9 @@ export const ArcWriter = {
     pushTag(lines, 10, fmtNum(c.x));
     pushTag(lines, 20, fmtNum(c.y));
     pushTag(lines, 30, fmtNum(c.z));
-    pushTag(lines, 40, fmtNum(entity.geometry?.radius || 0));
-    pushTag(lines, 50, fmtNum(entity.geometry?.startAngle || 0));
-    pushTag(lines, 51, fmtNum(entity.geometry?.endAngle || 360));
+    pushTag(lines, 40, fmtNum(entity.geometry?.radius ?? 0));
+    pushTag(lines, 50, fmtNum(entity.geometry?.startAngle ?? 0));
+    pushTag(lines, 51, fmtNum(entity.geometry?.endAngle ?? 360));
 
     const ex = entity.geometry?.extrusion;
     if (ex && (ex.x !== 0 || ex.y !== 0 || ex.z !== 1)) {

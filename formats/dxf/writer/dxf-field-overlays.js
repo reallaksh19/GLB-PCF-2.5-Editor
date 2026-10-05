@@ -1,4 +1,5 @@
 import { nativeTags } from '../parser/dxf-source-index.js';
+import { encodeDxfText } from './dxf-encoding.js';
 
 const point = (name, x) => ['x', 'y', 'z'].map((axis, i) => [name + '.' + axis, x + i * 10]);
 const COMMON = [['layerId', 8], ['style.colorIndex', 62], ['style.trueColor', 420],
@@ -9,6 +10,16 @@ const FIELDS = {
   ARC: [...point('geometry.center', 10), ['geometry.radius', 40],
     ['geometry.startAngle', 50], ['geometry.endAngle', 51]],
   POINT: point('geometry.point', 10),
+  ELLIPSE: [...point('geometry.center', 10), ...point('geometry.majorAxis', 11),
+    ['geometry.ratio', 40], ['geometry.startParam', 41], ['geometry.endParam', 42]],
+  MTEXT: [...point('geometry.insertionPoint', 10), ['attributes.text', 1], ['attributes.height', 40],
+    ['attributes.rectWidth', 41], ['attributes.attachmentPoint', 71], ['attributes.drawingDir', 72],
+    ['attributes.rotation', 50], ['attributes.styleName', 7]],
+  DIMENSION: [...point('geometry.defPoints.p10',10), ...point('geometry.defPoints.p11',11),
+    ...point('geometry.defPoints.p13',13), ...point('geometry.defPoints.p14',14),
+    ['attributes.blockName',2], ['attributes.dimType',70], ['attributes.text',1]],
+  SPLINE: [['geometry.degree',71], ['attributes.flags',70]],
+  SOLID: [], LEADER: [],
   TEXT: [...point('geometry.insertionPoint', 10), ...point('geometry.alignmentPoint', 11),
     ['attributes.text', 1], ['attributes.height', 40], ['attributes.rotation', 50],
     ['attributes.widthFactor', 41], ['attributes.obliqueAngle', 51], ['attributes.styleName', 7],
@@ -48,10 +59,7 @@ export function encodeValue(value, encoding) {
   if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('Invalid non-finite DXF field');
   const text = String(value);
   if (/[\r\n\0]/.test(text)) throw new Error('Invalid multiline DXF field value');
-  if (encoding !== 'utf-8' && /[^\x00-\x7f]/.test(text)) {
-    throw new Error('Unsupported non-ASCII edit in source encoding ' + encoding);
-  }
-  return new TextEncoder().encode(text);
+  return encodeDxfText(text, encoding);
 }
 
 /** Patch only changed, uniquely selected native fields. Opaque control groups/XDATA never participate. */
@@ -79,7 +87,15 @@ export function fieldOverlays(before, after, tags, stream, newline, patches) {
     if (value === undefined || value === null) throw new Error('Unsupported field removal: ' + path);
     if (path === 'attributes.height' && !(value > 0)) throw new Error('Invalid text height');
     if (path === 'geometry.radius' && !(value > 0)) throw new Error('Invalid circle/arc radius');
-    change(code, value);
+    if (before.type === 'MTEXT' && path === 'attributes.text') {
+      encodeValue(value,stream.encoding);
+      const textTags = native.filter(t => t.code === 1 || t.code === 3);
+      for (const token of textTags) patches.push({start:token.start,end:token.end,bytes:new Uint8Array()});
+      const at = textTags[0]?.start ?? tags.at(-1).end;
+      const chars=Array.from(value), chunks = []; for (let i=0;i<chars.length;i+=250) chunks.push(chars.slice(i,i+250).join(''));
+      if (!chunks.length) chunks.push('');
+      patches.push({start:at,end:at,bytes:encodeDxfText(chunks.map((s,i)=>(i===chunks.length-1?1:3)+newline+s+newline).join(''),stream.encoding)});
+    } else change(code, value);
     set(expected, path, value);
   }
   // These modes are derived from the fields above; inconsistent mode-only edits are rejected.
@@ -96,6 +112,21 @@ export function fieldOverlays(before, after, tags, stream, newline, patches) {
     }
   }
   // Compound children have their own source spans and validation.
+  for (const [path,codes] of (before.type === 'SPLINE' ? [['geometry.controlPoints',[10,20,30]],['geometry.fitPoints',[11,21,31]],['geometry.knots',[40]],['geometry.weights',[41]]] :
+    before.type === 'SOLID' ? [['geometry.points',[10,20,30]]] : before.type === 'LEADER' ? [['geometry.vertices',[10,20,30]]] : [])) {
+    const old=get(before,path), values=get(after,path);
+    if (old.length!==values.length) throw new Error('Unsupported array topology requires a record conversion plan');
+    for (let i=0;i<old.length;i++) for (let a=0;a<codes.length;a++) {
+      const axis=['x','y','z'][a], prior=codes.length===1?old[i]:old[i][axis], value=codes.length===1?values[i]:values[i][axis];
+      if(prior===value) continue;
+      const code=before.type==='SOLID'?codes[a]+i:codes[a];
+      const hits=native.filter(t=>t.code===code), token=hits[before.type==='SOLID'?0:i];
+      if(!token) throw new Error('Unsupported missing repeated native field');
+      validateField(code,value,stream.acadVersion);
+      patches.push({start:token.valueStart,end:token.valueEnd,bytes:encodeValue(value,stream.encoding)});
+    }
+    set(expected,path,values);
+  }
   for (const key of ['attribs', 'subEntities']) {
     if (expected.attributes[key]) expected.attributes[key] = actual.attributes[key];
   }
@@ -160,8 +191,7 @@ function validateField(code, value, version) {
 }
 
 function encodeValueBlock(text, encoding) {
-  if (encoding !== 'utf-8' && /[^\x00-\x7f]/.test(text)) throw new Error('Unsupported source encoding edit');
-  return new TextEncoder().encode(text);
+  return encodeDxfText(text,encoding);
 }
 
 export function composeBytes(original, patches) {

@@ -53,9 +53,9 @@ export const EllipseWriter = {
     pushTag(lines, 21, fmtNum(m.y));
     pushTag(lines, 31, fmtNum(m.z));
 
-    pushTag(lines, 40, fmtNum(entity.geometry?.ratio || 1.0));
-    pushTag(lines, 41, fmtNum(entity.geometry?.startParam || 0));
-    pushTag(lines, 42, fmtNum(entity.geometry?.endParam || (Math.PI * 2)));
+    pushTag(lines, 40, fmtNum(entity.geometry?.ratio ?? 1.0));
+    pushTag(lines, 41, fmtNum(entity.geometry?.startParam ?? 0));
+    pushTag(lines, 42, fmtNum(entity.geometry?.endParam ?? (Math.PI * 2)));
   },
 };
 
