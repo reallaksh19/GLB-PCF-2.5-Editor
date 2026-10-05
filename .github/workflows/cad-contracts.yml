@@ -42,3 +42,6 @@ jobs:
       - name: Existing command history controls when available
         if: ${{ hashFiles('tests/dxf/dxf-command-history.test.mjs') != '' }}
         run: node --test tests/dxf/dxf-command-history.test.mjs
+      - name: Existing native high-ROI edit controls when available
+        if: ${{ hashFiles('tests/dxf/dxf-cad-editing.test.mjs') != '' }}
+        run: node --test tests/dxf/dxf-cad-editing.test.mjs

@@ -1,6 +1,6 @@
 import {snapshotEntityState,restoreEntityState} from './change-set.js';
 export function commandIds(command) {
-  return command.commands ? command.commands.flatMap(commandIds) : command.entityIds || command.sourceEntityIds || [command.entityId].filter(Boolean);
+  return command.commands ? command.commands.flatMap(commandIds) : command.entityIds || command.sourceEntityIds || [command.entityId,command.entity1Id,command.entity2Id].filter(Boolean);
 }
 /** Private touched-source images; index membership is restored if commit fails. */
 export function checkpoint(document,command) {

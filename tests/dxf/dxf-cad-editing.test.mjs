@@ -14,6 +14,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import {DxfDocumentParser} from '../../formats/dxf/parser/dxf-document-parser.js';
 import { DxfDocument } from '../../formats/dxf/model/dxf-document.js';
 import { DxfEntity } from '../../formats/dxf/model/dxf-entity.js';
 import { DxfBlock } from '../../formats/dxf/model/dxf-block.js';
@@ -30,9 +31,13 @@ import {
   JoinCommand,
 } from '../../core/commands/cad/index.js';
 
+class SampleDocument extends DxfDocument {
+ constructor(){super();for(const name of ['0','ARCH','OUTLINE'])this.addLayer(new DxfLayer({name}));}
+ addEntity(e,index){if(e.handle)this.handles.register(e.handle);return super.addEntity(e,index);}
+}
 describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   it('TrimEntitiesCommand: trims end of line intersecting a cutting edge', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Target Line: horizontal from (0, 10) to (100, 10)
@@ -74,7 +79,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('TrimEntitiesCommand: trims middle of line, splitting it into two separate lines', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Line from (0, 0) to (100, 0)
@@ -118,7 +123,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
 
     // New split line created for [70, 100]
     assert.equal(cs.added.length, 1);
-    const splitLine = cs.added[0];
+    const splitLine = doc.getEntity(cs.added[0].entityId);
     assert.equal(splitLine.geometry.start.x, 70);
     assert.equal(splitLine.geometry.end.x, 100);
     assert.equal(doc.entities.length, initialDocCount + 1);
@@ -131,7 +136,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('TrimEntitiesCommand: trims circle with 2 cutting lines, converting it into an ARC', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Circle centered at (50, 50), radius 20
@@ -169,7 +174,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('ExtendEntitiesCommand: extends line to an intersecting boundary line along ray', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Line from (10, 20) to (50, 20)
@@ -206,7 +211,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('OffsetCommand: creates parallel lines and concentric circles/arcs', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // 1. Line offset
@@ -225,7 +230,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
     const csLine = history.execute(offsetLineCmd, doc);
 
     assert.equal(csLine.added.length, 1);
-    const offsetLine = csLine.added[0];
+    const offsetLine = doc.getEntity(csLine.added[0].entityId);
     assert.equal(offsetLine.geometry.start.y, 20);
     assert.equal(offsetLine.geometry.end.y, 20);
 
@@ -243,15 +248,15 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
       sidePoint: { x: 100, y: 0 }, // Outside -> radius 40
     });
     const csCircle = history.execute(offsetCircleCmd, doc);
-    assert.equal(csCircle.added[0].geometry.radius, 40);
+    assert.equal(doc.getEntity(csCircle.added[0].entityId).geometry.radius, 40);
 
     // Undo circle offset
     history.undo(doc);
-    assert.equal(doc.getEntity(csCircle.added[0].id), null);
+    assert.equal(doc.getEntity(csCircle.added[0].entityId), null);
   });
 
   it('FilletCommand: sharp corner join (radius=0) and tangent arc (radius>0)', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Two lines: L1 from (0, 0) to (50, 0), L2 from (60, 10) to (60, 60)
@@ -296,7 +301,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
     const csFillet = history.execute(fillet10, doc);
 
     assert.equal(csFillet.added.length, 1);
-    const arc = csFillet.added[0];
+    const arc = doc.getEntity(csFillet.added[0].entityId);
     assert.equal(arc.type, 'ARC');
     assert.ok(Math.abs(arc.geometry.radius - 10) < 1e-6);
 
@@ -312,7 +317,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('ExplodeCommand: explodes INSERT into transformed model space entities and LWPOLYLINE into lines', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // Define Block "DOOR" with 1 LINE and 1 ARC
@@ -349,8 +354,8 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
     assert.equal(doc.getEntity(insert.id), null);
     assert.equal(cs.added.length, 2);
 
-    const childLine = cs.added.find((e) => e.type === 'LINE');
-    const childArc = cs.added.find((e) => e.type === 'ARC');
+    const childLine = cs.added.map(e=>doc.getEntity(e.entityId)).find(e=>e.type==='LINE');
+    const childArc = cs.added.map(e=>doc.getEntity(e.entityId)).find(e=>e.type==='ARC');
 
     assert.ok(childLine != null);
     assert.ok(childArc != null);
@@ -371,7 +376,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
   });
 
   it('JoinCommand: chains contiguous LINEs into a single continuous LWPOLYLINE', () => {
-    const doc = new DxfDocument();
+    const doc = new SampleDocument();
     const history = new CommandHistory();
 
     // 3 touching lines: (0,0)->(10,0), (10,0)->(10,20), (10,20)->(0,20)
@@ -404,7 +409,7 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
     assert.equal(cs.deleted.length, 3);
     assert.equal(cs.added.length, 1);
 
-    const poly = cs.added[0];
+    const poly = doc.getEntity(cs.added[0].entityId);
     assert.equal(poly.type, 'LWPOLYLINE');
     assert.equal(poly.geometry.vertices.length, 4);
     assert.equal(poly.geometry.vertices[0].x, 0);
@@ -419,37 +424,10 @@ describe('Phase 6: High-ROI Native CAD Editing Commands', () => {
     assert.equal(doc.getEntity(poly.id), null);
   });
 
-  it('Lossless Invariant on Edit-and-Undo: round-trip equivalence across all editing commands', () => {
-    const doc = new DxfDocument();
-    const l1 = new DxfEntity({
-      handle: '10',
-      type: 'LINE',
-      source: { rawTags: [{ code: 0, value: 'LINE' }, { code: 5, value: '10' }, { code: 8, value: '0' }, { code: 10, value: '0.0' }, { code: 20, value: '0.0' }, { code: 11, value: '100.0' }, { code: 21, value: '0.0' }] },
-      geometry: { start: { x: 0, y: 0, z: 0 }, end: { x: 100, y: 0, z: 0 } },
-    });
-    const l2 = new DxfEntity({
-      handle: '11',
-      type: 'LINE',
-      source: { rawTags: [{ code: 0, value: 'LINE' }, { code: 5, value: '11' }, { code: 8, value: '0' }, { code: 10, value: '50.0' }, { code: 20, value: '-50.0' }, { code: 11, value: '50.0' }, { code: 21, value: '50.0' }] },
-      geometry: { start: { x: 50, y: -50, z: 0 }, end: { x: 50, y: 50, z: 0 } },
-    });
-    doc.addEntity(l1);
-    doc.addEntity(l2);
-
-    const originalDxf = DxfDocumentWriter.write(doc);
-    const history = new CommandHistory();
-
-    // 1. Trim l1 with l2
-    history.execute(new TrimEntitiesCommand({
-      entityId: l1.id,
-      cuttingEdgeIds: [l2.id],
-      clickPoint: { x: 80, y: 0 },
-    }), doc);
-
-    assert.notEqual(DxfDocumentWriter.write(doc), originalDxf);
-
-    // 2. Undo trim
-    history.undo(doc);
-    assert.equal(DxfDocumentWriter.write(doc), originalDxf, 'Undo must restore byte-for-byte exact DXF');
+  it('Lossless Invariant on Edit-and-Undo: exact native byte round-trip',()=>{
+    const input=['0','SECTION','2','ENTITIES','0','LINE','5','10','10','0.0','20','0','30','5','11','100','21','0','31','5','0','LINE','5','11','10','50','20','-50','30','5','11','50','21','50','31','5','0','ENDSEC','0','EOF'].join('\n');
+    const doc=DxfDocumentParser.parse(input),history=new CommandHistory(),[l1,l2]=doc.entities;
+    history.execute(new TrimEntitiesCommand({entityId:l1.id,cuttingEdgeIds:[l2.id],clickPoint:{x:80,y:0}}),doc);
+    assert.notEqual(DxfDocumentWriter.write(doc),input);history.undo(doc);assert.equal(DxfDocumentWriter.write(doc),input);
   });
 });

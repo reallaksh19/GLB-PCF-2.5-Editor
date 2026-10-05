@@ -1,3 +1,4 @@
+import {addGenerated} from './generated-entity.js';
 /**
  * core/commands/cad/edit-commands/fillet-offset-commands.js
  *
@@ -6,11 +7,11 @@
  * - OffsetCommand: Creates concentric/parallel copies of entities at a specified distance.
  *
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
- * Touched-only rawTags invalidation on mutated entities (Invariant 1).
+ * Native source tokens are retained for reversible Save overlays.
  */
 
 import { CadCommand } from '../cad-command.js';
-import { ChangeSet, snapshotEntityState, restoreEntityState } from '../change-set.js';
+import { ChangeSet, snapshotEntityState, restoreEntityState, cloneNativeValue } from '../change-set.js';
 import { DxfEntity } from '../../../../formats/dxf/model/dxf-entity.js';
 import {
   intersectLineLine,
@@ -41,13 +42,14 @@ export class FilletCommand extends CadCommand {
     super({ name: 'FILLET', description: `Fillet entities ${params.entity1Id} & ${params.entity2Id} (R=${params.radius ?? 0})` });
     this.entity1Id = params.entity1Id;
     this.entity2Id = params.entity2Id;
-    this.radius = Math.max(0, Number(params.radius) || 0);
+    this.radius = Number(params.radius ?? 0);
 
     this.snapshots = new Map();
     this.createdArc = null;
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const line1 = document.getEntity(this.entity1Id);
     const line2 = document.getEntity(this.entity2Id);
@@ -111,9 +113,9 @@ export class FilletCommand extends CadCommand {
       }
 
       line1.markModified();
-      line1.source.rawTags = null;
+
       line2.markModified();
-      line2.source.rawTags = null;
+
 
       changeSet.addModified(line1.id, line1, this.snapshots.get(line1.id), snapshotEntityState(line1));
       changeSet.addModified(line2.id, line2, this.snapshots.get(line2.id), snapshotEntityState(line2));
@@ -180,18 +182,18 @@ export class FilletCommand extends CadCommand {
       }
 
       line1.markModified();
-      line1.source.rawTags = null;
+
       line2.markModified();
-      line2.source.rawTags = null;
+
 
       // Create new fillet ARC entity
       this.createdArc = new DxfEntity({
         type: 'ARC',
         layerId: line1.layerId,
         space: line1.space,
-        style: JSON.parse(JSON.stringify(line1.style || {})),
+        style: cloneNativeValue(line1.style || {}),
         geometry: {
-          center: { x: center.x, y: center.y, z: 0 },
+          center: { x: center.x, y: center.y, z: p1.z ?? 0 },
           radius: this.radius,
           startAngle,
           endAngle,
@@ -199,7 +201,8 @@ export class FilletCommand extends CadCommand {
         state: { modified: true, generated: true },
       });
 
-      document.addEntity(this.createdArc);
+      this.createdArc.ownerHandle=line1.ownerHandle;this.createdArc.layoutId=line1.layoutId;
+      addGenerated(document,this.createdArc);
 
       changeSet.addModified(line1.id, line1, this.snapshots.get(line1.id), snapshotEntityState(line1));
       changeSet.addModified(line2.id, line2, this.snapshots.get(line2.id), snapshotEntityState(line2));
@@ -248,12 +251,13 @@ export class OffsetCommand extends CadCommand {
   constructor(params) {
     super({ name: 'OFFSET', description: `Offset entity ${params.entityId} by ${params.distance}` });
     this.entityId = params.entityId;
-    this.distance = Math.max(1e-6, Number(params.distance) || 1);
+    this.distance = Number(params.distance);
     this.sidePoint = { x: params.sidePoint?.x ?? 0, y: params.sidePoint?.y ?? 0 };
     this.createdEntity = null;
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const target = document.getEntity(this.entityId);
     if (!target) return changeSet;
@@ -282,7 +286,7 @@ export class OffsetCommand extends CadCommand {
       const verts = target.geometry.vertices || [];
       const closed = Boolean(target.geometry.closed);
       const res = offsetPolylineVertices(verts, closed, this.distance, this.sidePoint);
-      if (res.length > 0) newGeometry = { vertices: res, closed };
+      if (res.length > 0) newGeometry = { vertices: res, closed,elevation:target.geometry.elevation ?? verts[0]?.z ?? 0 };
     }
 
     if (!newGeometry) return changeSet;
@@ -291,13 +295,14 @@ export class OffsetCommand extends CadCommand {
       type: target.type,
       layerId: target.layerId,
       space: target.space,
-      style: JSON.parse(JSON.stringify(target.style || {})),
+      style: cloneNativeValue(target.style || {}),
       geometry: newGeometry,
-      attributes: JSON.parse(JSON.stringify(target.attributes || {})),
+      attributes: cloneNativeValue(target.attributes || {}),
       state: { modified: true, generated: true },
     });
 
-    document.addEntity(this.createdEntity);
+    this.createdEntity.ownerHandle=target.ownerHandle;this.createdEntity.layoutId=target.layoutId;this.createdEntity.source.copiedRawTags=target.source.rawTags.slice();
+    addGenerated(document,this.createdEntity);
     changeSet.addAdded(this.createdEntity);
 
     this.executed = true;

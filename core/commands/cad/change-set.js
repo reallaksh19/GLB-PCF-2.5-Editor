@@ -83,3 +83,5 @@ export class ChangeSet {
     return this;
   }
 }
+
+export const cloneNativeValue=deepClone;

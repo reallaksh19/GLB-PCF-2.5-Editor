@@ -1,3 +1,4 @@
+import {addGenerated} from './generated-entity.js';
 /**
  * core/commands/cad/edit-commands/explode-join-commands.js
  *
@@ -7,13 +8,14 @@
  * - JoinCommand: Joins connected LINEs and ARCs into a single continuous LWPOLYLINE.
  *
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
- * Touched-only rawTags invalidation on mutated entities (Invariant 1).
+ * Native source tokens are retained for reversible Save overlays.
  */
 
 import { CadCommand } from '../cad-command.js';
-import { ChangeSet, snapshotEntityState, restoreEntityState } from '../change-set.js';
+import { ChangeSet, snapshotEntityState, restoreEntityState, cloneNativeValue } from '../change-set.js';
 import { DxfEntity } from '../../../../formats/dxf/model/dxf-entity.js';
 import { pointDistance, normalizeAngle, bulgeToArc } from '../../../geometry/cad-intersections.js';
+import {resolveEntityStyle} from '../../../../formats/dxf/render/dxf-style-resolver.js';
 import { createInsertTransform, transformPoint } from '../../../../formats/dxf/render/dxf-block-renderer.js';
 
 const EPSILON = 1e-3;
@@ -34,9 +36,11 @@ export class ExplodeCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     this.removedEntities = [];
     this.createdEntities = [];
+    const originalPositions=new Map(document.entities.map((e,i)=>[e.id,i]));
 
     for (const id of this.entityIds) {
       const entity = document.getEntity(id);
@@ -52,7 +56,7 @@ export class ExplodeCommand extends CadCommand {
         const snap = snapshotEntityState(entity);
         const res = document.removeEntity(entity);
         if (res) {
-          this.removedEntities.push({ entity: res.entity, index: res.index, snapshot: snap });
+          this.removedEntities.push({ entity: res.entity, index: originalPositions.get(res.entity.id), snapshot: snap });
           changeSet.addDeleted(res.entity, res.index);
         }
 
@@ -70,15 +74,18 @@ export class ExplodeCommand extends CadCommand {
           const isLayer0 = String(child.layerId || '0').trim() === '0';
           const layerId = isLayer0 ? entity.layerId : child.layerId;
 
-          const childStyle = JSON.parse(JSON.stringify(child.style || {}));
-          if (childStyle.colorMode === 'BYBLOCK') {
-            childStyle.colorMode = entity.style?.colorMode || 'BYLAYER';
-            childStyle.colorIndex = entity.style?.colorIndex ?? 256;
-            childStyle.trueColor = entity.style?.trueColor ?? null;
+          const childStyle = cloneNativeValue(child.style || {});
+          const inherited=resolveEntityStyle(entity,document);
+          if (childStyle.colorMode === 'BYBLOCK' || childStyle.colorIndex===0) {
+            childStyle.colorMode = 'INDEXED';
+            childStyle.colorIndex = inherited.colorIndex || 7;
+            childStyle.trueColor = inherited.colorSource==='TRUECOLOR' ? inherited.color : null;
           }
 
+          if(childStyle.lineType==='BYBLOCK'){childStyle.lineType=inherited.lineType;childStyle.lineTypeMode='EXPLICIT';}
+          if(childStyle.lineWeight===-2){childStyle.lineWeight=Math.round(inherited.lineWeight*100);childStyle.lineWeightMode='EXPLICIT';}
           // Transform child geometry
-          const childGeom = JSON.parse(JSON.stringify(child.geometry || {}));
+          const childGeom = cloneNativeValue(child.geometry || {});
           if (childGeom.start) childGeom.start = transformPoint(childGeom.start, transform, basePoint);
           if (childGeom.end) childGeom.end = transformPoint(childGeom.end, transform, basePoint);
           if (childGeom.center) childGeom.center = transformPoint(childGeom.center, transform, basePoint);
@@ -99,21 +106,28 @@ export class ExplodeCommand extends CadCommand {
             childGeom.vertices = childGeom.vertices.map((v) => {
               const tp = transformPoint(v, transform, basePoint);
               if (v.bulge != null) tp.bulge = v.bulge;
+              if(v.startWidth!=null)tp.startWidth=v.startWidth*transform.scale.x;
+              if(v.endWidth!=null)tp.endWidth=v.endWidth*transform.scale.x;
               return tp;
             });
           }
 
+          if(childGeom.constantWidth!=null)childGeom.constantWidth*=transform.scale.x;
+          if(childGeom.elevation!=null)childGeom.elevation=(entity.geometry.insertionPoint.z ?? 0)+(childGeom.elevation-(basePoint.z ?? 0))*transform.scale.z;
           const explodedChild = new DxfEntity({
             type: child.type,
             layerId,
             space: entity.space,
             style: childStyle,
             geometry: childGeom,
-            attributes: JSON.parse(JSON.stringify(child.attributes || {})),
+            attributes: cloneNativeValue(child.attributes || {}),
             state: { modified: true, generated: true },
           });
 
-          document.addEntity(explodedChild);
+          
+
+          explodedChild.ownerHandle=entity.ownerHandle;explodedChild.layoutId=entity.layoutId;explodedChild.source.copiedRawTags=child.source.rawTags.slice();
+          addGenerated(document,explodedChild);
           this.createdEntities.push(explodedChild);
           changeSet.addAdded(explodedChild);
         }
@@ -124,7 +138,7 @@ export class ExplodeCommand extends CadCommand {
         const snap = snapshotEntityState(entity);
         const res = document.removeEntity(entity);
         if (res) {
-          this.removedEntities.push({ entity: res.entity, index: res.index, snapshot: snap });
+          this.removedEntities.push({ entity: res.entity, index: originalPositions.get(res.entity.id), snapshot: snap });
           changeSet.addDeleted(res.entity, res.index);
         }
 
@@ -141,14 +155,15 @@ export class ExplodeCommand extends CadCommand {
               type: 'LINE',
               layerId: entity.layerId,
               space: entity.space,
-              style: JSON.parse(JSON.stringify(entity.style || {})),
+              style: cloneNativeValue(entity.style || {}),
               geometry: {
-                start: { x: v1.x, y: v1.y, z: v1.z ?? 0 },
-                end: { x: v2.x, y: v2.y, z: v2.z ?? 0 },
+                start: { x: v1.x, y: v1.y, z: entity.geometry.elevation ?? v1.z ?? 0 },
+                end: { x: v2.x, y: v2.y, z: entity.geometry.elevation ?? v2.z ?? 0 },
               },
               state: { modified: true, generated: true },
             });
-            document.addEntity(line);
+            
+            addGenerated(document,line);
             this.createdEntities.push(line);
             changeSet.addAdded(line);
           } else {
@@ -159,16 +174,17 @@ export class ExplodeCommand extends CadCommand {
                 type: 'ARC',
                 layerId: entity.layerId,
                 space: entity.space,
-                style: JSON.parse(JSON.stringify(entity.style || {})),
+                style: cloneNativeValue(entity.style || {}),
                 geometry: {
-                  center: arcGeom.center,
+                  center: {...arcGeom.center,z:entity.geometry.elevation ?? v1.z ?? 0},
                   radius: arcGeom.radius,
                   startAngle: arcGeom.startAngle,
                   endAngle: arcGeom.endAngle,
                 },
                 state: { modified: true, generated: true },
               });
-              document.addEntity(arc);
+              
+              addGenerated(document,arc);
               this.createdEntities.push(arc);
               changeSet.addAdded(arc);
             }
@@ -221,6 +237,7 @@ export class JoinCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const entities = this.entityIds
       .map((id) => document.getEntity(id))
@@ -258,42 +275,24 @@ export class JoinCommand extends CadCommand {
       };
     });
 
-    // Chain segments end-to-end
-    const chain = [remaining.shift()];
-
-    while (remaining.length > 0) {
-      const tail = chain[chain.length - 1].p2;
-      let matchIdx = -1;
-      let flip = false;
-
-      for (let i = 0; i < remaining.length; i++) {
-        const seg = remaining[i];
-        if (pointDistance(tail, seg.p1) < EPSILON) {
-          matchIdx = i;
-          flip = false;
-          break;
-        } else if (pointDistance(tail, seg.p2) < EPSILON) {
-          matchIdx = i;
-          flip = true;
-          break;
-        }
-      }
-
-      if (matchIdx === -1) {
-        break; // No further contiguous segments found
-      }
-
-      const [nextSeg] = remaining.splice(matchIdx, 1);
-      if (flip) {
-        const tmp = nextSeg.p1;
-        nextSeg.p1 = nextSeg.p2;
-        nextSeg.p2 = tmp;
-        nextSeg.bulge = -nextSeg.bulge;
-      }
-      chain.push(nextSeg);
+    // Every endpoint has degree at most two; a branch cannot become one native polyline.
+    for(const seg of remaining)for(const end of [seg.p1,seg.p2]) {
+      const degree=remaining.filter(s=>pointDistance(end,s.p1)<EPSILON || pointDistance(end,s.p2)<EPSILON).length;
+      if(degree>2)throw new Error('Branching Join is unsupported');
     }
-
-    if (chain.length < 2) return changeSet;
+    remaining.sort((a,b)=>a.entity.id.localeCompare(b.entity.id));
+    const chain=[remaining.shift()];
+    while(remaining.length) {
+      const head=chain[0].p1,tail=chain.at(-1).p2;
+      const i=remaining.findIndex(s=>[head,tail].some(p=>pointDistance(p,s.p1)<EPSILON || pointDistance(p,s.p2)<EPSILON));
+      if(i<0)throw new Error('Disconnected Join selection');
+      const [next]=remaining.splice(i,1);
+      const atTail=pointDistance(tail,next.p1)<EPSILON || pointDistance(tail,next.p2)<EPSILON;
+      const flip=atTail ? pointDistance(tail,next.p2)<EPSILON : pointDistance(head,next.p1)<EPSILON;
+      if(flip){[next.p1,next.p2]=[next.p2,next.p1];next.bulge=-next.bulge;}
+      if(atTail)chain.push(next);else chain.unshift(next);
+    }
+    const originalPositions=new Map(document.entities.map((e,i)=>[e.id,i]));
 
     // Check if closed
     const isClosed = pointDistance(chain[0].p1, chain[chain.length - 1].p2) < EPSILON;
@@ -325,7 +324,7 @@ export class JoinCommand extends CadCommand {
       const snap = snapshotEntityState(ent);
       const res = document.removeEntity(ent);
       if (res) {
-        this.removedEntities.push({ entity: res.entity, index: res.index, snapshot: snap });
+        this.removedEntities.push({ entity: res.entity, index: originalPositions.get(res.entity.id), snapshot: snap });
         changeSet.addDeleted(res.entity, res.index);
       }
     }
@@ -336,15 +335,17 @@ export class JoinCommand extends CadCommand {
       type: 'LWPOLYLINE',
       layerId: primary.layerId,
       space: primary.space,
-      style: JSON.parse(JSON.stringify(primary.style || {})),
+      style: cloneNativeValue(primary.style || {}),
       geometry: {
         vertices,
         closed: isClosed,
+        elevation:primary.geometry.start?.z ?? primary.geometry.center?.z ?? 0,
       },
       state: { modified: true, generated: true },
     });
 
-    document.addEntity(this.createdPolyline);
+    this.createdPolyline.ownerHandle=primary.ownerHandle;this.createdPolyline.layoutId=primary.layoutId;
+    addGenerated(document,this.createdPolyline);
     changeSet.addAdded(this.createdPolyline);
 
     this.executed = true;

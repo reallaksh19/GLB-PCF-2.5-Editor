@@ -1,9 +1,10 @@
 import {CadCommand,CompositeCadCommand} from './cad-command.js';
+import {recordTransition,replayTransition} from './history-transition.js';
 import {ChangeSet} from './change-set.js';
 import {validateResult} from './command-validation.js';
 import {atomically} from './transaction-state.js';
 function fingerprint(command) {
-  const keys=['name','entityIds','sourceEntityIds','entityId','dx','dy','dz','basePoint','angleDeg','sx','sy','sz','properties','updates','gripKey','newPoint'];
+  const keys=['name','entityIds','sourceEntityIds','entityId','dx','dy','dz','basePoint','angleDeg','sx','sy','sz','properties','updates','gripKey','newPoint','entity1Id','entity2Id','cuttingEdgeIds','boundaryEdgeIds','clickPoint','pickPoint','sidePoint','radius','distance'];
   return JSON.stringify(command.commands ? command.commands.map(fingerprint) : Object.fromEntries(keys.filter(k=>command[k]!==undefined).map(k=>[k,command[k]])));
 }
 /** Source transactions commit once; Undo advances revision but restores prior content identity. */
@@ -42,15 +43,17 @@ export class CommandHistory {
       return delivered.changeSet;
     }
     if(command.baseRevision!=null && command.baseRevision!==document.revision)throw new Error('Stale transaction base revision');
+    if(this._states.has(command))throw new Error('Command already committed; use a new transaction');
     command.validate(document);
     if(this._batch){if(this._batch.document && this._batch.document!==document)throw new Error('Batch document mismatch');this._batch.document=document;this._batch.commands.push(command);return new ChangeSet(this._batch.name);}
+    const sourceBefore=[...document.entities];
     const before=document.contentStateId,seedBefore=document.committedHandleSeed ?? document.handles.handseed;
     const changeSet=atomically(document,command,()=>{const result=command.execute(document);validateResult(result,document);return result;});
     if(!changeSet.hasChanges())return changeSet;
     this._document=document;
     const after=document.id+':content:revision:'+ (document.revision+1);
     this._serial++;document.committedHandleSeed=document.handles.handseed;this._advance(document,after);
-    this._states.set(command,{before,after,seedBefore,seedAfter:document.committedHandleSeed});
+    this._states.set(command,{before,after,seedBefore,seedAfter:document.committedHandleSeed,plan:recordTransition(document,sourceBefore,changeSet,command),changeSet});
     Object.assign(changeSet,{documentId:document.id,transactionId:transactionId || document.id+':local:'+this._serial,baseRevision:document.revision-1,resultRevision:document.revision,sourceContentStateId:after});
     if(transactionId)this._ledger.set(transactionId,{payload,document,changeSet});
     this.undoStack.push(command);if(this.undoStack.length>this.maxHistory)this.undoStack.shift();this.redoStack=[];
@@ -66,7 +69,7 @@ export class CommandHistory {
   redo(document){
     this._check(document);if(!this.canRedo)return null;
     const command=this.redoStack.at(-1),state=this._states.get(command);command.validate(document);
-    const changeSet=atomically(document,command,()=>{const result=command.execute(document);validateResult(result,document);return result;});
+    const changeSet=atomically(document,command,()=>{replayTransition(document,state.plan);const result=new ChangeSet(command.name);result.merge(state.changeSet);validateResult(result,document);return result;});
     this.redoStack.pop();this.undoStack.push(command);document.committedHandleSeed=state.seedAfter;this._advance(document,state.after);
     this._notify('redo',command,changeSet);return changeSet;
   }

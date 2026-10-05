@@ -12,7 +12,7 @@
  */
 
 import { CadCommand } from './cad-command.js';
-import { ChangeSet, snapshotEntityState, restoreEntityState } from './change-set.js';
+import { ChangeSet, snapshotEntityState, restoreEntityState, cloneNativeValue } from './change-set.js';
 import { DxfEntity } from '../../../formats/dxf/model/dxf-entity.js';
 
 function translatePoint(p, dx, dy, dz = 0) {
@@ -447,9 +447,9 @@ export class CopyEntitiesCommand extends CadCommand {
         type: src.type,
         layerId: src.layerId,
         space: src.space,
-        style: JSON.parse(JSON.stringify(src.style || {})),
-        geometry: JSON.parse(JSON.stringify(src.geometry || {})),
-        attributes: JSON.parse(JSON.stringify(src.attributes || {})),
+        style: cloneNativeValue(src.style || {}),
+        geometry: cloneNativeValue(src.geometry || {}),
+        attributes: cloneNativeValue(src.attributes || {}),
         source: {
           order: document.entities.length,
           rawTags: [], // No imported byte span belongs to this created record

@@ -1,3 +1,4 @@
+import {addGenerated} from './generated-entity.js';
 /**
  * core/commands/cad/edit-commands/trim-extend-commands.js
  *
@@ -6,11 +7,11 @@
  * - ExtendEntitiesCommand: Extends geometry to boundary edges based on pick point.
  *
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
- * Touched-only rawTags invalidation on mutated entities (Invariant 1).
+ * Native source tokens are retained for reversible Save overlays.
  */
 
 import { CadCommand } from '../cad-command.js';
-import { ChangeSet, snapshotEntityState, restoreEntityState } from '../change-set.js';
+import { ChangeSet, snapshotEntityState, restoreEntityState, cloneNativeValue } from '../change-set.js';
 import { DxfEntity } from '../../../../formats/dxf/model/dxf-entity.js';
 import {
   findEntityIntersections,
@@ -43,6 +44,7 @@ export class TrimEntitiesCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const target = document.getEntity(this.entityId);
     if (!target) return changeSet;
@@ -102,9 +104,9 @@ export class TrimEntitiesCommand extends CadCommand {
         segments.push({ tStart, tEnd, distToClick, index: i });
       }
 
-      // Find segment to discard (closest to clickPoint)
-      segments.sort((a, b) => a.distToClick - b.distToClick);
-      const discard = segments[0];
+      // Select the interval containing the projected pick parameter, with boundary ties to the right.
+      const pickT=Math.max(0,Math.min(1,((this.clickPoint.x-s.x)*dx+(this.clickPoint.y-s.y)*dy)/lenSq));
+      const discard=segments.find(seg=>pickT>=seg.tStart && (pickT<seg.tEnd || seg.tEnd===1));
 
       if (discard.tStart === 0) {
         // Trimming start of line: move start to tEnd
@@ -114,7 +116,7 @@ export class TrimEntitiesCommand extends CadCommand {
           z: s.z ?? 0,
         };
         target.markModified();
-        target.source.rawTags = null;
+
         changeSet.addModified(target.id, target, this.beforeSnapshot, snapshotEntityState(target));
       } else if (discard.tEnd === 1) {
         // Trimming end of line: move end to tStart
@@ -124,7 +126,7 @@ export class TrimEntitiesCommand extends CadCommand {
           z: e.z ?? 0,
         };
         target.markModified();
-        target.source.rawTags = null;
+
         changeSet.addModified(target.id, target, this.beforeSnapshot, snapshotEntityState(target));
       } else {
         // Trimming middle of line: split into two lines
@@ -137,7 +139,7 @@ export class TrimEntitiesCommand extends CadCommand {
           z: e.z ?? 0,
         };
         target.markModified();
-        target.source.rawTags = null;
+
         changeSet.addModified(target.id, target, this.beforeSnapshot, snapshotEntityState(target));
 
         // 2nd segment: new line from discard.tEnd to oldEnd
@@ -145,14 +147,16 @@ export class TrimEntitiesCommand extends CadCommand {
           type: 'LINE',
           layerId: target.layerId,
           space: target.space,
-          style: JSON.parse(JSON.stringify(target.style || {})),
+          style: cloneNativeValue(target.style || {}),
           geometry: {
             start: { x: s.x + discard.tEnd * dx, y: s.y + discard.tEnd * dy, z: s.z ?? 0 },
             end: oldEnd,
           },
           state: { modified: true, generated: true },
         });
-        document.addEntity(splitLine);
+        
+        splitLine.ownerHandle=target.ownerHandle;splitLine.layoutId=target.layoutId;splitLine.source.copiedRawTags=target.source.rawTags.slice();
+        addGenerated(document,splitLine);
         this.createdEntities.push(splitLine);
         changeSet.addAdded(splitLine);
       }
@@ -163,6 +167,8 @@ export class TrimEntitiesCommand extends CadCommand {
 
       const angles = allHits.map((h) => normalizeAngle((Math.atan2(h.y - c.y, h.x - c.x) * 180) / Math.PI));
       angles.sort((a, b) => a - b);
+      for(let i=angles.length-1;i>0;i--)if(Math.abs(angles[i]-angles[i-1])<1e-8)angles.splice(i,1);
+      if(angles.length<2)return changeSet;
 
       const clickAngle = normalizeAngle((Math.atan2(this.clickPoint.y - c.y, this.clickPoint.x - c.x) * 180) / Math.PI);
 
@@ -194,7 +200,7 @@ export class TrimEntitiesCommand extends CadCommand {
       target.geometry.startAngle = arcStart;
       target.geometry.endAngle = arcEnd;
       target.markModified();
-      target.source.rawTags = null;
+
       changeSet.addModified(target.id, target, this.beforeSnapshot, snapshotEntityState(target));
     }
 
@@ -244,6 +250,7 @@ export class ExtendEntitiesCommand extends CadCommand {
   }
 
   execute(document) {
+    this.validate(document);
     const changeSet = new ChangeSet(this.name);
     const target = document.getEntity(this.entityId);
     if (!target) return changeSet;
@@ -307,7 +314,7 @@ export class ExtendEntitiesCommand extends CadCommand {
     }
 
     target.markModified();
-    target.source.rawTags = null;
+
 
     const after = snapshotEntityState(target);
     changeSet.addModified(target.id, target, this.beforeSnapshot, after);
