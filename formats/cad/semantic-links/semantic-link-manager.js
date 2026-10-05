@@ -31,6 +31,17 @@ export class SemanticLinkManager {
       throw new Error('registerComponent requires a SemanticComponentRef instance');
     }
 
+    const previous = this._components.get(component.componentId);
+    if (previous) {
+      for (const ref of previous.sourceRefs) {
+        const set = this._entityToComponents.get(ref.cadEntityId);
+        if (set) {
+          set.delete(component.componentId);
+          if (set.size === 0) this._entityToComponents.delete(ref.cadEntityId);
+        }
+      }
+    }
+
     this._components.set(component.componentId, component);
 
     for (const ref of component.sourceRefs) {
