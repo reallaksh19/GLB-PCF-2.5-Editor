@@ -25,4 +25,27 @@ export class DxfLayer {
       rawTags: Array.isArray(params.source?.rawTags) ? params.source.rawTags : [],
     };
   }
+
+  setVisible(visible) {
+    this.off = !visible;
+  }
+
+  setFrozen(frozen) {
+    this.frozen = Boolean(frozen);
+    this.flags = frozen ? this.flags | 1 : this.flags & ~1;
+  }
+
+  setLocked(locked) {
+    this.locked = Boolean(locked);
+    this.flags = locked ? this.flags | 4 : this.flags & ~4;
+  }
+
+  setColor(colorIndex, trueColor = null) {
+    this.colorIndex = colorIndex;
+    this.trueColor = trueColor;
+  }
+
+  isVisible() {
+    return !this.off && !this.frozen;
+  }
 }
