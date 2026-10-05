@@ -237,6 +237,53 @@ export class SpatialIndex2D {
   }
 
   /**
+   * Remove item(s) by id or matching predicate from spatial index.
+   *
+   * @param {string|Function} idOrPredicate
+   * @returns {number} count of items removed
+   */
+  remove(idOrPredicate) {
+    const isMatch = typeof idOrPredicate === 'function'
+      ? idOrPredicate
+      : (item) => item?.id === idOrPredicate;
+
+    let removedCount = 0;
+
+    function traverse(node) {
+      if (node.leaf) {
+        const initialLen = node.children.length;
+        node.children = node.children.filter((child) => !isMatch(child));
+        const diff = initialLen - node.children.length;
+        if (diff > 0) {
+          removedCount += diff;
+          calcBBox(node);
+        }
+        return diff > 0;
+      }
+
+      let childChanged = false;
+      for (const child of node.children) {
+        if (traverse(child)) {
+          childChanged = true;
+        }
+      }
+
+      if (childChanged) {
+        // Prune empty inner children
+        node.children = node.children.filter((c) => (c.leaf ? c.children.length > 0 : c.children.length > 0));
+        calcBBox(node);
+      }
+      return childChanged;
+    }
+
+    traverse(this.root);
+    this._size = Math.max(0, this._size - removedCount);
+    if(!this._size) this.clear();
+    else while(!this.root.leaf && this.root.children.length===1) this.root=this.root.children[0];
+    return removedCount;
+  }
+
+  /**
    * Search for all items whose bounding box intersects query box.
    * @param {Object} queryBox - { minX, minY, maxX, maxY }
    * @returns {Array<Object>}

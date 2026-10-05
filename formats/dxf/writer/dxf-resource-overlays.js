@@ -31,7 +31,7 @@ export function resourceOverlays(before, doc, stream, newline, patches, created)
   for(const [key,field,code] of [['$INSUNITS','insunits',70],['$MEASUREMENT','measurement',70]]) {
     if(doc.units[field]!==before.units[field])changes.set(key,[{code,value:doc.units[field]}]);
   }
-  if(created.length)changes.set('$HANDSEED',[{code:5,value:doc.handles.handseed}]);
+  if(created.length)changes.set('$HANDSEED',[{code:5,value:doc.committedHandleSeed ?? doc.handles.handseed}]);
   for(const key of before.header.keys())if(!changes.has(key))throw new Error('Unsupported header deletion');
   for(const [key,value] of changes) {
     if(same(value,before.header.get(key)))continue;
