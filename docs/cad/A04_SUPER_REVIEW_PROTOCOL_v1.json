@@ -1,0 +1,529 @@
+{
+  "protocol_id": "CAD85-A04-BOUNDED-SUPER-REVIEW",
+  "version": "1.0",
+  "repository": "reallaksh19/GLB-PCF-2.5-Editor",
+  "acceptance_sets": [
+    {
+      "id": "A04-BOUNDED-FOUNDATION",
+      "criteria": [
+        {
+          "id": "A04-ISOLATION",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-ISOLATION"
+          ]
+        },
+        {
+          "id": "A04-CANCEL-QUEUED",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-CANCEL-QUEUED"
+          ]
+        },
+        {
+          "id": "A04-CANCEL-HOST-REPLY",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-CANCEL-HOST-REPLY"
+          ]
+        },
+        {
+          "id": "A04-CANCEL-COMMITTED",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-CANCEL-COMMITTED"
+          ]
+        },
+        {
+          "id": "A04-OPEN-RACE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-OPEN-RACE"
+          ]
+        },
+        {
+          "id": "A04-CLOSE-PENDING-OPEN",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-CLOSE-PENDING-OPEN"
+          ]
+        },
+        {
+          "id": "A04-REPLAY-REVISION",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-REPLAY-REVISION"
+          ]
+        },
+        {
+          "id": "A04-PAYLOAD-IDENTITY",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-PAYLOAD-IDENTITY"
+          ]
+        },
+        {
+          "id": "A04-INNER-TRANSACTION-REPLAY",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-INNER-TRANSACTION-REPLAY"
+          ]
+        },
+        {
+          "id": "A04-EMPTY-UNDO",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-EMPTY-UNDO"
+          ]
+        },
+        {
+          "id": "A04-INVALID-REVISION",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-INVALID-REVISION"
+          ]
+        },
+        {
+          "id": "A04-QUEUE-CANCEL-LEAK",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-QUEUE-CANCEL-LEAK"
+          ]
+        },
+        {
+          "id": "A04-SEND-FAILURE",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-SEND-FAILURE"
+          ]
+        },
+        {
+          "id": "A04-WORKER-PORT-LIFETIME",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-WORKER-PORT-LIFETIME"
+          ]
+        },
+        {
+          "id": "A04-SAVE-BUFFER",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-SAVE-BUFFER"
+          ]
+        },
+        {
+          "id": "A04-FAILED-OPEN",
+          "required": true,
+          "reviewer_check_required": false,
+          "super_review_required": true,
+          "verification_method_ids": [
+            "A04-FAILED-OPEN"
+          ]
+        }
+      ]
+    }
+  ],
+  "verification_methods": [
+    {
+      "id": "A04-ISOLATION",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-CANCEL-QUEUED",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-CANCEL-HOST-REPLY",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-CANCEL-COMMITTED",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-OPEN-RACE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-CLOSE-PENDING-OPEN",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-REPLAY-REVISION",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-PAYLOAD-IDENTITY",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-INNER-TRANSACTION-REPLAY",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-EMPTY-UNDO",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-INVALID-REVISION",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-QUEUE-CANCEL-LEAK",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-SEND-FAILURE",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-WORKER-PORT-LIFETIME",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-SAVE-BUFFER",
+      "verification_class": "ROUND_TRIP",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    },
+    {
+      "id": "A04-FAILED-OPEN",
+      "verification_class": "NEGATIVE",
+      "harness_id": "A04-SUPER-HARNESS",
+      "external_gate_id": null,
+      "required_evidence_classes": [
+        "SUPER_REVIEW_INDEPENDENT"
+      ],
+      "material_inputs": [
+        "runtime/cad/**",
+        "core/commands/cad/**",
+        "formats/dxf/**"
+      ],
+      "rerun_policy": "FULL_REQUIRED_SET",
+      "applies_to_roles": [
+        "COORDINATOR"
+      ]
+    }
+  ],
+  "harnesses": [
+    {
+      "id": "A04-SUPER-HARNESS",
+      "criteria": [
+        "A04-ISOLATION",
+        "A04-CANCEL-QUEUED",
+        "A04-CANCEL-HOST-REPLY",
+        "A04-CANCEL-COMMITTED",
+        "A04-OPEN-RACE",
+        "A04-CLOSE-PENDING-OPEN",
+        "A04-REPLAY-REVISION",
+        "A04-PAYLOAD-IDENTITY",
+        "A04-INNER-TRANSACTION-REPLAY",
+        "A04-EMPTY-UNDO",
+        "A04-INVALID-REVISION",
+        "A04-QUEUE-CANCEL-LEAK",
+        "A04-SEND-FAILURE",
+        "A04-WORKER-PORT-LIFETIME",
+        "A04-SAVE-BUFFER",
+        "A04-FAILED-OPEN"
+      ],
+      "protected": true,
+      "verification_method_ids": [
+        "A04-ISOLATION",
+        "A04-CANCEL-QUEUED",
+        "A04-CANCEL-HOST-REPLY",
+        "A04-CANCEL-COMMITTED",
+        "A04-OPEN-RACE",
+        "A04-CLOSE-PENDING-OPEN",
+        "A04-REPLAY-REVISION",
+        "A04-PAYLOAD-IDENTITY",
+        "A04-INNER-TRANSACTION-REPLAY",
+        "A04-EMPTY-UNDO",
+        "A04-INVALID-REVISION",
+        "A04-QUEUE-CANCEL-LEAK",
+        "A04-SEND-FAILURE",
+        "A04-WORKER-PORT-LIFETIME",
+        "A04-SAVE-BUFFER",
+        "A04-FAILED-OPEN"
+      ],
+      "manifest_refs": [
+        "A04-SUPER-HARNESS",
+        "ARCHITECTURE",
+        "LOCKFILE"
+      ]
+    }
+  ],
+  "external_gates": [],
+  "source_ref": "reallaksh19/GLB-PCF-2.5-Editor@adc263ae32d01a99d73b4d32a7ca1d604d264db9:docs/CAD_DOCUMENT_ARCHITECTURE.md",
+  "protected_surface": {
+    "harness_digest": "301b26574aeb59edc757191097c8aecfc9d391714aaa9c0308567a0f2f739c1c",
+    "baseline_digest": "126a1b6f30a21040885bc4ddd124db2344998e70abc47d0860770053a1cd4854",
+    "oracle_digests": [],
+    "fixture_digests": [
+      "301b26574aeb59edc757191097c8aecfc9d391714aaa9c0308567a0f2f739c1c"
+    ],
+    "manifest": [
+      {
+        "id": "A04-SUPER-HARNESS",
+        "kind": "HARNESS_ENTRYPOINT",
+        "ref": "tests/cad/A04/super-review.mjs",
+        "digest": "301b26574aeb59edc757191097c8aecfc9d391714aaa9c0308567a0f2f739c1c",
+        "transitive": true
+      },
+      {
+        "id": "ARCHITECTURE",
+        "kind": "POLICY",
+        "ref": "docs/CAD_DOCUMENT_ARCHITECTURE.md",
+        "digest": "170e12ef2973db8f3356fc7628830007ad5dd333f8d63a1578185895e215106a",
+        "transitive": true
+      },
+      {
+        "id": "LOCKFILE",
+        "kind": "LOCKFILE",
+        "ref": "package-lock.json",
+        "digest": "64ca81015543683ddf7763730afd65ea87b04b47244e14c2bb59bc6a5a8b5482",
+        "transitive": true
+      }
+    ],
+    "manifest_digest": "10ffd1bc41794380a7230726a02308fc7b776dc5114e5089e6471a4234b7902e"
+  },
+  "regressions": [],
+  "digest": "bb5fe3a8e90b9d41d7571df0c14ae1eb81d00080538284cf4340a58debbb2d87"
+}
