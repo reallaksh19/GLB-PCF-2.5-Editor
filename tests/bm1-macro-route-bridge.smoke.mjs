@@ -5,6 +5,7 @@ import { createRouteEngine } from '../editor/route-engine.js';
 import { executeMacro, lintMacroScript, listMacroCommands } from '../macro/macro-engine.js';
 import './bm1-break-support.smoke.mjs';
 import './bm1-flange-pair.smoke.mjs';
+import './bm1-runtime-loader.smoke.mjs';
 import './bm1-csv-replay.smoke.mjs';
 import './bm1-ui-hud-command-parity.smoke.mjs';
 

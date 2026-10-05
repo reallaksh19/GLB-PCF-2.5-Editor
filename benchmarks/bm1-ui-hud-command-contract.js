@@ -1,4 +1,5 @@
 import { BM1_CENTERLINE_FIXTURE } from './bm1-centerline.fixture.js';
+import { loadBm1FixtureIntoRouteEngine } from './bm1-runtime-loader.js';
 import { normalizeBenchmark } from './benchmark-normalizer.js';
 
 export const BM1_UI_HUD_CONTRACT_VERSION = 'bm1-ui-hud-command-contract/v1';
@@ -61,12 +62,28 @@ function runMacro(macro, context) {
 }
 
 function runService(service, context) {
-  if (service === 'benchmark.loadFixture') return BM1_CENTERLINE_FIXTURE;
+  if (service === 'benchmark.loadFixture') return loadFixtureService(context);
   if (service === 'benchmark.validate') return normalizeBenchmark(BM1_CENTERLINE_FIXTURE);
   if (service === 'benchmark.diagnostics') return normalizeBenchmark(BM1_CENTERLINE_FIXTURE).diagnostics;
   if (service === 'benchmark.topology') return buildAsciiTopology();
   if (service === 'benchmark.clear') return context.clearBenchmark?.() ?? { cleared: true };
   throw new Error(`Unsupported BM1 service action: ${service}`);
+}
+
+function loadFixtureService(context) {
+  const routeEngine = context.getRouteEngine?.();
+  if (!routeEngine) {
+    return {
+      ...BM1_CENTERLINE_FIXTURE,
+      runtimeLoaded: false,
+      mode: 'fixture-only',
+      fixtureId: BM1_CENTERLINE_FIXTURE.id,
+      fixture: BM1_CENTERLINE_FIXTURE,
+    };
+  }
+  const result = loadBm1FixtureIntoRouteEngine(routeEngine, BM1_CENTERLINE_FIXTURE);
+  context.refreshScene?.();
+  return result;
 }
 
 function runRouteAction(payload, context) {
