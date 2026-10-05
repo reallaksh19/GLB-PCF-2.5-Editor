@@ -10,7 +10,7 @@
  * Pure JS: zero DOM, zero Node runtime imports, zero Three.js.
  */
 
-import { affinePoint, ocsAffine, boundsOfPoints } from '../../../../geometry/cad/affine3d.js';
+import { boundsOfPoints } from '../../../../geometry/cad/affine3d.js';
 import { createDefaultGlyphProvider } from './glyph-provider.js';
 
 /**
@@ -28,245 +28,9 @@ const ATTACHMENT_MAP = {
   7: { h: 'LEFT', v: 'BOTTOM' }, 8: { h: 'CENTER', v: 'BOTTOM' }, 9: { h: 'RIGHT', v: 'BOTTOM' },
 };
 
-/**
- * Strip AutoCAD MTEXT formatting tags and return plain text.
- * @param {string} raw
- * @returns {string}
- */
-export function cleanMTextFormatting(raw) {
-  if (!raw || typeof raw !== 'string') return '';
-  let text = raw;
-
-  // Protect escaped characters first with placeholders so \\P, \{, \} are not consumed as formatting
-  text = text.replace(/\\\\/g, '\u0001');
-  text = text.replace(/\\\{/g, '\u0002');
-  text = text.replace(/\\\}/g, '\u0003');
-
-  // AutoCAD escape sequences
-  text = text.replace(/%%d/gi, '°');
-  text = text.replace(/%%p/gi, '±');
-  text = text.replace(/%%c/gi, 'Ø');
-  text = text.replace(/%%u/gi, '');
-  text = text.replace(/%%o/gi, '');
-  text = text.replace(/%%%/g, '%');
-
-  // Paragraph breaks
-  text = text.replace(/\\P/g, '\n');
-
-  // Stacked fractions \S1/2; -> 1/2
-  text = text.replace(/\\S([^;]+);/g, '$1');
-
-  // Strip formatting tags
-  text = text.replace(/\\[fF][^;]*;/g, '');
-  text = text.replace(/\\[cChHwWqQaAtT][^;]*;/g, '');
-  text = text.replace(/\\[oOlLkK]/g, '');
-
-  // Strip brace groups
-  let prev;
-  do {
-    prev = text;
-    text = text.replace(/\{([^{}]*)\}/g, '$1');
-  } while (text !== prev);
-
-  // Restore escaped characters
-  text = text.replace(/\u0001/g, '\\');
-  text = text.replace(/\u0002/g, '{');
-  text = text.replace(/\u0003/g, '}');
-
-  return text;
-}
-
-/**
- * Parse MTEXT string into structured formatted runs and report diagnostics.
- *
- * @param {string} rawText
- * @param {Object} [baseStyle]
- * @returns {{runs: Array<Object>, cleanText: string, diagnostics: Array<Object>}}
- */
-export function parseMTextRuns(rawText, baseStyle = {}) {
-  const diagnostics = [];
-  if (!rawText || typeof rawText !== 'string') {
-    return { runs: [], cleanText: '', diagnostics };
-  }
-
-  const baseFont = baseStyle.font || 'STANDARD';
-  const baseHeight = Math.max(0.001, Number(baseStyle.height) || 2.5);
-  const baseWidthFactor = Number.isFinite(Number(baseStyle.widthFactor)) ? Number(baseStyle.widthFactor) : 1.0;
-  const baseOblique = Number(baseStyle.obliqueAngle) || 0;
-  const baseColor = baseStyle.color || null;
-
-  const stack = [{
-    font: baseFont, height: baseHeight, widthFactor: baseWidthFactor,
-    obliqueAngle: baseOblique, color: baseColor, underline: false, overline: false, strike: false,
-  }];
-
-  const runs = [];
-  let currentRunText = '';
-
-  function flushRun() {
-    if (!currentRunText) return;
-    const current = stack[stack.length - 1];
-    runs.push({
-      text: currentRunText, font: current.font, height: current.height,
-      widthFactor: current.widthFactor, obliqueAngle: current.obliqueAngle,
-      color: current.color, underline: current.underline, overline: current.overline,
-      strike: current.strike, isStacked: false,
-    });
-    currentRunText = '';
-  }
-
-  let i = 0;
-  const len = rawText.length;
-
-  while (i < len) {
-    const ch = rawText[i];
-
-    // AutoCAD special escape %%%, %%d, %%p, %%c, %%u, %%o
-    if (ch === '%' && rawText[i + 1] === '%') {
-      const code = rawText[i + 2]?.toLowerCase();
-      if (code === 'd') { currentRunText += '°'; i += 3; continue; }
-      if (code === 'p') { currentRunText += '±'; i += 3; continue; }
-      if (code === 'c') { currentRunText += 'Ø'; i += 3; continue; }
-      if (code === '%') { currentRunText += '%'; i += 3; continue; }
-      if (code === 'u') {
-        flushRun();
-        stack[stack.length - 1].underline = !stack[stack.length - 1].underline;
-        i += 3;
-        continue;
-      }
-      if (code === 'o') {
-        flushRun();
-        stack[stack.length - 1].overline = !stack[stack.length - 1].overline;
-        i += 3;
-        continue;
-      }
-    }
-
-    // Scoped formatting block { ... }
-    if (ch === '{') {
-      flushRun();
-      const current = stack[stack.length - 1];
-      stack.push({ ...current });
-      i++;
-      continue;
-    }
-
-    if (ch === '}') {
-      flushRun();
-      if (stack.length > 1) {
-        stack.pop();
-      }
-      i++;
-      continue;
-    }
-
-    // Escape code
-    if (ch === '\\') {
-      const next = rawText[i + 1];
-
-      // Paragraph break
-      if (next === 'P') {
-        flushRun();
-        runs.push({ isLineBreak: true });
-        i += 2;
-        continue;
-      }
-
-      // Escaped characters: \\, \{, \}
-      if (next === '\\' || next === '{' || next === '}') {
-        currentRunText += next;
-        i += 2;
-        continue;
-      }
-
-      // Formatting codes: \F, \f, \C, \c, \H, \h, \W, \w, \Q, \q, \S, \s, \A, \a, \T, \t
-      if (/[fFcChHwWqQsSaAtT]/.test(next)) {
-        const semicolon = rawText.indexOf(';', i + 2);
-        if (semicolon !== -1) {
-          const tagContent = rawText.slice(i + 2, semicolon);
-          flushRun();
-          const current = stack[stack.length - 1];
-          const tagChar = next.toUpperCase();
-
-          switch (tagChar) {
-            case 'F':
-              current.font = tagContent;
-              break;
-            case 'C':
-              current.color = tagContent;
-              break;
-            case 'H':
-              if (tagContent.endsWith('x') || tagContent.endsWith('X')) {
-                const factor = parseFloat(tagContent);
-                if (Number.isFinite(factor) && factor > 0) current.height = baseHeight * factor;
-              } else {
-                const h = parseFloat(tagContent);
-                if (Number.isFinite(h) && h > 0) current.height = h;
-              }
-              break;
-            case 'W':
-              const wf = parseFloat(tagContent);
-              if (Number.isFinite(wf) && wf > 0) current.widthFactor = wf;
-              break;
-            case 'Q':
-              const ob = parseFloat(tagContent);
-              if (Number.isFinite(ob)) current.obliqueAngle = ob;
-              break;
-            case 'S':
-              // Stacked fraction: upper^lower or upper/lower or upper#lower
-              let sep = '^';
-              if (tagContent.includes('/')) sep = '/';
-              else if (tagContent.includes('#')) sep = '#';
-              const parts = tagContent.split(sep);
-              runs.push({
-                isStacked: true,
-                stackUpper: parts[0] || '',
-                stackLower: parts[1] || '',
-                stackType: sep,
-                height: current.height,
-                font: current.font,
-              });
-              break;
-            case 'A':
-            case 'T':
-              diagnostics.push({
-                code: 'MTEXT_UNSUPPORTED_FORMAT_CODE',
-                tag: `\\${next}${tagContent};`,
-                message: `Tag \\${next} is noted but not rendered in 2D baseline layout`,
-              });
-              break;
-          }
-
-          i = semicolon + 1;
-          continue;
-        }
-      }
-
-      // Single-character toggles: \L, \l (underline), \O, \o (overline), \K, \k (strike)
-      if (/[oOlLkK]/.test(next)) {
-        flushRun();
-        const current = stack[stack.length - 1];
-        if (next === 'L' || next === 'l') current.underline = (next === 'L');
-        if (next === 'O' || next === 'o') current.overline = (next === 'O');
-        if (next === 'K' || next === 'k') current.strike = (next === 'K');
-        i += 2;
-        continue;
-      }
-    }
-
-    // Normal character
-    currentRunText += ch;
-    i++;
-  }
-
-  flushRun();
-
-  const cleanText = runs
-    .map(r => r.isLineBreak ? '\n' : r.isStacked ? `${r.stackUpper}/${r.stackLower}` : r.text || '')
-    .join('');
-
-  return { runs, cleanText, diagnostics };
-}
+export { cleanMTextFormatting, parseMTextRuns } from './mtext-format.js';
+import { parseMTextRuns } from './mtext-format.js';
+import { positiveNumber, finiteNumber, nativeValue, textPoint, plainText } from './text-values.js';
 
 /**
  * Perform source-space layout for a standard TEXT entity.
@@ -281,23 +45,23 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
   const geom = entity.geometry || {};
   const attrs = entity.attributes || {};
 
-  const p0 = geom.insertionPoint ? { ...geom.insertionPoint } : { x: geom.point?.x ?? 0, y: geom.point?.y ?? 0, z: geom.point?.z ?? 0 };
-  const p1 = geom.alignmentPoint ? { ...geom.alignmentPoint } : null;
+  const p0 = textPoint(geom.insertionPoint || geom.point);
+  const p1 = geom.alignmentPoint ? textPoint(geom.alignmentPoint) : null;
 
   const hCode = Number(attrs.horizJust ?? attrs.hAlign) || 0;
   const vCode = Number(attrs.vertJust ?? attrs.vAlign) || 0;
   const hAlign = H_ALIGN_CODES[hCode] || 'LEFT';
   const vAlign = V_ALIGN_CODES[vCode] || 'BASELINE';
 
-  const rawText = String(attrs.rawText || attrs.text || '');
-  const cleanText = cleanMTextFormatting(rawText);
+  const rawText = String(attrs.rawText ?? attrs.text ?? '');
+  const cleanText = plainText(rawText);
 
   const rawH = Number(attrs.height ?? geom.height);
   let height = Number.isFinite(rawH) && rawH > 0 ? rawH : 2.5;
-  let widthFactor = Number.isFinite(Number(attrs.widthFactor ?? geom.widthFactor)) ? Number(attrs.widthFactor ?? geom.widthFactor) : 1.0;
-  let rotationDeg = Number(attrs.rotation ?? geom.rotation ?? 0);
-  const obliqueAngle = Number(attrs.obliqueAngle ?? geom.obliqueAngle) || 0;
-  const generationFlags = Number(attrs.flags ?? attrs.generationFlags) || 0;
+  let widthFactor = positiveNumber(attrs.widthFactor ?? geom.widthFactor, 1);
+  let rotationDeg = finiteNumber(attrs.rotation ?? geom.rotation);
+  const obliqueAngle = finiteNumber(attrs.obliqueAngle ?? geom.obliqueAngle);
+  const generationFlags = finiteNumber(attrs.textGenFlags ?? attrs.flags ?? attrs.generationFlags);
   const mirrorX = Boolean(generationFlags & 2);
   const mirrorY = Boolean(generationFlags & 4);
 
@@ -305,27 +69,27 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
   const diagnostics = [];
 
   // DXF Rule: ALIGNED (3) & FIT (5)
-  if (hCode === 3 && p1) {
+  if (hCode === 3 && vCode === 0 && p1) {
     // ALIGNED: scale height and width so text exactly spans p0 -> p1
     const dx = p1.x - p0.x;
     const dy = p1.y - p0.y;
     const targetLength = Math.hypot(dx, dy);
     rotationDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
 
-    const unitMeasure = provider.measureText(cleanText, { height: 1.0, widthFactor: 1.0, styleName: attrs.styleName });
+    const unitMeasure = provider.measureText(cleanText, { height: 1.0, widthFactor: 1.0, styleName: attrs.styleName, fontFile: options.fontFile ?? attrs.fontFile });
     if (unitMeasure.width > 0 && targetLength > 0) {
       height = targetLength / unitMeasure.width;
       widthFactor = 1.0;
     }
     anchorPoint = { ...p0 };
-  } else if (hCode === 5 && p1) {
+  } else if (hCode === 5 && vCode === 0 && p1) {
     // FIT: preserve height, scale width factor so text spans p0 -> p1
     const dx = p1.x - p0.x;
     const dy = p1.y - p0.y;
     const targetLength = Math.hypot(dx, dy);
     rotationDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
 
-    const naturalMeasure = provider.measureText(cleanText, { height, widthFactor: 1.0, styleName: attrs.styleName });
+    const naturalMeasure = provider.measureText(cleanText, { height, widthFactor: 1.0, styleName: attrs.styleName, fontFile: options.fontFile ?? attrs.fontFile });
     if (naturalMeasure.width > 0 && targetLength > 0) {
       widthFactor = targetLength / naturalMeasure.width;
     }
@@ -335,7 +99,7 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
     anchorPoint = { ...p1 };
   }
 
-  const measured = provider.measureText(cleanText, { height, widthFactor, styleName: attrs.styleName });
+  const measured = provider.measureText(cleanText, { height, widthFactor, styleName: attrs.styleName, fontFile: options.fontFile ?? attrs.fontFile });
   const totalWidth = measured.width;
   const totalHeight = height;
   const descent = measured.descent;
@@ -352,18 +116,17 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
   // Vertical offset
   let dy = 0;
   if (vAlign === 'TOP') {
-    dy = -height;
+    dy = -ascent;
   } else if (vAlign === 'MIDDLE') {
-    dy = -height / 2;
+    dy = (descent - ascent) / 2;
   } else if (vAlign === 'BOTTOM') {
-    dy = 0;
+    dy = descent;
   } else {
     // BASELINE: baseline is at anchor y; descent hangs below 0
     dy = 0;
   }
 
-  if (mirrorX) dx = -dx - totalWidth;
-  if (mirrorY) dy = -dy - totalHeight;
+  if (hAlign === 'MIDDLE' && vCode === 0) dy = (descent - ascent) / 2;
 
   const rotationRad = (rotationDeg * Math.PI) / 180;
   const cos = Math.cos(rotationRad);
@@ -376,6 +139,13 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
     { x: dx + totalWidth, y: dy + ascent },
     { x: dx, y: dy + ascent },
   ];
+
+  const shear = Math.tan(obliqueAngle * Math.PI / 180);
+  if (!Number.isFinite(shear)) throw new Error('Invalid annotation oblique angle');
+  for (const corner of localCorners) {
+    corner.x = (corner.x + shear * corner.y) * (mirrorX ? -1 : 1);
+    corner.y *= mirrorY ? -1 : 1;
+  }
 
   // Rotate local corners in text plane and translate by anchor
   const planeCorners = localCorners.map(c => ({
@@ -412,7 +182,7 @@ export function layoutTextEntity(entity, glyphProvider, options = {}) {
     planeCorners,
     localBounds,
     diagnostics,
-    approximate: measured.hasMissingGlyphs || !provider.hasGlyph('A'),
+    approximate: Boolean(measured.approximate || measured.hasMissingGlyphs || !provider.hasGlyph('A')),
   };
 }
 
@@ -429,23 +199,20 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
   const geom = entity.geometry || {};
   const attrs = entity.attributes || {};
 
-  const anchorPoint = {
-    x: geom.insertionPoint?.x ?? geom.point?.x ?? 0,
-    y: geom.insertionPoint?.y ?? geom.point?.y ?? 0,
-    z: geom.insertionPoint?.z ?? geom.point?.z ?? 0,
-  };
+  const anchorPoint = textPoint(geom.insertionPoint || geom.point);
 
-  const rawText = String(attrs.rawText || attrs.text || '');
+  const rawText = String(attrs.rawText ?? attrs.text ?? '');
   const rawH = Number(attrs.height ?? geom.height);
   const baseHeight = Number.isFinite(rawH) && rawH > 0 ? rawH : 2.5;
-  const baseWidthFactor = Number.isFinite(Number(attrs.widthFactor ?? geom.widthFactor)) ? Number(attrs.widthFactor ?? geom.widthFactor) : 1.0;
-  const refWidth = Math.max(0, Number(attrs.referenceWidth ?? attrs.width) || 0);
+  const baseWidthFactor = positiveNumber(attrs.widthFactor ?? geom.widthFactor, 1);
+  const refWidth = Math.max(0, finiteNumber(attrs.rectWidth ?? attrs.referenceWidth ?? attrs.width));
 
   const attachmentCode = Number(attrs.attachmentPoint ?? geom.attachmentPoint) || 1;
   const attachment = ATTACHMENT_MAP[attachmentCode] || { h: 'LEFT', v: 'TOP' };
 
-  let rotationDeg = Number(attrs.rotation ?? geom.rotation ?? 0);
-  if (geom.directionVector && (geom.directionVector.x !== 0 || geom.directionVector.y !== 0)) {
+  const nativeAngle = nativeValue(entity, 50, null);
+  let rotationDeg = nativeAngle !== null ? finiteNumber(nativeAngle) * 180 / Math.PI : finiteNumber(attrs.rotation ?? geom.rotation);
+  if (nativeAngle === null && geom.directionVector && (geom.directionVector.x !== 0 || geom.directionVector.y !== 0)) {
     rotationDeg = (Math.atan2(geom.directionVector.y, geom.directionVector.x) * 180) / Math.PI;
   }
   const rotationRad = (rotationDeg * Math.PI) / 180;
@@ -465,11 +232,13 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
     lines.push({
       runs: currentLineRuns,
       width: currentLineWidth,
+      height: currentLineRuns.reduce((h,r)=>Math.max(h,r.height || baseHeight),baseHeight),
     });
     currentLineRuns = [];
     currentLineWidth = 0;
   }
 
+  const runFont = run => provider.resolveFont?.(run.font?.split('|')[0], options.fontFile) || {name:run.font};
   for (const run of runs) {
     if (run.isLineBreak) {
       pushLine();
@@ -478,8 +247,8 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
 
     if (run.isStacked) {
       const stackedH = run.height * 0.7;
-      const upperM = provider.measureText(run.stackUpper, { height: stackedH, widthFactor: baseWidthFactor });
-      const lowerM = provider.measureText(run.stackLower, { height: stackedH, widthFactor: baseWidthFactor });
+      const upperM = provider.measureText(run.stackUpper, { height: stackedH, widthFactor: baseWidthFactor, font: runFont(run), styleName: run.font });
+      const lowerM = provider.measureText(run.stackLower, { height: stackedH, widthFactor: baseWidthFactor, font: runFont(run), styleName: run.font });
       const stackWidth = Math.max(upperM.width, lowerM.width);
       run.width = stackWidth;
       currentLineRuns.push(run);
@@ -490,7 +259,7 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
     const runText = run.text || '';
     if (!refWidth || refWidth <= 0) {
       // No word wrapping
-      const m = provider.measureText(runText, { height: run.height, widthFactor: run.widthFactor });
+      const m = provider.measureText(runText, { height: run.height, widthFactor: run.widthFactor, font: runFont(run), styleName: run.font });
       run.width = m.width;
       currentLineRuns.push(run);
       currentLineWidth += m.width;
@@ -501,7 +270,7 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
     const words = runText.split(/(\s+)/);
     for (const w of words) {
       if (!w) continue;
-      const wm = provider.measureText(w, { height: run.height, widthFactor: run.widthFactor });
+      const wm = provider.measureText(w, { height: run.height, widthFactor: run.widthFactor, font: runFont(run), styleName: run.font });
       if (currentLineWidth + wm.width > refWidth && currentLineWidth > 0 && !/^\s+$/.test(w)) {
         pushLine();
       }
@@ -515,13 +284,15 @@ export function layoutMTextEntity(entity, glyphProvider, options = {}) {
   }
 
   pushLine();
+  for (const run of runs) if (run.obliqueAngle) diagnostics.push({code:'MTEXT_APPROXIMATE_OBLIQUE',message:'Run shear requires glyph rendering; bounds conservatively include shear'});
 
   // Compute block metrics
-  const lineSpacingFactor = Number(attrs.lineSpacingFactor) || 1.0;
+  const lineSpacingFactor = positiveNumber(attrs.lineSpacingFactor, 1);
   const lineHeight = baseHeight * lineSpacingFactor * 1.666;
   const maxLineWidth = lines.reduce((m, l) => Math.max(m, l.width), 0);
-  const totalWidth = refWidth > 0 ? Math.max(refWidth, maxLineWidth) : maxLineWidth;
-  const totalHeight = Math.max(baseHeight, (lines.length - 1) * lineHeight + baseHeight);
+  const shearPad = runs.reduce((m,r)=>Math.max(m,Math.abs(Math.tan((r.obliqueAngle || 0)*Math.PI/180))*(r.height || baseHeight)),0);
+  const totalWidth = (refWidth > 0 ? Math.max(refWidth, maxLineWidth) : maxLineWidth) + 2*shearPad;
+  const totalHeight = lines.reduce((sum,line,i)=>sum+line.height+(i ? Math.max(0,lineHeight-baseHeight) : 0),0);
 
   // Horizontal offset
   let dx = 0;

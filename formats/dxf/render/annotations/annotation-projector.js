@@ -12,6 +12,7 @@
 import { affinePoint, affineVector, ocsAffine, boundsOfPoints } from '../../../../geometry/cad/affine3d.js';
 import { occurrenceIdentity } from '../dxf-occurrence.js';
 import { layoutTextEntity, layoutMTextEntity } from './text-layout-engine.js';
+import { annotationNormal, mtextFrame } from './annotation-frame.js';
 import { createDefaultGlyphProvider } from './glyph-provider.js';
 
 /**
@@ -42,6 +43,7 @@ export function projectAnnotation(entity, resolvedStyle, options = {}) {
     throw new Error('projectAnnotation requires a valid entity with document-scoped id');
   }
 
+  if (!['TEXT','MTEXT'].includes(entity.type)) throw new Error('Annotation projection supports TEXT/MTEXT only');
   const { transform, blockContext, glyphProvider } = options;
   const provider = glyphProvider || createDefaultGlyphProvider();
 
@@ -53,13 +55,14 @@ export function projectAnnotation(entity, resolvedStyle, options = {}) {
   const basePoint = blockContext?.basePoint;
 
   // Extrusion / OCS transformation
-  const plane = ocsAffine(entity.geometry?.extrusion);
+  const plane = ocsAffine(annotationNormal(entity));
 
   // Layout text in source text plane
   const isMText = entity.type === 'MTEXT';
+  const layoutOptions = {...options,fontFile: options.fontFile ?? resolvedStyle?.fontFile};
   const layout = isMText
-    ? layoutMTextEntity(entity, provider, options)
-    : layoutTextEntity(entity, provider, options);
+    ? layoutMTextEntity(entity, provider, layoutOptions)
+    : layoutTextEntity(entity, provider, layoutOptions);
 
   // Map text plane point to 3D world space
   const toWorld = p => {
@@ -73,18 +76,25 @@ export function projectAnnotation(entity, resolvedStyle, options = {}) {
     return transform ? affineVector(local, transform.matrix) : local;
   };
 
+  const frame = isMText ? mtextFrame(entity,layout.rotationRad) : null;
   const worldPosition = toWorld(layout.anchorPoint);
   const worldAlignmentPoint = layout.alignmentPoint ? toWorld(layout.alignmentPoint) : null;
 
   // Calculate oriented axes
   const rad = layout.rotationRad || 0;
-  const localX = { x: Math.cos(rad), y: Math.sin(rad), z: 0 };
-  const localY = { x: -Math.sin(rad), y: Math.cos(rad), z: 0 };
+  const localX = frame?.x || { x: Math.cos(rad)*(layout.mirrorX?-1:1), y: Math.sin(rad)*(layout.mirrorX?-1:1), z: 0 };
+  const shear=Math.tan((layout.obliqueAngle || 0)*Math.PI/180);
+  const sx=layout.mirrorX?-1:1,sy=layout.mirrorY?-1:1;
+  const localY = frame?.y || { x: shear*sx*Math.cos(rad)-sy*Math.sin(rad), y: shear*sx*Math.sin(rad)+sy*Math.cos(rad), z: 0 };
   const worldXAxis = toWorldVector(localX);
   const worldYAxis = toWorldVector(localY);
 
   // Transform all 2D plane bounding corners into 3D world space
-  const worldCorners = layout.planeCorners.map(toWorld);
+  const worldCorners = isMText ? layout.localCorners.map(c=>toWorld({
+    x:layout.anchorPoint.x+c.x*frame.x.x+c.y*frame.y.x,
+    y:layout.anchorPoint.y+c.x*frame.x.y+c.y*frame.y.y,
+    z:layout.anchorPoint.z+c.x*frame.x.z+c.y*frame.y.z,
+  })) : layout.planeCorners.map(toWorld);
   const worldBounds = boundsOfPoints(worldCorners);
 
   // Glyph coverage report
@@ -123,13 +133,15 @@ export function projectAnnotation(entity, resolvedStyle, options = {}) {
       ...worldBounds,
       corners: worldCorners,
       approximate: Boolean(layout.approximate),
-      reason: layout.approximate ? 'proportional font metrics estimation' : undefined,
+      reason: layout.approximate ? 'Synthetic font metrics or partial formatting; external visual acceptance pending' : undefined,
     },
     coverage: {
       totalMeasured: coverage.totalMeasured,
       totalFallback: coverage.totalFallback,
       coverageRatio: coverage.coverageRatio,
       missingGlyphs: coverage.missingGlyphs,
+      approximate: Boolean(coverage.approximate),
+      fontResourceVerified: coverage.fontResourceVerified === true,
     },
     diagnostics: layout.diagnostics || [],
     approximate: Boolean(layout.approximate),
