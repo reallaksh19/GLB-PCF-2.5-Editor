@@ -12,6 +12,7 @@
  * Touched source tags stay available to the native byte-overlay writer.
  */
 
+import {insertionAnchor} from '../../geometry/cad-source-plane.js';
 import { CadCommand } from './cad-command.js';
 import { ChangeSet, snapshotEntityState, restoreEntityState } from './change-set.js';
 
@@ -283,7 +284,7 @@ export class GripEditCommand extends CadCommand {
 
     this.beforeSnapshot = snapshotEntityState(entity);
     const g = entity.geometry;
-    const target=entity.type==='LINE' ? (this.gripKey===0 || this.gripKey==='start' ? g.start : g.end) : g.center || g.point || g.insertionPoint || g.vertices?.[Number(this.gripKey)];
+    const target=entity.type==='LINE' ? (this.gripKey===0 || this.gripKey==='start' ? g.start : g.end) : g.center || insertionAnchor(entity) || g.vertices?.[Number(this.gripKey)];
     const point={...this.newPoint,z:this.newPoint.z ?? target?.z ?? 0};
 
     if (entity.type === 'LINE') {
@@ -306,7 +307,7 @@ export class GripEditCommand extends CadCommand {
       if (Array.isArray(g.vertices) && idx >= 0 && idx < g.vertices.length) {
         g.vertices[idx].x = this.newPoint.x;
         g.vertices[idx].y = this.newPoint.y;
-        if (this.newPoint.z != null && g.vertices[idx].z != null) {
+        if (this.newPoint.z != null && (g.is3D || (entity.attributes.flags&8))) {
           g.vertices[idx].z = point.z;
         }
       }
@@ -315,13 +316,14 @@ export class GripEditCommand extends CadCommand {
         if (sub.geometry?.point) {
           sub.geometry.point.x = this.newPoint.x;
           sub.geometry.point.y = this.newPoint.y;
-          sub.geometry.point.z = point.z;
+          if(g.is3D || (entity.attributes.flags&8))sub.geometry.point.z = point.z;
         }
       }
     } else if (entity.type === 'POINT') {
       g.point = { ...point };
     } else if (entity.type === 'TEXT' || entity.type === 'MTEXT' || entity.type === 'INSERT') {
-      g.insertionPoint = { ...point };
+      const anchor=insertionAnchor(entity),dx=point.x-anchor.x,dy=point.y-anchor.y,dz=point.z-(anchor.z ?? 0);
+      for(const key of ['insertionPoint','alignmentPoint','point'])if(g[key])g[key]={x:g[key].x+dx,y:g[key].y+dy,z:(g[key].z ?? 0)+dz};
     }
 
     entity.markModified();

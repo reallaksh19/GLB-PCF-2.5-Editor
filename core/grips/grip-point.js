@@ -46,7 +46,7 @@ export class GripPoint {
     if (!id) throw new Error('GripPoint requires an id');
     if (!entityId) throw new Error('GripPoint requires an entityId');
     if (!role) throw new Error('GripPoint requires a role');
-    if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z ?? 0)) {
       throw new Error('GripPoint requires valid point coordinates {x, y}');
     }
 

@@ -42,6 +42,8 @@ function scalePoint(p, center, sx, sy, sz = 1) {
 }
 
 function applyTranslation(entity, dx, dy, dz, seen=new Set()) {
+  const is2D=['LWPOLYLINE','POLYLINE'].includes(entity.type) && !(entity.attributes.flags&8);
+  const vertexDz=is2D?0:dz;
   const g = entity.geometry;
   if (!g) return;
 
@@ -56,7 +58,7 @@ function applyTranslation(entity, dx, dy, dz, seen=new Set()) {
 
   if (Array.isArray(g.vertices)) {
     for (const v of g.vertices) {
-      if (v && !seen.has(v)) {seen.add(v); translatePoint(v, dx, dy, dz);}
+      if (v && !seen.has(v)) {seen.add(v); translatePoint(v, dx, dy, vertexDz);}
     }
   }
 
@@ -82,7 +84,7 @@ function applyTranslation(entity, dx, dy, dz, seen=new Set()) {
   // Also translate subEntities if compound entity (e.g. POLYLINE with VERTEX records)
   if (Array.isArray(entity.attributes?.subEntities)) {
     for (const sub of entity.attributes.subEntities) {
-      applyTranslation(sub, dx, dy, dz,seen);
+      applyTranslation(sub, dx, dy, is2D?0:dz,seen);
     }
   }
 }
@@ -158,6 +160,8 @@ function applyRotation(entity, center, angleDeg, seen=new Set()) {
 }
 
 function applyScaling(entity, center, sx, sy, sz, seen=new Set()) {
+  const is2D=['LWPOLYLINE','POLYLINE'].includes(entity.type) && !(entity.attributes.flags&8);
+  const vertexCenter=is2D?{...center,z:0}:center,vertexSz=is2D?1:sz;
   const g = entity.geometry;
   if (!g) return;
 
@@ -172,7 +176,7 @@ function applyScaling(entity, center, sx, sy, sz, seen=new Set()) {
 
   if (Array.isArray(g.vertices)) {
     for (const v of g.vertices) {
-      if (v && !seen.has(v)) {seen.add(v); scalePoint(v, center, sx, sy, sz);}
+      if (v && !seen.has(v)) {seen.add(v); scalePoint(v, vertexCenter, sx, sy, vertexSz);}
     }
   }
 
@@ -221,7 +225,7 @@ function applyScaling(entity, center, sx, sy, sz, seen=new Set()) {
 
   if (Array.isArray(entity.attributes?.subEntities)) {
     for (const sub of entity.attributes.subEntities) {
-      applyScaling(sub, center, sx, sy, sz,seen);
+      applyScaling(sub, vertexCenter, sx, sy, vertexSz,seen);
     }
   }
 }

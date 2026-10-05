@@ -1,3 +1,4 @@
+import {sourcePlaneZ} from '../geometry/cad-source-plane.js';
 /**
  * core/grips/grip-edit-command.js
  *
@@ -28,16 +29,16 @@ export class GripEditCommand extends CadCommand {
 
     if (!entityId) throw new Error('GripEditCommand requires entityId');
     if (!grip) throw new Error('GripEditCommand requires grip');
-    if (!newPosition || typeof newPosition.x !== 'number' || typeof newPosition.y !== 'number') {
+    if (!newPosition || !Number.isFinite(newPosition.x) || !Number.isFinite(newPosition.y) || (newPosition.z!=null && !Number.isFinite(newPosition.z))) {
       throw new Error('GripEditCommand requires valid newPosition {x, y}');
     }
 
     this.entityId = entityId;
-    this.grip = grip;
+    this.grip = {entityId:grip.entityId,role:grip.role,vertexIndex:grip.vertexIndex,point:{...grip.point}};
     this.newPosition = {
       x: Number(newPosition.x),
       y: Number(newPosition.y),
-      z: Number(newPosition.z ?? 0),
+      z: Number(newPosition.z ?? (basePosition || grip.point)?.z ?? 0),
     };
     const base = basePosition || grip.point || newPosition;
     this.basePosition = {
@@ -49,7 +50,22 @@ export class GripEditCommand extends CadCommand {
     this.preSnapshot = null;
   }
 
+  validateOperands(document,[entity]) {
+    const g=entity.geometry,role=this.grip.role,n=this.grip.vertexIndex,z=sourcePlaneZ(entity);
+    if(z==null || this.grip.entityId!==entity.id)throw new Error('Unsupported or mismatched source grip');
+    const roles={LINE:['START','END','MID'],CIRCLE:['CENTER','QUADRANT'],ARC:['CENTER','START','END','MID'],LWPOLYLINE:['VERTEX','MID'],POLYLINE:['VERTEX','MID'],TEXT:['INSERTION'],MTEXT:['INSERTION'],INSERT:['INSERTION']};
+    if(!roles[entity.type]?.includes(role))throw new Error('Unsupported native grip role');
+    if(g.vertices && (!Number.isInteger(n) || n<0 || n>=g.vertices.length || (role==='MID' && !(g.closed ?? g.isClosed) && n===g.vertices.length-1)))throw new Error('Invalid native grip vertex');
+    if(g.vertices && !(entity.attributes.flags&8) && this.newPosition.z!==z)throw new Error('2D polyline vertex must retain source elevation');
+    if(['CIRCLE','ARC'].includes(entity.type) && role!=='CENTER') {
+      if(this.newPosition.z!==z || Math.hypot(this.newPosition.x-g.center.x,this.newPosition.y-g.center.y)<=1e-9)throw new Error('Invalid circular grip target plane/radius');
+    }
+    if(entity.type==='INSERT' && entity.attributes.attribs?.length)throw new Error('Owned INSERT grip requires native association closure');
+    for(const point of [this.newPosition,this.basePosition])if(!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z))throw new Error('Non-finite grip operand');
+  }
+
   execute(document) {
+    this.validate(document);
     const entity = (typeof document.getEntity === 'function' ? document.getEntity(this.entityId) : null)
       || document.entitiesById?.get(this.entityId)
       || (Array.isArray(document.entities) ? document.entities.find((e) => e.id === this.entityId || e.handle === this.entityId) : null);
@@ -126,7 +142,7 @@ export class GripEditCommand extends CadCommand {
           const v = vertices[vIdx];
           v.x = this.newPosition.x;
           v.y = this.newPosition.y;
-          if (this.newPosition.z != null) v.z = this.newPosition.z;
+          if (g.is3D || (entity.attributes.flags&8)) v.z = this.newPosition.z;
         } else if (role === GripRole.MID && vIdx != null && vIdx >= 0 && vIdx < vertices.length) {
           // Move the segment: translate vertex vIdx and the next vertex by delta
           const nextIdx = (vIdx + 1) % vertices.length;
@@ -142,7 +158,7 @@ export class GripEditCommand extends CadCommand {
       case 'MTEXT':
       case 'INSERT': {
         if (role === GripRole.INSERTION) {
-          g.point = { x: this.newPosition.x, y: this.newPosition.y, z: this.newPosition.z };
+          for(const key of ['insertionPoint','alignmentPoint','point'])if(g[key])g[key]={x:g[key].x+dx,y:g[key].y+dy,z:(g[key].z ?? 0)+dz};
         }
         break;
       }
@@ -151,10 +167,11 @@ export class GripEditCommand extends CadCommand {
         break;
     }
 
-    // 3. Invalidate raw tags on modified entity
-    if (entity.source) {
-      entity.source.rawTags = null;
+    // Compound native VERTEX views remain consistent with parent geometry.
+    if(entity.type==='POLYLINE')for(let i=0;i<g.vertices.length;i++) {
+      const child=entity.attributes.subEntities?.[i];if(child?.geometry.point)Object.assign(child.geometry.point,{x:g.vertices[i].x,y:g.vertices[i].y,z:g.vertices[i].z ?? 0});
     }
+    // Original source tokens stay available to exact native Save overlays.
     entity.state = entity.state || {};
     entity.state.modified = true;
 

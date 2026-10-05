@@ -4,7 +4,7 @@ import {ChangeSet} from './change-set.js';
 import {validateResult} from './command-validation.js';
 import {atomically} from './transaction-state.js';
 function fingerprint(command) {
-  const keys=['name','entityIds','sourceEntityIds','entityId','dx','dy','dz','basePoint','angleDeg','sx','sy','sz','properties','updates','gripKey','newPoint','entity1Id','entity2Id','cuttingEdgeIds','boundaryEdgeIds','clickPoint','pickPoint','sidePoint','radius','distance'];
+  const keys=['name','entityIds','sourceEntityIds','entityId','dx','dy','dz','basePoint','angleDeg','sx','sy','sz','properties','updates','gripKey','newPoint','entity1Id','entity2Id','cuttingEdgeIds','boundaryEdgeIds','clickPoint','pickPoint','sidePoint','radius','distance','newPosition','basePosition','grip'];
   return JSON.stringify(command.commands ? command.commands.map(fingerprint) : Object.fromEntries(keys.filter(k=>command[k]!==undefined).map(k=>[k,command[k]])));
 }
 /** Source transactions commit once; Undo advances revision but restores prior content identity. */

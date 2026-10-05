@@ -1,3 +1,6 @@
+import {SpatialIndex2D} from '../spatial/spatial-index-2d.js';
+import {sourceVertices,sourcePlaneZ,insertionAnchor} from '../geometry/cad-source-plane.js';
+import {eligibleSnapEntity} from '../geometry/cad-snap-candidates.js';
 /**
  * core/grips/grip-manager.js
  *
@@ -21,6 +24,7 @@ export class GripManager {
     this.pickTolerance = options.pickTolerance ?? 10.0;
     this.activeGrips = new Map(); // id -> GripPoint
     this.hotGripId = null;
+    this.gripIndex=new SpatialIndex2D();
   }
 
   /**
@@ -28,6 +32,7 @@ export class GripManager {
    */
   clear() {
     this.activeGrips.clear();
+    this.gripIndex.clear();
     this.hotGripId = null;
   }
 
@@ -36,14 +41,16 @@ export class GripManager {
    * @param {Array<import('../../formats/dxf/model/dxf-entity.js').DxfEntity>} entities
    * @returns {Array<GripPoint>}
    */
-  updateGripsForEntities(entities = []) {
+  updateGripsForEntities(entities = [],document=null,policy={}) {
     this.clear();
     if (!Array.isArray(entities)) return [];
 
     for (const entity of entities) {
+      if(!eligibleSnapEntity(entity,document,{...policy,editableOnly:true}))continue;
       const entityGrips = this.extractEntityGrips(entity);
       for (const grip of entityGrips) {
         this.activeGrips.set(grip.id, grip);
+        this.gripIndex.insert({id:grip.id,minX:grip.point.x,minY:grip.point.y,maxX:grip.point.x,maxY:grip.point.y,grip});
       }
     }
 
@@ -56,7 +63,7 @@ export class GripManager {
    * @returns {Array<GripPoint>}
    */
   extractEntityGrips(entity) {
-    if (!entity || !entity.geometry) return [];
+    if (!entity || !entity.id || entity.state?.deleted || sourcePlaneZ(entity)==null) return [];
     const grips = [];
     const id = entity.id;
     const g = entity.geometry;
@@ -164,7 +171,7 @@ export class GripManager {
 
       case 'LWPOLYLINE':
       case 'POLYLINE': {
-        const vertices = g.vertices || [];
+        const vertices = sourceVertices(entity);
         vertices.forEach((v, idx) => {
           grips.push(new GripPoint({
             id: `grip:${id}:VERTEX:${idx}`,
@@ -175,7 +182,7 @@ export class GripManager {
           }));
         });
 
-        const count = g.isClosed ? vertices.length : vertices.length - 1;
+        const count = (g.closed ?? g.isClosed) ? vertices.length : vertices.length - 1;
         for (let i = 0; i < count; i++) {
           const p1 = vertices[i];
           const p2 = vertices[(i + 1) % vertices.length];
@@ -208,7 +215,8 @@ export class GripManager {
       case 'TEXT':
       case 'MTEXT':
       case 'INSERT': {
-        const pt = g.point || { x: 0, y: 0 };
+        const pt = insertionAnchor(entity);
+        if(!pt)break;
         grips.push(new GripPoint({
           id: `grip:${id}:INSERTION`,
           entityId: id,
@@ -236,9 +244,10 @@ export class GripManager {
     let closestGrip = null;
     let minDist = Infinity;
 
-    for (const grip of this.activeGrips.values()) {
+    if(!Number.isFinite(cursorPoint.x) || !Number.isFinite(cursorPoint.y) || !Number.isFinite(tolerance) || tolerance<0)throw new Error('Invalid grip aperture');
+    for (const {grip} of this.gripIndex.searchPoint(cursorPoint.x,cursorPoint.y,tolerance)) {
       const d = pointDistance(cursorPoint, grip.point);
-      if (d <= tolerance && d < minDist) {
+      if (d <= tolerance && (d < minDist || (d===minDist && grip.id.localeCompare(closestGrip.id)<0))) {
         minDist = d;
         closestGrip = grip;
       }

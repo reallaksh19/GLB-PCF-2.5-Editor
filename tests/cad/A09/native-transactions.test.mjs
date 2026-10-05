@@ -67,3 +67,11 @@ test('Real native spatial index updates; untouched render primitives retain iden
  IncrementalUpdater.reconcile(h.execute(new MoveEntitiesCommand([id],100,0),d),r,ix,d);
  assert.equal(r.getPrimitivesForEntity(d.entities[1].id)[0],untouched);assert.deepEqual(ix.searchPoint(100,0,0.1),[id]);assert.ok(!ix.searchPoint(0,0,0.1).includes(id));
 });
+test('Native LW Move in Z changes elevation without adding a per-vertex field rejected by Save',()=>{
+ const text=wrap(['0','LWPOLYLINE','5','A1','90','2','38','5','10','0','20','0','10','2','20','0']),d=P.parse(text),h=new CommandHistory();
+ h.execute(new MoveEntitiesCommand([d.entities[0].id],2,3,1),d);const next=P.parse(W.writeBytes(d));assert.equal(next.entities[0].geometry.elevation,6);assert.equal(next.entities[0].geometry.vertices[0].x,2);assert.ok(!('z' in d.entities[0].geometry.vertices[0]));h.undo(d);assert.equal(W.write(d),text);
+});
+test('The core text-grip command also preserves native aligned anchors and omitted Z',()=>{
+ const text=wrap(['0','TEXT','5','A1','10','10','20','20','30','5','11','15','21','25','31','5','72','1','40','2','1','Aligned']),d=P.parse(text),h=new CommandHistory();
+ h.execute(new GripEditCommand(d.entities[0].id,'insertion',{x:25,y:35}),d);const next=P.parse(W.writeBytes(d)).entities[0];assert.equal(next.geometry.insertionPoint.x,20);assert.equal(next.geometry.alignmentPoint.x,25);assert.equal(next.geometry.insertionPoint.z,5);h.undo(d);assert.equal(W.write(d),text);
+});

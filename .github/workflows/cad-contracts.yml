@@ -45,3 +45,9 @@ jobs:
       - name: Existing native high-ROI edit controls when available
         if: ${{ hashFiles('tests/dxf/dxf-cad-editing.test.mjs') != '' }}
         run: node --test tests/dxf/dxf-cad-editing.test.mjs
+      - name: Native grip and snap regressions when available
+        if: ${{ hashFiles('tests/cad/A07/*.test.mjs') != '' }}
+        run: node --test tests/cad/A07/*.test.mjs
+      - name: Existing grip and snap controls when available
+        if: ${{ hashFiles('tests/dxf/dxf-grips-snaps.test.mjs') != '' }}
+        run: node --test tests/dxf/dxf-grips-snaps.test.mjs

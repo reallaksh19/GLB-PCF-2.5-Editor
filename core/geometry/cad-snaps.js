@@ -1,3 +1,5 @@
+import {sourceVertices,sourcePlaneZ} from './cad-source-plane.js';
+import {snapEntities} from './cad-snap-candidates.js';
 /**
  * core/geometry/cad-snaps.js
  *
@@ -147,7 +149,7 @@ export function nearestPointOnArc(p, center, radius, startAngle = null, endAngle
  * Extract snap candidates from a single entity according to requested modes.
  */
 export function extractEntitySnaps(entity, modes = DEFAULT_SNAP_MODES, basePoint = null) {
-  if (!entity || !entity.geometry) return [];
+  if (!entity || entity.state?.deleted || sourcePlaneZ(entity)==null) return [];
   const g = entity.geometry;
   const candidates = [];
   const entityId = entity.id;
@@ -259,7 +261,7 @@ export function extractEntitySnaps(entity, modes = DEFAULT_SNAP_MODES, basePoint
 
     case 'LWPOLYLINE':
     case 'POLYLINE': {
-      const vertices = g.vertices || [];
+      const vertices = sourceVertices(entity);
       if (vertices.length === 0) break;
 
       if (want(CadSnapMode.END)) {
@@ -273,7 +275,7 @@ export function extractEntitySnaps(entity, modes = DEFAULT_SNAP_MODES, basePoint
         });
       }
 
-      const count = g.isClosed ? vertices.length : vertices.length - 1;
+      const count = (g.closed ?? g.isClosed) ? vertices.length : vertices.length - 1;
       for (let i = 0; i < count; i++) {
         const p1 = vertices[i];
         const p2 = vertices[(i + 1) % vertices.length];
@@ -358,24 +360,8 @@ export class CadSnapService {
 
     if (!cursorPoint) return null;
 
-    let candidateEntities = entities;
-    if (spatialIndex && tolerance > 0) {
-      const queryBox = {
-        minX: (cursorPoint.x ?? 0) - tolerance,
-        minY: (cursorPoint.y ?? 0) - tolerance,
-        maxX: (cursorPoint.x ?? 0) + tolerance,
-        maxY: (cursorPoint.y ?? 0) + tolerance,
-      };
-      const found = typeof spatialIndex.search === 'function'
-        ? spatialIndex.search(queryBox)
-        : typeof spatialIndex.query === 'function'
-        ? spatialIndex.query(queryBox)
-        : [];
-      const idSet = new Set(
-        found.map((item) => (typeof item === 'string' ? item : item?.id)).filter(Boolean)
-      );
-      candidateEntities = entities.filter((e) => idSet.has(e.id));
-    }
+    if(!Number.isFinite(cursorPoint.x) || !Number.isFinite(cursorPoint.y) || !Number.isFinite(tolerance) || tolerance<0)throw new Error('Invalid snap aperture');
+    const candidateEntities=snapEntities({...params,tolerance});
 
     const allCandidates = [];
 
@@ -396,13 +382,14 @@ export class CadSnapService {
         for (let j = i + 1; j < candidateEntities.length; j++) {
           const e1 = candidateEntities[i];
           const e2 = candidateEntities[j];
+          const z=sourcePlaneZ(e1);if(z==null || Math.abs(z-sourcePlaneZ(e2))>1e-8)continue;
           const intersections = findEntityIntersections(e1, e2);
           for (const pt of intersections) {
             const d = pointDistance(cursorPoint, pt);
             if (d <= tolerance) {
               allCandidates.push({
                 mode: CadSnapMode.INT,
-                point: { x: pt.x, y: pt.y, z: pt.z ?? 0 },
+                point: { x: pt.x, y: pt.y, z },
                 distance: d,
                 entityId: e1.id,
                 secondaryEntityId: e2.id,
@@ -450,7 +437,7 @@ export class CadSnapService {
       if (prioA !== prioB) {
         return prioA - prioB;
       }
-      return String(a.entityId).localeCompare(String(b.entityId));
+      return String(a.entityId).localeCompare(String(b.entityId)) || String(a.secondaryEntityId || '').localeCompare(String(b.secondaryEntityId || '')) || String(a.subIndex ?? '').localeCompare(String(b.subIndex ?? ''));
     });
 
     return pool[0];
@@ -460,7 +447,7 @@ export class CadSnapService {
    * Calculate nearest point on an entity geometry to a given query point.
    */
   calculateNearestPoint(entity, p) {
-    if (!entity || !entity.geometry) return null;
+    if (!entity || entity.state?.deleted || sourcePlaneZ(entity)==null) return null;
     const g = entity.geometry;
 
     switch (entity.type) {
@@ -478,11 +465,11 @@ export class CadSnapService {
       }
       case 'LWPOLYLINE':
       case 'POLYLINE': {
-        const vertices = g.vertices || [];
+        const vertices = sourceVertices(entity);
         if (vertices.length < 2) return null;
         let closest = null;
         let minDist = Infinity;
-        const count = g.isClosed ? vertices.length : vertices.length - 1;
+        const count = (g.closed ?? g.isClosed) ? vertices.length : vertices.length - 1;
         for (let i = 0; i < count; i++) {
           const p1 = vertices[i];
           const p2 = vertices[(i + 1) % vertices.length];

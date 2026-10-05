@@ -27,21 +27,23 @@ import {
   GripEditCommand,
 } from '../../core/grips/index.js';
 
+let fixtureId=0;
+class SampleEntity extends DxfEntity {constructor(params){super({...params,id:params.id || 'fixture:'+ (++fixtureId)});}}
 test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
   const snapService = new CadSnapService({ tolerance: 5.0 });
 
   await t.test('END snap: locates endpoints on LINE, ARC, and LWPOLYLINE', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'L1',
       geometry: { start: { x: 10, y: 10 }, end: { x: 50, y: 10 } },
     });
-    const arc = new DxfEntity({
+    const arc = new SampleEntity({
       type: 'ARC',
       handle: 'A1',
       geometry: { center: { x: 0, y: 0 }, radius: 10, startAngle: 0, endAngle: 90 },
     });
-    const poly = new DxfEntity({
+    const poly = new SampleEntity({
       type: 'LWPOLYLINE',
       handle: 'P1',
       geometry: {
@@ -76,19 +78,19 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
   });
 
   await t.test('MID snap: calculates exact midpoints on LINE, ARC, and LWPOLYLINE with bulge', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'L2',
       geometry: { start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
     });
     // Arc from 0 to 180 deg, radius 50 -> midpoint is at 90 deg: (0, 50)
-    const arc = new DxfEntity({
+    const arc = new SampleEntity({
       type: 'ARC',
       handle: 'A2',
       geometry: { center: { x: 0, y: 0 }, radius: 50, startAngle: 0, endAngle: 180 },
     });
     // Polyline semicircle with bulge 1 from (0, 0) to (0, 40)
-    const polyBulge = new DxfEntity({
+    const polyBulge = new SampleEntity({
       type: 'LWPOLYLINE',
       handle: 'P2',
       geometry: {
@@ -120,18 +122,18 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
     assert.ok(Math.abs(snapArcMid.point.y - 50) < 1e-6);
 
     const snapPolyMid = snapService.snap({
-      cursorPoint: { x: -20, y: 20 },
+      cursorPoint: { x: 20, y: 20 },
       entities: [polyBulge],
       activeModes: [CadSnapMode.MID],
     });
     assert.ok(snapPolyMid);
     assert.equal(snapPolyMid.mode, CadSnapMode.MID);
-    assert.ok(Math.abs(snapPolyMid.point.x - (-20)) < 1e-3);
+    assert.ok(Math.abs(snapPolyMid.point.x - 20) < 1e-3);
     assert.ok(Math.abs(snapPolyMid.point.y - 20) < 1e-3);
   });
 
   await t.test('CEN and QUAD snaps: extracts centers and 4 quadrants on CIRCLE and ARC', () => {
-    const circle = new DxfEntity({
+    const circle = new SampleEntity({
       type: 'CIRCLE',
       handle: 'C1',
       geometry: { center: { x: 50, y: 50 }, radius: 25 },
@@ -161,12 +163,12 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
   });
 
   await t.test('INT snap: finds geometric intersection point between intersecting entities', () => {
-    const l1 = new DxfEntity({
+    const l1 = new SampleEntity({
       type: 'LINE',
       handle: 'L_INT1',
       geometry: { start: { x: 0, y: 50 }, end: { x: 100, y: 50 } },
     });
-    const l2 = new DxfEntity({
+    const l2 = new SampleEntity({
       type: 'LINE',
       handle: 'L_INT2',
       geometry: { start: { x: 50, y: 0 }, end: { x: 50, y: 100 } },
@@ -184,7 +186,7 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
   });
 
   await t.test('NEA and PERP snaps: computes closest point and perpendicular foot from basePoint', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'L_NP',
       geometry: { start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
@@ -215,7 +217,7 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
   });
 
   await t.test('Prioritization & Tie-Breaking: END outranks NEA, closer candidate preferred', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'L_PRIO',
       geometry: { start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
@@ -232,12 +234,12 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
 
   await t.test('SpatialIndex integration: queries candidates within tolerance bounding box', () => {
     const spatialIndex = new SpatialIndex2D();
-    const lNear = new DxfEntity({
+    const lNear = new SampleEntity({
       type: 'LINE',
       handle: 'L_NEAR',
       geometry: { start: { x: 10, y: 10 }, end: { x: 20, y: 10 } },
     });
-    const lFar = new DxfEntity({
+    const lFar = new SampleEntity({
       type: 'LINE',
       handle: 'L_FAR',
       geometry: { start: { x: 5000, y: 5000 }, end: { x: 5020, y: 5000 } },
@@ -250,6 +252,7 @@ test('Phase 7: Object Snaps (CadSnapService & CadGeometry2D)', async (t) => {
       cursorPoint: { x: 10.5, y: 10.5 },
       entities: [lNear, lFar],
       spatialIndex,
+      entityIndex:new Map([lNear,lFar].map(e=>[e.id,e])),
       tolerance: 2.0,
     });
     assert.ok(snap);
@@ -261,22 +264,22 @@ test('Phase 7: Grip Model & GripManager', async (t) => {
   const gripManager = new GripManager({ pickTolerance: 5.0 });
 
   await t.test('extractEntityGrips: extracts correct grips for LINE, CIRCLE, ARC, LWPOLYLINE, TEXT', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'GL1',
       geometry: { start: { x: 10, y: 20 }, end: { x: 90, y: 20 } },
     });
-    const circle = new DxfEntity({
+    const circle = new SampleEntity({
       type: 'CIRCLE',
       handle: 'GC1',
       geometry: { center: { x: 50, y: 50 }, radius: 20 },
     });
-    const arc = new DxfEntity({
+    const arc = new SampleEntity({
       type: 'ARC',
       handle: 'GA1',
       geometry: { center: { x: 0, y: 0 }, radius: 30, startAngle: 0, endAngle: 90 },
     });
-    const poly = new DxfEntity({
+    const poly = new SampleEntity({
       type: 'LWPOLYLINE',
       handle: 'GP1',
       geometry: {
@@ -287,10 +290,10 @@ test('Phase 7: Grip Model & GripManager', async (t) => {
         ],
       },
     });
-    const text = new DxfEntity({
+    const text = new SampleEntity({
       type: 'TEXT',
       handle: 'GT1',
-      geometry: { point: { x: 15, y: 25 } },
+      geometry: { insertionPoint: { x: 15, y: 25 } },
     });
 
     const lineGrips = gripManager.extractEntityGrips(line);
@@ -319,7 +322,7 @@ test('Phase 7: Grip Model & GripManager', async (t) => {
   });
 
   await t.test('findGripAt and activateGrip: performs hit testing and state transition', () => {
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       type: 'LINE',
       handle: 'GL2',
       geometry: { start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
@@ -348,7 +351,7 @@ test('Phase 7: Grip Model & GripManager', async (t) => {
 test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
   await t.test('LINE stretch START grip: updates start position while keeping end intact', () => {
     const doc = new DxfDocument();
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       handle: 'L_TEST1',
       type: 'LINE',
       layerId: '0',
@@ -363,7 +366,7 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
     const cmd = gripManager.createGripEditCommand(startGrip, { x: 0, y: 0 });
     const changeSet = cmd.execute(doc);
 
-    assert.ok(changeSet.modified.some((m) => m.entity === line));
+    assert.ok(changeSet.modified.some((m) => m.entityId === line.id));
     assert.equal(line.geometry.start.x, 0);
     assert.equal(line.geometry.start.y, 0);
     assert.equal(line.geometry.end.x, 100);
@@ -372,7 +375,7 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
 
     // Undo restores exact original geometry
     const undoCs = cmd.undo(doc);
-    assert.ok(undoCs.modified.some((m) => m.entity === line));
+    assert.ok(undoCs.modified.some((m) => m.entityId === line.id));
     assert.equal(line.geometry.start.x, 10);
     assert.equal(line.geometry.start.y, 10);
     assert.equal(line.geometry.end.x, 100);
@@ -381,7 +384,7 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
 
   await t.test('LINE drag MID grip: translates entire line by delta', () => {
     const doc = new DxfDocument();
-    const line = new DxfEntity({
+    const line = new SampleEntity({
       handle: 'L_TEST2',
       type: 'LINE',
       layerId: '0',
@@ -412,7 +415,7 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
 
   await t.test('CIRCLE stretch QUADRANT grip: dynamically resizes radius', () => {
     const doc = new DxfDocument();
-    const circle = new DxfEntity({
+    const circle = new SampleEntity({
       handle: 'C_TEST1',
       type: 'CIRCLE',
       layerId: '0',
@@ -439,7 +442,7 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
 
   await t.test('LWPOLYLINE stretch VERTEX grip: moves specific vertex', () => {
     const doc = new DxfDocument();
-    const poly = new DxfEntity({
+    const poly = new SampleEntity({
       handle: 'P_TEST1',
       type: 'LWPOLYLINE',
       layerId: '0',
@@ -476,11 +479,11 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
 
   await t.test('TEXT / INSERT move INSERTION grip: moves anchor position', () => {
     const doc = new DxfDocument();
-    const text = new DxfEntity({
+    const text = new SampleEntity({
       handle: 'T_TEST1',
       type: 'TEXT',
       layerId: '0',
-      geometry: { point: { x: 30, y: 40 } },
+      geometry: { insertionPoint: { x: 30, y: 40 } },
     });
     doc.addEntity(text);
 
@@ -491,16 +494,16 @@ test('Phase 7: GripEditCommand & Lossless Undo/Redo Invariants', async (t) => {
     const cmd = gripManager.createGripEditCommand(insGrip, { x: 100, y: 200 });
     cmd.execute(doc);
 
-    assert.equal(text.geometry.point.x, 100);
-    assert.equal(text.geometry.point.y, 200);
+    assert.equal(text.geometry.insertionPoint.x, 100);
+    assert.equal(text.geometry.insertionPoint.y, 200);
 
     cmd.undo(doc);
-    assert.equal(text.geometry.point.x, 30);
-    assert.equal(text.geometry.point.y, 40);
+    assert.equal(text.geometry.insertionPoint.x, 30);
+    assert.equal(text.geometry.insertionPoint.y, 40);
   });
 
   await t.test('Numerical robustness: handles extreme coordinates without degradation or NaN', () => {
-    const highCoordLine = new DxfEntity({
+    const highCoordLine = new SampleEntity({
       type: 'LINE',
       handle: 'L_HIGH',
       geometry: { start: { x: 1000000.0, y: 2000000.0 }, end: { x: 1000010.0, y: 2000000.0 } },

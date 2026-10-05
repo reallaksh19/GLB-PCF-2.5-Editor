@@ -52,6 +52,7 @@ export function validateCommand(command,document) {
     const e=entities[0],g=e.geometry,k=command.gripKey;
     const valid=e.type==='LINE' ? [0,1,'start','end'].includes(k) : ['CIRCLE','ARC'].includes(e.type) ? ['center','radius',0,1,2,3,4].includes(k) : ['LWPOLYLINE','POLYLINE'].includes(e.type) ? Number.isInteger(Number(k)) && Number(k)>=0 && Number(k)<g.vertices.length : ['POINT','TEXT','MTEXT','INSERT'].includes(e.type);
     if(!valid)throw new Error('Unsupported native grip');
+    if(g.vertices && !(e.attributes.flags&8) && command.newPoint.z!=null && command.newPoint.z!==(g.elevation ?? g.vertices[0].z ?? 0))throw new Error('2D grip must retain native elevation');
     if(!Number.isFinite(command.newPoint.x) || !Number.isFinite(command.newPoint.y))throw new Error('Finite grip coordinates required');
   }
   if(['TRIM','EXTEND','OFFSET','FILLET','EXPLODE','JOIN'].includes(command.name))validateEditing(command,entities,document);

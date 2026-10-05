@@ -7,6 +7,7 @@
  * Invariant: Does NOT import Three.js, DOM APIs, or CEG.
  */
 
+import {sourcePlaneZ} from './cad-source-plane.js';
 import {
   pointDistance,
   normalizeAngle,
@@ -42,7 +43,9 @@ export class CadGeometry2D {
    * Supports LINE, ARC, CIRCLE, and LWPOLYLINE combinations.
    */
   static intersect(entityA, entityB) {
-    return findEntityIntersections(entityA, entityB);
+    const z=sourcePlaneZ(entityA),other=sourcePlaneZ(entityB);
+    if(z==null || other==null || Math.abs(z-other)>1e-8)return [];
+    return findEntityIntersections(entityA, entityB).map(p=>({...p,z}));
   }
 
   /**
@@ -116,7 +119,8 @@ export class CadGeometry2D {
         );
       case 'LWPOLYLINE':
       case 'POLYLINE':
-        return offsetPolylineVertices(entity.geometry.vertices, entity.geometry.isClosed, distance, sidePoint);
+        if(entity.geometry.vertices.some(v=>v.bulge || v.startWidth || v.endWidth) || entity.geometry.constantWidth)throw new Error('Unsupported curved/width polyline Offset');
+        return offsetPolylineVertices(entity.geometry.vertices, (entity.geometry.closed ?? entity.geometry.isClosed), distance, sidePoint);
       default:
         return null;
     }
