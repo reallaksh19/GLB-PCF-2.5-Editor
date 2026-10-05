@@ -79,18 +79,29 @@ export class DxfDocument {
       entity.source.sequenceSpan = { start: entity.source.span.start, end: record?.span.end || entity.source.span.end };
     }
   }
-  addEntity(entity) {
+  addEntity(entity,insertIndex=-1) {
     if (!entity) return;
     this.adoptEntity(entity);
-    this.entities.push(entity);
+    entity.state.deleted=false;
+    if(insertIndex>=0 && insertIndex<this.entities.length)this.entities.splice(insertIndex,0,entity);else this.entities.push(entity);
     const key=String(entity.layerId || '0').trim().toUpperCase();
     if(!this.layerEntityIndex.has(key)) this.layerEntityIndex.set(key,new Set());
     this.layerEntityIndex.get(key).add(entity.id);
     if (entity.space === 'paper') {
       const key = entity.layoutId || entity.ownerHandle || 'paper';
       if (!this.paperSpaces.has(key)) this.paperSpaces.set(key, []);
-      this.paperSpaces.get(key).push(entity);
-    } else this.modelSpace.push(entity);
+      const list=this.paperSpaces.get(key);
+      if(insertIndex>=0)list.splice(this.entities.slice(0,insertIndex).filter(e=>e.space==='paper'&&(e.layoutId||e.ownerHandle||'paper')===key).length,0,entity);else list.push(entity);
+    } else if(insertIndex>=0)this.modelSpace.splice(this.entities.slice(0,insertIndex).filter(e=>e.space!=='paper').length,0,entity);else this.modelSpace.push(entity);
+  }
+  removeEntity(idOrEntity) {
+    const entity=typeof idOrEntity==='string'?this.getEntity(idOrEntity):idOrEntity;
+    const index=this.entities.indexOf(entity);if(index<0)return null;
+    this.entities.splice(index,1);
+    const removeView=e=>{this.entityIndex.delete(e.id);for(const child of [...e.attributes.subEntities || [],...e.attributes.attribs || []])removeView(child);};removeView(entity);
+    this.layerEntityIndex.get(String(entity.layerId).toUpperCase())?.delete(entity.id);
+    for(const list of [this.modelSpace,...this.paperSpaces.values()]){const i=list.indexOf(entity);if(i>=0)list.splice(i,1);}
+    entity.markDeleted();return {entity,index};
   }
   addBlock(block) {
     if (!block?.name) return;
