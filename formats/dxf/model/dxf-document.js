@@ -109,6 +109,12 @@ export class DxfDocument {
   getEntityIdsOnLayer(name) { return new Set(this.layerEntityIndex.get(String(name).trim().toUpperCase()) || []); }
   getEntitiesOnLayer(name) { return [...this.getEntityIdsOnLayer(name)].map(id=>this.entityIndex.get(id)).filter(e=>e && !e.state.deleted); }
   getAllLayers() { return [...this.tables.layers.values()]; }
+  isEntitySelectable(id,options={}) {
+    const e=this.entityIndex.get(id);if(!e || e.state.deleted)return false;
+    if(!options.includePaperSpace && e.space!==(options.activeSpace || 'model'))return false;
+    const layer=this.getLayer(e.layerId);
+    return options.includeHidden || !(layer?.off || layer?.frozen || Number(e.style.colorIndex)<0 || e.attributes.invisible || e.source.rawTags.some(t=>t.code===60 && Number(t.value)===1));
+  }
   setLayerVisibility(name,visible) { const l=this.getLayer(name);if(!l)return false;l.setVisible(visible);return true; }
   setLayerFrozen(name,frozen) { const l=this.getLayer(name);if(!l)return false;l.setFrozen(frozen);return true; }
   setLayerLocked(name,locked) { const l=this.getLayer(name);if(!l)return false;l.setLocked(locked);return true; }

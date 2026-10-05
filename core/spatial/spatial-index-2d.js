@@ -117,15 +117,11 @@ export class SpatialIndex2D {
   load(items = []) {
     if (!Array.isArray(items) || items.length === 0) return;
 
-    const normalized = items.map(normalizeBox);
-    this._size += normalized.length;
-
+    const normalized = [...this.all(),...items.map(normalizeBox)];
+    this._size = normalized.length;
     if (normalized.length <= this.maxEntries) {
-      for (const item of normalized) {
-        this.root.children.push(item);
-      }
-      calcBBox(this.root);
-      return;
+      this.root = {children:normalized,leaf:true,height:1};
+      calcBBox(this.root);return;
     }
 
     // Recursively build tree levels from bottom up
@@ -186,43 +182,27 @@ export class SpatialIndex2D {
   insert(rawItem) {
     if (!rawItem) return;
     const item = normalizeBox(rawItem);
-    this._insert(item, this.root, 1);
+    const sibling=this._insert(item,this.root);
+    if(sibling) {
+      this.root={children:[this.root,sibling],leaf:false,height:this.root.height+1};
+      calcBBox(this.root);
+    }
     this._size++;
   }
 
-  _insert(item, node, depth) {
-    if (node.leaf) {
-      node.children.push(item);
-      calcBBox(node);
-      if (node.children.length > this.maxEntries) {
-        this._split(node);
+  _insert(item,node) {
+    if(node.leaf) node.children.push(item);
+    else {
+      let best=node.children[0],bestArea=Infinity;
+      for(const child of node.children) {
+        const area=(Math.max(child.maxX,item.maxX)-Math.min(child.minX,item.minX))*(Math.max(child.maxY,item.maxY)-Math.min(child.minY,item.minY))-(child.maxX-child.minX)*(child.maxY-child.minY);
+        if(area<bestArea) { bestArea=area;best=child; }
       }
-      return;
+      const sibling=this._insert(item,best);
+      if(sibling)node.children.push(sibling);
     }
-
-    // Choose child with minimum enlargement
-    let bestChild = node.children[0];
-    let bestEnlargement = Infinity;
-
-    for (const child of node.children) {
-      const enlargedArea =
-        (Math.max(child.maxX, item.maxX) - Math.min(child.minX, item.minX)) *
-        (Math.max(child.maxY, item.maxY) - Math.min(child.minY, item.minY));
-      const currentArea = (child.maxX - child.minX) * (child.maxY - child.minY);
-      const enlargement = enlargedArea - currentArea;
-
-      if (enlargement < bestEnlargement) {
-        bestEnlargement = enlargement;
-        bestChild = child;
-      }
-    }
-
-    this._insert(item, bestChild, depth + 1);
     calcBBox(node);
-
-    if (node.children.length > this.maxEntries) {
-      this._split(node);
-    }
+    return node.children.length>this.maxEntries?this._split(node):null;
   }
 
   _split(node) {
@@ -253,15 +233,7 @@ export class SpatialIndex2D {
     node.children = leftChildren;
     calcBBox(node);
 
-    if (node === this.root) {
-      this.root = {
-        children: [node, newNode],
-        leaf: false,
-        height: node.height + 1,
-        minX: 0, minY: 0, maxX: 0, maxY: 0,
-      };
-      calcBBox(this.root);
-    }
+    return newNode;
   }
 
   /**

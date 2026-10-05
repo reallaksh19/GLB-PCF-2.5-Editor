@@ -221,7 +221,7 @@ export class SelectionManager {
     const tol = options.tolerance ?? 5;
     const mode = options.mode || SELECTION_MODES.SET;
 
-    const hits = spatialIndex.searchPoint(x, y, tol);
+    const hits = spatialIndex.searchPoint(x, y, tol, options);
     const candidateId = hits.length > 0 ? (hits[0].id || hits[0]) : null;
 
     if (!candidateId) {
@@ -246,7 +246,7 @@ export class SelectionManager {
   selectWindow(windowBox, spatialIndex, options = {}) {
     if (!spatialIndex) return false;
     const mode = options.mode || SELECTION_MODES.SET;
-    const hits = spatialIndex.searchWindow(windowBox);
+    const hits = spatialIndex.searchWindow(windowBox, options);
     const ids = hits.map((h) => (h.id || h));
     return this.select(ids, mode);
   }
@@ -263,7 +263,7 @@ export class SelectionManager {
   selectCrossing(crossingBox, spatialIndex, options = {}) {
     if (!spatialIndex) return false;
     const mode = options.mode || SELECTION_MODES.SET;
-    const hits = spatialIndex.searchCrossing(crossingBox);
+    const hits = spatialIndex.searchCrossing(crossingBox, options);
     const ids = hits.map((h) => (h.id || h));
     return this.select(ids, mode);
   }
@@ -293,7 +293,7 @@ export class SelectionManager {
       if (set) targetIds = Array.from(set);
     }
 
-    return this.select(targetIds, mode);
+    return this.select(targetIds.filter(id=>!layerSource.isEntitySelectable || layerSource.isEntitySelectable(id,options)), mode);
   }
 
   /**
@@ -325,7 +325,7 @@ export class SelectionManager {
       }
     }
 
-    return this.select(Array.from(ids), mode);
+    return this.select(Array.from(ids).filter(id=>!source.isEntitySelectable || source.isEntitySelectable(id,options)), mode);
   }
 
   /**
@@ -386,7 +386,7 @@ export class SelectionManager {
       }
     }
 
-    return this.select(Array.from(matchedIds), options.mode || SELECTION_MODES.SET);
+    return this.select(Array.from(matchedIds).filter(id=>!source.isEntitySelectable || source.isEntitySelectable(id,options)), options.mode || SELECTION_MODES.SET);
   }
 
   /**

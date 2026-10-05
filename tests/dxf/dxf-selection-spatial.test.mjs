@@ -65,25 +65,25 @@ doc.addEntity(pump1);
 // Verify bidirectional lookup
 const pipingIds = doc.getEntityIdsOnLayer('PIPING');
 assert.equal(pipingIds.size, 2);
-assert.ok(pipingIds.has('dxf:entity:P1'));
-assert.ok(pipingIds.has('dxf:entity:P2'));
+assert.ok(pipingIds.has(pipe1.id));
+assert.ok(pipingIds.has(pipe2.id));
 
 const pipingEntities = doc.getEntitiesOnLayer('PIPING');
 assert.equal(pipingEntities.length, 2);
 
 const eqIds = doc.getEntityIdsOnLayer('EQUIPMENT');
 assert.equal(eqIds.size, 1);
-assert.ok(eqIds.has('dxf:entity:EQ1'));
+assert.ok(eqIds.has(pump1.id));
 
 // Fast O(1) ID lookup
-assert.equal(doc.getEntity('dxf:entity:P1').handle, 'P1');
+assert.equal(doc.getEntity(pipe1.id).handle, 'P1');
 assert.equal(doc.getEntity('P2').handle, 'P2');
 
 // Move entity to another layer
-doc.moveEntityToLayer('dxf:entity:P2', 'EQUIPMENT');
+doc.moveEntityToLayer(pipe2.id, 'EQUIPMENT');
 assert.equal(doc.getEntityIdsOnLayer('PIPING').size, 1);
 assert.equal(doc.getEntityIdsOnLayer('EQUIPMENT').size, 2);
-assert.ok(doc.getEntityIdsOnLayer('EQUIPMENT').has('dxf:entity:P2'));
+assert.ok(doc.getEntityIdsOnLayer('EQUIPMENT').has(pipe2.id));
 
 // Layer state mutations
 doc.setLayerVisibility('PIPING', false);
@@ -258,14 +258,14 @@ selMgr.selectPoint(50, 50, dxfSpatial, { tolerance: 2 });
 assert.equal(selMgr.count, 1);
 assert.equal(
   selMgr.primaryId,
-  'dxf:entity:INS_VALVE_99',
+  insertEnt.id,
   'Clicking block child geometry MUST select the parent INSERT instance'
 );
 
 // 4.6 Acceptance Criterion: Selection survives render rebuild
 console.log('Subtest: Selection survives render rebuild...');
 const savedSelectionIds = selMgr.getIds();
-assert.deepEqual(savedSelectionIds, ['dxf:entity:INS_VALVE_99']);
+assert.deepEqual(savedSelectionIds, [insertEnt.id]);
 
 // Rebuild render model from scratch
 const rebuiltModel = DxfRenderAdapter.buildRenderModel(blockTestDoc);
@@ -273,7 +273,7 @@ dxfSpatial.loadFromRenderModel(rebuiltModel);
 
 // Selection manager state is still 100% valid!
 assert.equal(selMgr.count, 1);
-assert.ok(selMgr.has('dxf:entity:INS_VALVE_99'));
+assert.ok(selMgr.has(insertEnt.id));
 
 // Zoom to Selection bounds
 const zoomBounds = selMgr.getSelectionBounds(dxfSpatial);
@@ -334,37 +334,37 @@ const cadSel = new SelectionManager();
 // Only PIPE_1 and VALVE_1 are fully contained! PIPE_2 crosses the right edge.
 cadSel.selectWindow({ minX: 0, minY: 0, maxX: 50, maxY: 50 }, cadSpatial);
 assert.equal(cadSel.count, 2, 'Window selection should only select fully contained entities');
-assert.ok(cadSel.has('dxf:entity:PIPE_1'));
-assert.ok(cadSel.has('dxf:entity:VALVE_1'));
-assert.ok(!cadSel.has('dxf:entity:PIPE_2'), 'PIPE_2 crossed the border, must not be selected by Window');
+assert.ok(cadSel.has(cadDoc.getEntity('PIPE_1').id));
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_1').id));
+assert.ok(!cadSel.has(cadDoc.getEntity('PIPE_2').id), 'PIPE_2 crossed the border, must not be selected by Window');
 
 // 5.2 Crossing Selection (right-to-left drag): [0, 0, 50, 50]
 // PIPE_1, VALVE_1, AND PIPE_2 (crossing) are selected!
 cadSel.selectCrossing({ minX: 0, minY: 0, maxX: 50, maxY: 50 }, cadSpatial);
 assert.equal(cadSel.count, 3, 'Crossing selection must include crossing entity PIPE_2');
-assert.ok(cadSel.has('dxf:entity:PIPE_1'));
-assert.ok(cadSel.has('dxf:entity:PIPE_2'));
-assert.ok(cadSel.has('dxf:entity:VALVE_1'));
+assert.ok(cadSel.has(cadDoc.getEntity('PIPE_1').id));
+assert.ok(cadSel.has(cadDoc.getEntity('PIPE_2').id));
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_1').id));
 
 // 5.3 Select by Layer: 'VALVES'
 cadSel.selectByLayer('VALVES', cadDoc);
 assert.equal(cadSel.count, 2);
-assert.ok(cadSel.has('dxf:entity:VALVE_1'));
-assert.ok(cadSel.has('dxf:entity:VALVE_2'));
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_1').id));
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_2').id));
 
 // 5.4 Select by Entity Type: 'LINE'
 cadSel.selectByType('LINE', cadDoc);
 assert.equal(cadSel.count, 2);
-assert.ok(cadSel.has('dxf:entity:PIPE_1'));
-assert.ok(cadSel.has('dxf:entity:PIPE_2'));
+assert.ok(cadSel.has(cadDoc.getEntity('PIPE_1').id));
+assert.ok(cadSel.has(cadDoc.getEntity('PIPE_2').id));
 
 // 5.5 Select All Similar: based on VALVE_1 (Type = CIRCLE, Layer = VALVES)
-cadSel.set('dxf:entity:VALVE_1');
-cadSel.selectAllSimilar('dxf:entity:VALVE_1', cadDoc);
+cadSel.set(cadDoc.getEntity('VALVE_1').id);
+cadSel.selectAllSimilar(cadDoc.getEntity('VALVE_1').id, cadDoc);
 assert.equal(cadSel.count, 2);
-assert.ok(cadSel.has('dxf:entity:VALVE_1'));
-assert.ok(cadSel.has('dxf:entity:VALVE_2'));
-assert.ok(!cadSel.has('dxf:entity:PIPE_1'), 'Pipes should not be selected by Select All Similar for valves');
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_1').id));
+assert.ok(cadSel.has(cadDoc.getEntity('VALVE_2').id));
+assert.ok(!cadSel.has(cadDoc.getEntity('PIPE_1').id), 'Pipes should not be selected by Select All Similar for valves');
 
 console.log('✅ CAD-Native selection actions verified (Window, Crossing, Select by Layer, Type, Similar).');
 

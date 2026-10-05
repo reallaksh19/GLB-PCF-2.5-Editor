@@ -5,7 +5,7 @@ import { encodeRecord } from './dxf-record-writer.js';
 export function entityOverlays(before, doc, newline, patches, validateReferences) {
   const created=[],deleted=[],originalHandles=new Set(before.raw.records.map(r=>r.handle).filter(Boolean));
   const used=new Set(originalHandles);
-  editList(before.entities,doc.entities,sectionEnd('ENTITIES'));
+  editList(before.entities,doc.entities,()=>sectionEnd('ENTITIES'));
   for(let i=0;i<before.blockRecords.length;i++) {
     const block=doc.blockRecords[i];
     if(!block || block.id!==before.blockRecords[i].id)throw new Error('Unsupported BLOCK topology edit');
@@ -33,7 +33,7 @@ export function entityOverlays(before, doc, newline, patches, validateReferences
           used.add(h);
         }
         const next=current.slice(i+1).find(e=>e.source.span && !e.state.deleted);
-        const at=next?.source.span.start ?? end;
+        const at=next?.source.span.start ?? (typeof end==='function'?end():end);
         if(!Number.isInteger(at))throw new Error('Absent record insertion boundary');
         patches.push({start:at,end:at,bytes:encodeRecord(after,doc,newline)});created.push(after);continue;
       }

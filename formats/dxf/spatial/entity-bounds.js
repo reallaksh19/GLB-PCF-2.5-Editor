@@ -6,8 +6,8 @@
  * render primitives without coordinate scaling or Three.js dependencies.
  */
 
-import { sampleBulgeArc } from '../render/index.js';
-import { resolveTextGeometry, estimateTextBounds } from '../render/dxf-text-renderer.js';
+import { sampleBulge as sampleBulgeArc } from '../../../geometry/cad/native-curves.js';
+import { nativeTextCorners } from './native-selection-geometry.js';
 
 export function createEmptyBounds() {
   return {
@@ -161,6 +161,8 @@ export function computePolylineBounds(vertices = [], closed = false) {
 export function computeItemBounds(item, options = {}) {
   if (!item) return createEmptyBounds();
 
+  if (item.bounds?.min && item.bounds?.max) return finalizeBounds({...item.bounds.min},{...item.bounds.max});
+
   // If item already has points computed (e.g. from RenderModel)
   if (Array.isArray(item.points) && item.points.length > 0) {
     return computePointsBounds(item.points);
@@ -203,11 +205,7 @@ export function computeItemBounds(item, options = {}) {
 
     case 'TEXT':
     case 'MTEXT': {
-      const geomInfo = resolveTextGeometry(item);
-      const rawText = item.attributes?.rawText || item.attributes?.text || item.text || '';
-      const lines = String(rawText).split(/\r?\n|\\P/);
-      const bounds = estimateTextBounds(lines, geomInfo);
-      return finalizeBounds(bounds.min, bounds.max);
+      return computePointsBounds(nativeTextCorners(item));
     }
 
     case 'POINT': {
