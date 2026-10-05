@@ -12,6 +12,80 @@
 import { SourceRef, SemanticComponentRef } from '../../cad/semantic-links/source-ref.js';
 import { SemanticLinkManager } from '../../cad/semantic-links/semantic-link-manager.js';
 import { RecognitionPolicy, createDefaultRecognitionPolicy } from './recognition-policy.js';
+import { DXF_INSUNITS, scalePointToMm } from '../dxf-units.js';
+
+const SOURCE_UNIT_MM = {
+  MM: 1,
+  MILLIMETER: 1,
+  MILLIMETERS: 1,
+  MILLIMETRE: 1,
+  MILLIMETRES: 1,
+  CM: 10,
+  CENTIMETER: 10,
+  CENTIMETERS: 10,
+  CENTIMETRE: 10,
+  CENTIMETRES: 10,
+  M: 1000,
+  METER: 1000,
+  METERS: 1000,
+  METRE: 1000,
+  METRES: 1000,
+  IN: 25.4,
+  INCH: 25.4,
+  INCHES: 25.4,
+  FT: 304.8,
+  FOOT: 304.8,
+  FEET: 304.8,
+  YD: 914.4,
+  YARD: 914.4,
+  YARDS: 914.4,
+};
+
+function resolveEngineeringUnitPolicy(document) {
+  const units = document?.units || {};
+  const insunits = Number(units.insunits);
+  const insunitDef = Number.isFinite(insunits) ? DXF_INSUNITS[insunits] : null;
+  const sourceUnit = String(units.sourceUnit || '').trim().toUpperCase();
+  const sourceUnitMm = SOURCE_UNIT_MM[sourceUnit];
+
+  if (insunitDef && insunits !== 0) {
+    return {
+      engineeringUnit: 'mm',
+      mmPerSourceUnit: insunitDef.mmPerUnit,
+      source: 'INSUNITS',
+      sourceUnit: units.sourceUnit || insunitDef.label,
+      insunits,
+      isExplicit: true,
+    };
+  }
+
+  if (sourceUnitMm) {
+    return {
+      engineeringUnit: 'mm',
+      mmPerSourceUnit: sourceUnitMm,
+      source: 'sourceUnit',
+      sourceUnit: units.sourceUnit,
+      insunits: Number.isFinite(insunits) ? insunits : 0,
+      isExplicit: true,
+    };
+  }
+
+  return {
+    engineeringUnit: 'mm',
+    mmPerSourceUnit: 1,
+    source: 'UNSPECIFIED',
+    sourceUnit: units.sourceUnit || 'UNSPECIFIED',
+    insunits: Number.isFinite(insunits) ? insunits : 0,
+    isExplicit: false,
+    reason: 'No explicit source unit; numeric source coordinates are retained at 1 source unit = 1 engineering mm for derived output only',
+  };
+}
+
+function currentDocumentRevision(document) {
+  const value = document?.revision ?? document?.sourceRevision ?? 0;
+  const revision = Number(value);
+  return Number.isFinite(revision) ? revision : 0;
+}
 
 /**
  * Result container for a derived semantic projection.
@@ -49,7 +123,7 @@ export class SemanticProjectionResult {
    */
   validateFreshness(document) {
     if (!document) throw new Error('validateFreshness requires a target document');
-    const currentRev = document.sourceRevision ?? 0;
+    const currentRev = currentDocumentRevision(document);
     if (this.sourceRevision !== currentRev) {
       const err = new Error(`Semantic projection is stale: projected at rev ${this.sourceRevision}, current document is rev ${currentRev}`);
       err.code = 'STALE_REVISION';
@@ -93,10 +167,12 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
   }
 
   const policy = options.policy || createDefaultRecognitionPolicy();
-  const confidenceThreshold = Number(options.confidenceThreshold) || 0.5;
+  const requestedThreshold = Number(options.confidenceThreshold);
+  const confidenceThreshold = Number.isFinite(requestedThreshold) ? requestedThreshold : 0.5;
 
   const docId = document.id || 'doc:default';
-  const sourceRev = Number(document.sourceRevision) || 0;
+  const sourceRev = currentDocumentRevision(document);
+  const unitPolicy = resolveEngineeringUnitPolicy(document);
 
   // Snapshot entity count before derivation to guard immutability
   const initialEntities = Array.isArray(document.entities)
@@ -127,22 +203,27 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
 
       // Extract geometry properties
       const props = {
-        layer: entity.layer || '0',
+        layer: entity.layerId ?? entity.layer ?? entity.attributes?.layer ?? '0',
         handle: entity.handle || null,
         rawType: entity.type,
+        engineeringUnit: 'mm',
+        sourceUnitConversion: { ...unitPolicy },
       };
 
       if (entity.type === 'LINE') {
-        props.start = { ...entity.geometry?.start };
-        props.end = { ...entity.geometry?.end };
+        props.start = scalePointToMm(entity.geometry?.start || {}, unitPolicy.mmPerSourceUnit);
+        props.end = scalePointToMm(entity.geometry?.end || {}, unitPolicy.mmPerSourceUnit);
         const dx = (props.end.x || 0) - (props.start.x || 0);
         const dy = (props.end.y || 0) - (props.start.y || 0);
         const dz = (props.end.z || 0) - (props.start.z || 0);
         props.length = Math.hypot(dx, dy, dz);
       } else if (entity.type === 'INSERT') {
         props.blockName = entity.attributes?.blockName || entity.geometry?.blockName || '';
-        props.position = { ...entity.geometry?.point };
-        props.rotation = entity.attributes?.rotation || 0;
+        props.position = scalePointToMm(
+          entity.geometry?.insertionPoint ?? entity.geometry?.point ?? {},
+          unitPolicy.mmPerSourceUnit
+        );
+        props.rotation = Number(entity.geometry?.rotation ?? entity.attributes?.rotation ?? 0) || 0;
       }
 
       const compRef = new SemanticComponentRef({
@@ -160,7 +241,7 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
       rejectedEntities.push({
         entityId: entity.id,
         type: entity.type,
-        layer: entity.layer || '0',
+        layer: entity.layerId ?? entity.layer ?? entity.attributes?.layer ?? '0',
         ruleId: classification.ruleId,
         reasons: classification.reasons,
       });
@@ -170,7 +251,7 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
   // Construct basic topological connectivity
   const nodes = [];
   const segments = [];
-  const tol = policy.connectionTolerance;
+  const tol = policy.connectionTolerance * unitPolicy.mmPerSourceUnit;
 
   function findOrCreateNode(pt) {
     if (!pt) return null;
@@ -202,7 +283,7 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
   const postEntities = Array.isArray(document.entities)
     ? document.entities
     : (document.getEntities ? document.getEntities() : []);
-  if (postEntities.length !== initialCount || (document.sourceRevision ?? 0) !== sourceRev) {
+  if (postEntities.length !== initialCount || currentDocumentRevision(document) !== sourceRev) {
     throw new Error('FATAL: derivePipingCegFromDxfDocument mutated the authoritative document');
   }
 
@@ -214,6 +295,7 @@ export function derivePipingCegFromDxfDocument(document, options = {}) {
     fittings: components.filter(c => c.componentType !== 'PIPE').length,
     topologyNodes: nodes.length,
     topologySegments: segments.length,
+    unitConversion: { ...unitPolicy },
   };
 
   return new SemanticProjectionResult({
