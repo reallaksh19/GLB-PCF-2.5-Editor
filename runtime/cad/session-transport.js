@@ -15,6 +15,7 @@ import {
   SessionErrorCode,
   createResponseEnvelope,
   createErrorEnvelope,
+  validateEnvelope,
 } from './session-envelope.js';
 
 export class DirectSessionTransport {
@@ -42,6 +43,18 @@ export class DirectSessionTransport {
    */
   send(envelope) {
     if (this.terminated) return;
+
+    const validation = validateEnvelope(envelope);
+    if (!validation.valid) {
+      this._emit(
+        createErrorEnvelope({
+          requestId: envelope?.requestId || 'unknown',
+          code: SessionErrorCode.INVALID_ENVELOPE,
+          message: validation.error,
+        })
+      );
+      return;
+    }
 
     // Handle cancel request synchronously before queue execution if possible
     if (envelope.type === EnvelopeType.CANCEL_REQUEST) {
