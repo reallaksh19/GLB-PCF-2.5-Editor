@@ -67,6 +67,12 @@ export class SemanticSelectionResult {
   }
 }
 
+function currentDocumentRevision(document) {
+  const value = document?.revision ?? document?.sourceRevision ?? 0;
+  const revision = Number(value);
+  return Number.isFinite(revision) ? revision : 0;
+}
+
 /**
  * Resolver mapping derived semantic selections to authoritative native CAD entities.
  */
@@ -103,7 +109,7 @@ export class SemanticSelectionResolver {
       );
     }
 
-    const currentRev = document.sourceRevision ?? document.revision ?? 0;
+    const currentRev = currentDocumentRevision(document);
     if (!this.linkManager.isFresh(currentRev)) {
       throw new SemanticSelectionError(
         `Semantic selection is stale: link manager is at revision ${this.linkManager.sourceRevision}, document is at revision ${currentRev}`,
@@ -200,7 +206,11 @@ export class SemanticSelectionResolver {
           );
         }
 
-        const entity = document.getEntity(sourceRef.cadEntityId);
+        const entity = typeof document.getEntity === 'function'
+          ? document.getEntity(sourceRef.cadEntityId)
+          : (Array.isArray(document.entities)
+              ? document.entities.find(e => e.id === sourceRef.cadEntityId || e.handle === sourceRef.cadEntityId)
+              : null);
         if (!entity || entity.state?.deleted) {
           throw new SemanticSelectionError(
             `Missing native source entity: ${sourceRef.cadEntityId} for component ${comp.componentId}`,
@@ -219,11 +229,11 @@ export class SemanticSelectionResolver {
 
         const layerName = entity.layerId || entity.layer || '0';
         const layer = document.getLayer ? document.getLayer(layerName) : null;
-        if (layer?.locked) {
+        if (layer?.locked || layer?.frozen) {
           throw new SemanticSelectionError(
-            `Native entity ${entity.id} is on locked layer ${layerName}`,
+            `Native entity ${entity.id} is on ${layer?.locked ? 'locked' : 'frozen'} layer ${layerName}`,
             'READ_ONLY_TARGET',
-            { entityId: entity.id, layer: layerName, componentId: comp.componentId }
+            { entityId: entity.id, layer: layerName, componentId: comp.componentId, locked: Boolean(layer?.locked), frozen: Boolean(layer?.frozen) }
           );
         }
 

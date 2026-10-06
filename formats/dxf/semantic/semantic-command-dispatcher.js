@@ -155,23 +155,24 @@ export class SemanticCommandDispatcher {
     // Step 2: Instantiate supported native CAD command
     switch (operation.type.toUpperCase()) {
       case 'MOVE': {
-        const dx = Number(operation.dx) || 0;
-        const dy = Number(operation.dy) || 0;
-        const dz = Number(operation.dz) || 0;
+        const dx = Number(operation.dx ?? operation.delta?.x) || 0;
+        const dy = Number(operation.dy ?? operation.delta?.y) || 0;
+        const dz = Number(operation.dz ?? operation.delta?.z) || 0;
         nativeCommand = new MoveEntitiesCommand(nativeIds, dx, dy, dz);
         break;
       }
       case 'ROTATE': {
         const center = operation.center || { x: 0, y: 0, z: 0 };
-        const angleDeg = Number(operation.angleDeg) || 0;
+        const angleDeg = Number(operation.angleDeg ?? operation.rotationDeg ?? operation.angle) || 0;
         nativeCommand = new RotateEntitiesCommand(nativeIds, center, angleDeg);
         break;
       }
       case 'SCALE': {
         const center = operation.center || { x: 0, y: 0, z: 0 };
-        const sx = Number(operation.sx) || 1;
-        const sy = Number(operation.sy) || 1;
-        const sz = operation.sz != null ? Number(operation.sz) : 1;
+        const defaultS = operation.scaleFactor ?? operation.scale;
+        const sx = Number(operation.sx ?? defaultS) || 1;
+        const sy = Number(operation.sy ?? defaultS) || 1;
+        const sz = operation.sz != null ? Number(operation.sz) : (defaultS != null ? Number(defaultS) : 1);
         nativeCommand = new ScaleEntitiesCommand(nativeIds, center, sx, sy, sz);
         break;
       }
@@ -214,11 +215,14 @@ export class SemanticCommandDispatcher {
     let changeSet = null;
     if (this.commandHistory) {
       changeSet = this.commandHistory.execute(nativeCommand, document);
+      if (document.sourceRevision != null && typeof document.revision === 'number') {
+        document.sourceRevision = document.revision;
+      }
     } else {
       changeSet = nativeCommand.execute(document);
     }
 
-    const resultRevision = document.sourceRevision ?? document.revision ?? 0;
+    const resultRevision = document.revision ?? document.sourceRevision ?? 0;
 
     return new SemanticDispatchResult({
       operationType: operation.type.toUpperCase(),
