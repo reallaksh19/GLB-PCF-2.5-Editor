@@ -235,7 +235,8 @@ test('A11-DSP-01: SemanticCommandDispatcher executes MOVE without writable CEG d
     documentId: doc.id,
   });
 
-  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver });
+  const history = new CommandHistory();
+  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver, commandHistory: history });
   const compId = projection.components[0].componentId;
 
   const result = dispatcher.dispatch({
@@ -338,7 +339,8 @@ test('A11-DSP-04: Batch semantic operations (ROTATE, DELETE, CHANGE_LAYER) opera
     documentId: doc.id,
   });
 
-  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver });
+  const history = new CommandHistory();
+  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver, commandHistory: history });
 
   // Test CHANGE_LAYER
   dispatcher.dispatch({
@@ -347,6 +349,7 @@ test('A11-DSP-04: Batch semantic operations (ROTATE, DELETE, CHANGE_LAYER) opera
     targetLayer: 'UTILITIES',
   }, doc);
   assert.equal(line.layerId, 'UTILITIES');
+  projection.linkManager.sourceRevision = doc.revision;
 
   // Test ROTATE
   dispatcher.dispatch({
@@ -357,6 +360,7 @@ test('A11-DSP-04: Batch semantic operations (ROTATE, DELETE, CHANGE_LAYER) opera
   }, doc);
   // INSERT rotation updated
   assert.equal(valve.geometry.rotation, 90);
+  projection.linkManager.sourceRevision = doc.revision;
 
   // Test DELETE
   dispatcher.dispatch({
