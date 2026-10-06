@@ -368,7 +368,8 @@ test('ADV-A11-10: Parameter aliases for MOVE, ROTATE, SCALE are accepted', () =>
   linkMgr.registerComponent(new SemanticComponentRef({ componentId: 'PIPE-001', componentType: 'PIPE', sourceRefs: [ref] }));
 
   const resolver = new SemanticSelectionResolver({ linkManager: linkMgr });
-  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver });
+  const history = new CommandHistory();
+  const dispatcher = new SemanticCommandDispatcher({ selectionResolver: resolver, commandHistory: history });
 
   // 1. MOVE with delta alias
   const moveRes = dispatcher.dispatch({ type: 'MOVE', target: 'PIPE-001', delta: { x: 5, y: 10, z: 0 } }, doc);
