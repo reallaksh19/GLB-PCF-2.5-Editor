@@ -196,8 +196,34 @@ export class SemanticSelectionResolver {
         resolvedComponents.push(comp);
       }
 
-      // Validate each bound source entity
+      // Validate each bound source entity and its exact source provenance.
       for (const sourceRef of comp.sourceRefs) {
+        if (sourceRef.documentId && document.id && sourceRef.documentId !== document.id) {
+          throw new SemanticSelectionError(
+            `Source reference document mismatch: expected ${document.id}, got ${sourceRef.documentId}`,
+            'DOCUMENT_MISMATCH',
+            {
+              componentId: comp.componentId,
+              cadEntityId: sourceRef.cadEntityId,
+              expectedDocumentId: document.id,
+              actualDocumentId: sourceRef.documentId,
+            }
+          );
+        }
+
+        if (!sourceRef.isFresh(currentRev)) {
+          throw new SemanticSelectionError(
+            `Stale source reference for component ${comp.componentId}: source is at revision ${sourceRef.sourceRevision}, document is at revision ${currentRev}`,
+            'STALE_REVISION',
+            {
+              componentId: comp.componentId,
+              cadEntityId: sourceRef.cadEntityId,
+              sourceRevision: sourceRef.sourceRevision,
+              documentRevision: currentRev,
+            }
+          );
+        }
+
         if (!options.allowOccurrence && Array.isArray(sourceRef.occurrencePath) && sourceRef.occurrencePath.length > 0) {
           throw new SemanticSelectionError(
             `Unsupported mutation target: component ${comp.componentId} targets nested block occurrence path`,
