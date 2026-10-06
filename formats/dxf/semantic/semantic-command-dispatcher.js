@@ -18,10 +18,36 @@ import {
   MoveEntitiesCommand,
   RotateEntitiesCommand,
   ScaleEntitiesCommand,
+} from '../../../core/commands/cad/transform-commands.js';
+import {
   DeleteEntitiesCommand,
   ChangeLayerCommand,
   ChangePropertiesCommand,
-} from '../../../core/commands/cad/index.js';
+} from '../../../core/commands/cad/entity-modify-commands.js';
+
+function finiteOperand(value, fallback, name) {
+  if (value == null) return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new SemanticCommandDispatchError(
+      `Invalid finite numeric operand: ${name}`,
+      'INVALID_ARGUMENT',
+      { operand: name, value }
+    );
+  }
+  return number;
+}
+
+function scaleOperands(operation) {
+  const alias = operation.scaleFactor ?? operation.scale;
+  const aliasObject = alias && typeof alias === 'object' ? alias : null;
+  const scalar = aliasObject ? undefined : alias;
+  return {
+    sx: finiteOperand(operation.sx ?? aliasObject?.x ?? scalar, 1, 'sx'),
+    sy: finiteOperand(operation.sy ?? aliasObject?.y ?? scalar, 1, 'sy'),
+    sz: finiteOperand(operation.sz ?? aliasObject?.z ?? scalar, 1, 'sz'),
+  };
+}
 
 /**
  * Dedicated error class for semantic dispatch failures.
@@ -140,8 +166,12 @@ export class SemanticCommandDispatcher {
       );
     }
 
-    // Step 1: Resolve selection to exact native IDs with pre-mutation verification
-    const resolution = this.selectionResolver.resolve(operation.target, document, options);
+    // Step 1: Resolve selection to exact native IDs with pre-mutation verification.
+    // Mutation of derived occurrence paths is not supported in this bounded milestone.
+    const resolution = this.selectionResolver.resolve(operation.target, document, {
+      ...options,
+      allowOccurrence: false,
+    });
     if (resolution.count === 0) {
       throw new SemanticCommandDispatchError(
         'Cannot dispatch command: selection resolved to zero native entities',
@@ -155,25 +185,22 @@ export class SemanticCommandDispatcher {
     // Step 2: Instantiate supported native CAD command
     switch (operation.type.toUpperCase()) {
       case 'MOVE': {
-        const dx = Number(operation.dx ?? operation.delta?.x) || 0;
-        const dy = Number(operation.dy ?? operation.delta?.y) || 0;
-        const dz = Number(operation.dz ?? operation.delta?.z) || 0;
+        const dx = finiteOperand(operation.dx ?? operation.delta?.x, 0, 'dx');
+        const dy = finiteOperand(operation.dy ?? operation.delta?.y, 0, 'dy');
+        const dz = finiteOperand(operation.dz ?? operation.delta?.z, 0, 'dz');
         nativeCommand = new MoveEntitiesCommand(nativeIds, dx, dy, dz);
         break;
       }
       case 'ROTATE': {
         const center = operation.center || { x: 0, y: 0, z: 0 };
-        const angleDeg = Number(operation.angleDeg ?? operation.rotationDeg ?? operation.angle) || 0;
+        const angleDeg = finiteOperand(operation.angleDeg ?? operation.rotationDeg ?? operation.angle, 0, 'angleDeg');
         nativeCommand = new RotateEntitiesCommand(nativeIds, center, angleDeg);
         break;
       }
       case 'SCALE': {
         const center = operation.center || { x: 0, y: 0, z: 0 };
-        const defaultS = operation.scaleFactor ?? operation.scale;
-        const sx = Number(operation.sx ?? defaultS) || 1;
-        const sy = Number(operation.sy ?? defaultS) || 1;
-        const sz = operation.sz != null ? Number(operation.sz) : (defaultS != null ? Number(defaultS) : 1);
-        nativeCommand = new ScaleEntitiesCommand(nativeIds, center, sx, sy, sz);
+        const { sx, sy, sz } = scaleOperands(operation);
+        nativeCommand = new ScaleEntitiesCommand(nativeIds, center, { x: sx, y: sy, z: sz });
         break;
       }
       case 'DELETE': {
@@ -211,15 +238,17 @@ export class SemanticCommandDispatcher {
       }
     }
 
-    // Step 3: Execute through A09 command history port or directly on document
-    let changeSet = null;
-    if (this.commandHistory) {
-      changeSet = this.commandHistory.execute(nativeCommand, document);
-      if (document.sourceRevision != null && typeof document.revision === 'number') {
-        document.sourceRevision = document.revision;
-      }
-    } else {
-      changeSet = nativeCommand.execute(document);
+    // Step 3: Every native mutation enters the authoritative A09 history/transaction port.
+    if (!this.commandHistory || typeof this.commandHistory.execute !== 'function') {
+      throw new SemanticCommandDispatchError(
+        'Semantic command dispatch requires the A09 CommandHistory transaction port',
+        'MISSING_COMMAND_HISTORY'
+      );
+    }
+
+    const changeSet = this.commandHistory.execute(nativeCommand, document);
+    if (document.sourceRevision != null && typeof document.revision === 'number') {
+      document.sourceRevision = document.revision;
     }
 
     const resultRevision = document.revision ?? document.sourceRevision ?? 0;
